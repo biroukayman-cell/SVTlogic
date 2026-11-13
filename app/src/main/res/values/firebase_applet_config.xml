@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<resources>
+    <string name="firestore_database_id" translatable="false">ai-studio-android-bioterre-eb3decdd-52a7-4d8e-8dc6-bad24a12b2c5</string>
+    <string name="recaptcha_site_key" translatable="false">6Lf-HR0uAAAAAEChZcgyDstnzZyxuuC-b1THAlHd</string>
+</resources>

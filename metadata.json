@@ -1,0 +1,6 @@
+{
+  "name": "BioTerre SVT",
+  "description": "Application éducative SVT : gestion de classe, QCM chronométrés avec IA, cours et suivi vidéo, messagerie privée et système de badges.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

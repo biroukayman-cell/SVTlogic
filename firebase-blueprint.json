@@ -1,0 +1,244 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private profile, role, streak, XP and unlocked SVT badges for a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "fullName": { "type": "string", "description": "Full display name" },
+        "phoneNumber": { "type": "string", "description": "Phone number for student registration" },
+        "role": { "type": "string", "enum": ["teacher", "student"], "description": "Account role" },
+        "avatarUrl": { "type": "string", "description": "Profile avatar URL or preset key" },
+        "xp": { "type": "integer", "description": "Total SVT badge experience points" },
+        "loginStreak": { "type": "integer", "description": "Consecutive active login days" },
+        "lastLoginDate": { "type": "string", "description": "ISO local date of last active day (YYYY-MM-DD)" },
+        "unlockedBadgeIds": { "type": "array", "description": "List of unlocked badge IDs" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "fullName", "phoneNumber", "role", "xp", "loginStreak", "lastLoginDate", "unlockedBadgeIds", "createdAt", "updatedAt"]
+    },
+    "SvtClass": {
+      "title": "SvtClass",
+      "description": "SVT class section owned by a teacher with a unique QR token.",
+      "type": "object",
+      "properties": {
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "name": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "level": { "type": "string" },
+        "qrToken": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teacherId", "teacherName", "name", "academicYear", "level", "qrToken", "createdAt", "updatedAt"]
+    },
+    "ClassCode": {
+      "title": "ClassCode",
+      "description": "Secret QR token lookup document mapping qrToken to class metadata without PII.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "className", "academicYear", "teacherId", "teacherName", "createdAt"]
+    },
+    "Enrollment": {
+      "title": "Enrollment",
+      "description": "Student enrollment request and teacher validation status for a class.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentPhone": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "requestedAt": { "type": "string", "format": "date-time" },
+        "validatedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "classId", "className", "teacherId", "teacherName", "studentName", "studentPhone", "status", "requestedAt", "updatedAt"]
+    },
+    "Quiz": {
+      "title": "Quiz",
+      "description": "SVT multiple-choice exercise assigned to a class.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "chapterSvt": { "type": "string" },
+        "questions": { "type": "array" },
+        "approvedStudentIds": { "type": "array" },
+        "isPublished": { "type": "boolean" },
+        "isDownloadable": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "teacherId", "title", "description", "chapterSvt", "questions", "approvedStudentIds", "isPublished", "createdAt", "updatedAt"]
+    },
+    "QuizAttempt": {
+      "title": "QuizAttempt",
+      "description": "Auto-graded student quiz submission with exact per-question and total duration.",
+      "type": "object",
+      "properties": {
+        "quizId": { "type": "string" },
+        "quizTitle": { "type": "string" },
+        "classId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "score": { "type": "number" },
+        "maxScore": { "type": "number" },
+        "totalDurationSeconds": { "type": "integer" },
+        "answers": { "type": "array" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["quizId", "quizTitle", "classId", "teacherId", "studentId", "studentName", "score", "maxScore", "totalDurationSeconds", "answers", "completedAt", "createdAt"]
+    },
+    "Resource": {
+      "title": "Resource",
+      "description": "Educational document or video resource (PDF, Word, Image, Video) for a class.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["pdf", "word", "image", "video"] },
+        "fileUrl": { "type": "string" },
+        "durationSeconds": { "type": "integer" },
+        "approvedStudentIds": { "type": "array" },
+        "isDownloadable": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "teacherId", "title", "description", "type", "fileUrl", "durationSeconds", "approvedStudentIds", "createdAt", "updatedAt"]
+    },
+    "VideoTracking": {
+      "title": "VideoTracking",
+      "description": "Granular video watch percentage and status per student per video resource.",
+      "type": "object",
+      "properties": {
+        "resourceId": { "type": "string" },
+        "classId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "maxPositionSeconds": { "type": "integer" },
+        "durationSeconds": { "type": "integer" },
+        "watchedPercentage": { "type": "number" },
+        "status": { "type": "string", "enum": ["not_started", "partial", "completed"] },
+        "lastWatchedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["resourceId", "classId", "teacherId", "studentId", "studentName", "maxPositionSeconds", "durationSeconds", "watchedPercentage", "status", "lastWatchedAt", "createdAt", "updatedAt"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Class announcement published by the teacher.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "attachmentUrl": { "type": "string" },
+        "approvedStudentIds": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "teacherId", "title", "content", "approvedStudentIds", "createdAt", "updatedAt"]
+    },
+    "PrivateMessage": {
+      "title": "PrivateMessage",
+      "description": "Strictly private message between one student and their teacher.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderRole": { "type": "string", "enum": ["student", "teacher"] },
+        "content": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "teacherId", "studentId", "studentName", "senderId", "senderRole", "content", "isRead", "createdAt"]
+    },
+    "StudentNotification": {
+      "title": "StudentNotification",
+      "description": "In-app notification for a student (new quiz, resource, announcement, message, or unlocked badge).",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "type": { "type": "string", "enum": ["quiz", "resource", "announcement", "badge", "message", "enrollment"] },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "teacherId", "type", "title", "body", "isRead", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile and badge progress."
+    },
+    "/classes/{classId}": {
+      "schema": { "$ref": "#/entities/SvtClass" },
+      "description": "SVT classes managed by the teacher."
+    },
+    "/class_codes/{qrToken}": {
+      "schema": { "$ref": "#/entities/ClassCode" },
+      "description": "QR token lookup for joining a class."
+    },
+    "/enrollments/{studentId}": {
+      "schema": { "$ref": "#/entities/Enrollment" },
+      "description": "Student enrollment and approval workflow."
+    },
+    "/quizzes/{quizId}": {
+      "schema": { "$ref": "#/entities/Quiz" },
+      "description": "Class QCM exercises."
+    },
+    "/quiz_attempts/{attemptId}": {
+      "schema": { "$ref": "#/entities/QuizAttempt" },
+      "description": "Auto-graded student QCM attempts with per-question timings."
+    },
+    "/resources/{resourceId}": {
+      "schema": { "$ref": "#/entities/Resource" },
+      "description": "Shared PDF, Word, Image, and Video courses."
+    },
+    "/video_tracking/{trackingId}": {
+      "schema": { "$ref": "#/entities/VideoTracking" },
+      "description": "Student video watch progress tracking."
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "Teacher announcements per class."
+    },
+    "/private_messages/{messageId}": {
+      "schema": { "$ref": "#/entities/PrivateMessage" },
+      "description": "Isolated student-teacher private messages."
+    },
+    "/student_notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/StudentNotification" },
+      "description": "Student notifications including badge unlocks."
+    }
+  }
+}

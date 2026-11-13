@@ -1,0 +1,231 @@
+<resources>
+    <string name="app_name">BioTerre SVT</string>
+    <string name="app_subtitle">Life and Earth Sciences</string>
+
+    <!-- Languages -->
+    <string name="language_label">Language</string>
+    <string name="lang_fr">Français</string>
+    <string name="lang_ar">العربية</string>
+    <string name="lang_en">English</string>
+
+    <!-- Auth & Onboarding -->
+    <string name="auth_welcome_title">Welcome to BioTerre SVT</string>
+    <string name="auth_welcome_desc">Your educational space for Biology &amp; Geology lessons, timed quizzes, video tracking, and achievement badges.</string>
+    <string name="auth_google_sign_in">Continue with Google</string>
+    <string name="auth_sign_out">Sign out</string>
+    <string name="auth_error_generic">Sign-in failed. Please try again.</string>
+
+    <string name="setup_title">Account Setup</string>
+    <string name="setup_subtitle">Complete your details to access your SVT classroom.</string>
+    <string name="setup_role_label">Your Role</string>
+    <string name="role_student">Student</string>
+    <string name="role_teacher">Teacher (Admin)</string>
+    <string name="field_full_name">Full name</string>
+    <string name="field_phone">Phone number</string>
+    <string name="setup_continue">Continue</string>
+    <string name="error_name_required">Please enter your full name (min. 2 characters).</string>
+    <string name="error_phone_required">Please enter a valid phone number.</string>
+
+    <!-- QR Code & Validation -->
+    <string name="qr_join_title">Join your SVT Class</string>
+    <string name="qr_join_desc">Scan the QR Code provided by your teacher to enroll in the right section.</string>
+    <string name="qr_scan_button">Scan QR Code</string>
+    <string name="qr_manual_label">Or enter class code</string>
+    <string name="qr_manual_hint">E.g. SVT-2BAC-A1</string>
+    <string name="qr_join_submit">Submit code</string>
+    <string name="qr_camera_permission_needed">Camera permission is required to scan your class QR Code.</string>
+    <string name="qr_grant_camera">Allow Camera</string>
+    <string name="qr_invalid_code">QR Code not found. Please check with your teacher.</string>
+    <string name="qr_close_scanner">Close scanner</string>
+
+    <string name="pending_title">Enrollment Pending</string>
+    <string name="pending_desc">Your request to join \"%1$s\" has been sent to your teacher (%2$s). Your name will appear on their dashboard for approval.</string>
+    <string name="rejected_title">Request Declined</string>
+    <string name="rejected_desc">Your enrollment request for \"%1$s\" was not approved. You can scan another QR Code.</string>
+    <string name="change_class_code">Scan another QR Code</string>
+
+    <!-- Main Tabs -->
+    <string name="tab_exercises">Exercises</string>
+    <string name="tab_resources">Courses</string>
+    <string name="tab_announcements">News</string>
+    <string name="tab_messaging">Messages</string>
+    <string name="tab_profile">Profile</string>
+
+    <!-- Profile & Badges -->
+    <string name="profile_personal_info">Personal Details</string>
+    <string name="profile_edit">Edit profile</string>
+    <string name="profile_save">Save</string>
+    <string name="profile_change_photo">Change photo</string>
+    <string name="profile_class_label">Class</string>
+    <string name="profile_role_teacher">SVT Teacher</string>
+    <string name="profile_role_student">SVT Student</string>
+    <string name="profile_saved">Profile updated</string>
+
+    <string name="badges_section_title">SVT Badges &amp; Rewards</string>
+    <string name="badges_xp_label">%1$d XP</string>
+    <string name="badges_level_label">Level %1$d • %2$s</string>
+    <string name="badges_streak_label">Streak: %1$d day(s)</string>
+    <string name="badges_unlocked_count">%1$d / %2$d unlocked</string>
+    <string name="badges_unlocked_tag">Unlocked</string>
+    <string name="badges_locked_tag">Locked</string>
+    <string name="badges_cat_all">All</string>
+    <string name="badges_cat_performance">Performance</string>
+    <string name="badges_cat_regularity">Consistency</string>
+    <string name="badges_cat_attendance">Attendance</string>
+    <string name="badge_unlocked_banner_title">New Badge Unlocked!</string>
+    <string name="badge_unlocked_banner_body">Congratulations! You earned \"%1$s\" (+%2$d XP).</string>
+    <string name="badge_celebration_close">Awesome!</string>
+
+    <!-- Badge Definitions -->
+    <string name="badge_perf_first_title">SVT First Steps</string>
+    <string name="badge_perf_first_desc">Complete your first SVT quiz.</string>
+    <string name="badge_perf_elite_title">Elite Geneticist</string>
+    <string name="badge_perf_elite_desc">Score at least 85% on any quiz.</string>
+    <string name="badge_perf_perfect_title">Flawless Score</string>
+    <string name="badge_perf_perfect_desc">Achieve 100% correct answers on a quiz.</string>
+    <string name="badge_perf_speed_title">Quick Mind</string>
+    <string name="badge_perf_speed_desc">Score ≥ 80% on a quiz in under 60 seconds.</string>
+    <string name="badge_reg_streak3_title">Steady Explorer</string>
+    <string name="badge_reg_streak3_desc">Maintain a 3-day login streak.</string>
+    <string name="badge_reg_streak7_title">Dedicated Researcher</string>
+    <string name="badge_reg_streak7_desc">Maintain a 7-day login streak.</string>
+    <string name="badge_reg_quiz3_title">Knowledge Collector</string>
+    <string name="badge_reg_quiz3_desc">Complete 3 different quizzes.</string>
+    <string name="badge_reg_quiz5_title">Curriculum Master</string>
+    <string name="badge_reg_quiz5_desc">Complete 5 different quizzes.</string>
+    <string name="badge_vid_first_title">SVT Observer</string>
+    <string name="badge_vid_first_desc">Watch 1 educational video completely (≥ 90%).</string>
+    <string name="badge_vid_three_title">Science Cinephile</string>
+    <string name="badge_vid_three_desc">Watch 3 educational videos completely (≥ 90%).</string>
+
+    <!-- XP Levels -->
+    <string name="level_title_1">Biology Apprentice</string>
+    <string name="level_title_2">Curious Observer</string>
+    <string name="level_title_3">Field Geologist</string>
+    <string name="level_title_4">Cellular Expert</string>
+    <string name="level_title_5">SVT Laureate</string>
+
+    <!-- Teacher Class Management -->
+    <string name="teacher_classes_title">Class Management</string>
+    <string name="teacher_new_class">New class</string>
+    <string name="teacher_class_name">Class name (e.g. Grade 12 Biology A)</string>
+    <string name="teacher_class_level">Level (e.g. Grade 12 / 2nd Bac)</string>
+    <string name="teacher_class_year">Academic year (e.g. 2026-2027)</string>
+    <string name="teacher_create">Create</string>
+    <string name="teacher_show_qr">QR Code</string>
+    <string name="teacher_qr_dialog_title">Class QR Code</string>
+    <string name="teacher_qr_code_label">Code: %1$s</string>
+    <string name="teacher_pending_requests">Pending Approvals (%1$d)</string>
+    <string name="teacher_approve">Approve</string>
+    <string name="teacher_reject">Decline</string>
+    <string name="teacher_students_list">Enrolled Students (%1$d)</string>
+    <string name="teacher_delete_student">Delete student</string>
+    <string name="teacher_delete_class">Delete class</string>
+    <string name="confirm_delete_title">Confirm Deletion</string>
+    <string name="confirm_delete_student_msg">Permanently delete %1$s and all their data (scores, video tracking, messages)?</string>
+    <string name="confirm_delete_class_msg">Delete class \"%1$s\" and all its data (students, quizzes, resources, announcements, messages)?</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="close">Close</string>
+    <string name="no_class_selected">Create a class in the Profile tab first.</string>
+
+    <!-- Quizzes -->
+    <string name="quiz_create">New Quiz</string>
+    <string name="quiz_ai_generate">Generate with AI</string>
+    <string name="quiz_ai_title">SVT AI Quiz Generator</string>
+    <string name="quiz_ai_chapter">SVT Curriculum Chapter</string>
+    <string name="quiz_ai_level">Grade Level</string>
+    <string name="quiz_ai_count">Number of questions (1 to 10)</string>
+    <string name="quiz_ai_generating">Generating SVT questions...</string>
+    <string name="quiz_ai_error">AI generation error: %1$s</string>
+    <string name="quiz_title_label">Quiz Title</string>
+    <string name="quiz_chapter_label">SVT Chapter</string>
+    <string name="quiz_desc_label">Instructions / Description</string>
+    <string name="quiz_add_question">Add question</string>
+    <string name="quiz_question_text">Question text</string>
+    <string name="quiz_option_label">Option %1$d</string>
+    <string name="quiz_correct_option">Correct answer</string>
+    <string name="quiz_explanation_label">Scientific explanation</string>
+    <string name="quiz_publish">Publish to class</string>
+    <string name="quiz_start">Start Quiz</string>
+    <string name="quiz_completed_tag">Done • %1$.1f / %2$.1f</string>
+    <string name="quiz_pending_tag">To do</string>
+    <string name="quiz_question_progress">Question %1$d / %2$d</string>
+    <string name="quiz_timer_total">Total: %1$s</string>
+    <string name="quiz_timer_question">Question: %1$s</string>
+    <string name="quiz_next">Next question</string>
+    <string name="quiz_finish">Finish &amp; Grade</string>
+    <string name="quiz_result_title">Automatic Grading</string>
+    <string name="quiz_result_score">Score: %1$.1f / %2$.1f (%3$d%%)</string>
+    <string name="quiz_result_time">Total time: %1$s</string>
+    <string name="quiz_time_spent">Time: %1$ds</string>
+    <string name="quiz_stats_title">Class Statistics</string>
+    <string name="quiz_stats_avg_score">Average: %1$d%%</string>
+    <string name="quiz_stats_avg_time">Avg time: %1$ds</string>
+    <string name="quiz_stats_attempts">%1$d submission(s)</string>
+    <string name="quiz_stats_by_student">By Student</string>
+    <string name="quiz_empty">No quizzes available for this class yet.</string>
+
+    <!-- Courses, Docs & Videos -->
+    <string name="resource_add">Add Resource</string>
+    <string name="resource_type_all">All</string>
+    <string name="resource_type_video">Video</string>
+    <string name="resource_type_pdf">PDF</string>
+    <string name="resource_type_word">Word</string>
+    <string name="resource_type_image">Image</string>
+    <string name="resource_title_label">Document / Video Title</string>
+    <string name="resource_desc_label">Description</string>
+    <string name="resource_url_label">URL link or local file</string>
+    <string name="resource_pick_file">Pick a file</string>
+    <string name="resource_duration_label">Video duration (seconds)</string>
+    <string name="resource_open">Open</string>
+    <string name="resource_watch">Watch</string>
+    <string name="resource_video_tracking">Video Tracking</string>
+    <string name="video_status_not_started">Not watched (0%)</string>
+    <string name="video_status_partial">Partially watched (%1$d%%)</string>
+    <string name="video_status_completed">Completed (%1$d%%)</string>
+    <string name="resources_empty">No documents or videos shared yet.</string>
+    <string name="pdf_page_label">Page %1$d / %2$d</string>
+    <string name="pdf_open_external">Open in external viewer</string>
+
+    <!-- Announcements -->
+    <string name="announcement_new">New Announcement</string>
+    <string name="announcement_title_label">Announcement Title</string>
+    <string name="announcement_content_label">Message Content</string>
+    <string name="announcement_publish">Publish Announcement</string>
+    <string name="announcements_empty">No announcements posted for this class yet.</string>
+
+    <!-- Private Messaging -->
+    <string name="messaging_student_header">Private Chat with your Teacher</string>
+    <string name="messaging_student_notice">Private Student ↔ Teacher channel. No other student can view your messages.</string>
+    <string name="messaging_teacher_inbox">Private Inbox (%1$d)</string>
+    <string name="messaging_input_hint">Write a private message...</string>
+    <string name="messaging_send">Send</string>
+    <string name="messaging_empty">No messages yet. Ask your SVT question!</string>
+
+    <!-- Notifications -->
+    <string name="notifications_title">Notifications</string>
+    <string name="notifications_empty">No notifications yet.</string>
+    <string name="notifications_mark_all_read">Mark all as read</string>
+    <string name="notification_channel_name">BioTerre SVT Alerts</string>
+    <string name="notification_channel_desc">Notifications for new assignments, announcements, and unlocked SVT badges</string>
+
+    <!-- Offline Mode & Sync -->
+    <string name="offline_mode_banner">Offline mode active • Downloaded content available</string>
+    <string name="offline_pending_sync_banner">%1$d item(s) waiting to sync</string>
+    <string name="offline_sync_now">Sync now</string>
+    <string name="offline_syncing">Syncing...</string>
+    <string name="offline_sync_completed">Sync complete (%1$d item(s) uploaded)</string>
+    <string name="offline_attempt_cached_msg">Offline: answers cached locally. They will be sent automatically when connected.</string>
+    <string name="offline_pending_sync_badge">Pending sync</string>
+    <string name="offline_filter_downloaded">Offline (%1$d)</string>
+    <string name="offline_download_button">Download</string>
+    <string name="offline_downloaded_badge">Available offline</string>
+    <string name="offline_remove_download">Remove offline copy</string>
+    <string name="offline_download_success">\"%1$s\" downloaded for offline viewing</string>
+    <string name="offline_download_error">Download failed: %1$s</string>
+    <string name="offline_not_available_msg">Download this resource while online to view it offline.</string>
+    <string name="teacher_mark_downloadable">Allow offline download</string>
+    <string name="teacher_downloadable_on">Downloadable</string>
+    <string name="teacher_downloadable_off">Online only</string>
+</resources>

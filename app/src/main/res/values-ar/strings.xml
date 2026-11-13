@@ -1,0 +1,231 @@
+<resources>
+    <string name="app_name">BioTerre SVT</string>
+    <string name="app_subtitle">علوم الحياة والأرض</string>
+
+    <!-- اللغات -->
+    <string name="language_label">اللغة</string>
+    <string name="lang_fr">Français</string>
+    <string name="lang_ar">العربية</string>
+    <string name="lang_en">English</string>
+
+    <!-- المصادقة والتسجيل -->
+    <string name="auth_welcome_title">مرحباً بك في BioTerre SVT</string>
+    <string name="auth_welcome_desc">فضاؤك التربوي للدروس، التمارين الموقوتة، تتبع مشاهدة الفيديو، وشارات التفوق في علوم الحياة والأرض.</string>
+    <string name="auth_google_sign_in">المتابعة عبر Google</string>
+    <string name="auth_sign_out">تسجيل الخروج</string>
+    <string name="auth_error_generic">تعذر تسجيل الدخول. يرجى المحاولة مجدداً.</string>
+
+    <string name="setup_title">إعداد الحساب</string>
+    <string name="setup_subtitle">أكمل بياناتك للوصول إلى قسم علوم الحياة والأرض.</string>
+    <string name="setup_role_label">الصفة</string>
+    <string name="role_student">تلميذ(ة)</string>
+    <string name="role_teacher">أستاذ(ة) (مشرف)</string>
+    <string name="field_full_name">الاسم الكامل</string>
+    <string name="field_phone">رقم الهاتف</string>
+    <string name="setup_continue">متابعة</string>
+    <string name="error_name_required">يرجى إدخال الاسم الكامل (حرفان على الأقل).</string>
+    <string name="error_phone_required">يرجى إدخال رقم هاتف صحيح.</string>
+
+    <!-- رمز QR والتحقق -->
+    <string name="qr_join_title">الانضمام إلى قسم علوم الحياة والأرض</string>
+    <string name="qr_join_desc">امسح رمز QR الذي يقدمه أستاذك للتسجيل في القسم الصحيح.</string>
+    <string name="qr_scan_button">مسح رمز QR</string>
+    <string name="qr_manual_label">أو أدخل رمز القسم يدوياً</string>
+    <string name="qr_manual_hint">مثال: SVT-2BAC-A1</string>
+    <string name="qr_join_submit">تأكيد الرمز</string>
+    <string name="qr_camera_permission_needed">إذن الكاميرا ضروري لمسح رمز QR الخاص بالقسم.</string>
+    <string name="qr_grant_camera">السماح بالكاميرا</string>
+    <string name="qr_invalid_code">رمز QR غير موجود. تحقق من أستاذك.</string>
+    <string name="qr_close_scanner">إغلاق الماسح</string>
+
+    <string name="pending_title">الطلب قيد المراجعة</string>
+    <string name="pending_desc">تم إرسال طلبك للانضمام إلى قسم «%1$s» إلى أستاذك (%2$s). سيظهر اسمك في لوحة التحكم الخاصة به للموافقة.</string>
+    <string name="rejected_title">تم رفض الطلب</string>
+    <string name="rejected_desc">لم تتم الموافقة على طلبك للانضمام إلى «%1$s». يمكنك مسح رمز QR آخر.</string>
+    <string name="change_class_code">مسح رمز QR آخر</string>
+
+    <!-- التبويبات الرئيسية -->
+    <string name="tab_exercises">التمارين</string>
+    <string name="tab_resources">الدروس</string>
+    <string name="tab_announcements">الإعلانات</string>
+    <string name="tab_messaging">المراسلة</string>
+    <string name="tab_profile">حسابي</string>
+
+    <!-- الملف الشخصي والشارات -->
+    <string name="profile_personal_info">المعلومات الشخصية</string>
+    <string name="profile_edit">تعديل الملف الشخصي</string>
+    <string name="profile_save">حفظ</string>
+    <string name="profile_change_photo">تغيير الصورة</string>
+    <string name="profile_class_label">القسم</string>
+    <string name="profile_role_teacher">أستاذ علوم الحياة والأرض</string>
+    <string name="profile_role_student">تلميذ علوم الحياة والأرض</string>
+    <string name="profile_saved">تم تحديث الملف الشخصي</string>
+
+    <string name="badges_section_title">شارات ومكافآت SVT</string>
+    <string name="badges_xp_label">%1$d نقطة</string>
+    <string name="badges_level_label">المستوى %1$d • %2$s</string>
+    <string name="badges_streak_label">المواظبة: %1$d يوم</string>
+    <string name="badges_unlocked_count">%1$d / %2$d مفتوحة</string>
+    <string name="badges_unlocked_tag">مفتوحة</string>
+    <string name="badges_locked_tag">مقفلة</string>
+    <string name="badges_cat_all">الكل</string>
+    <string name="badges_cat_performance">الأداء</string>
+    <string name="badges_cat_regularity">الانتظام</string>
+    <string name="badges_cat_attendance">المواظبة</string>
+    <string name="badge_unlocked_banner_title">تم فتح شارة جديدة!</string>
+    <string name="badge_unlocked_banner_body">تهانينا! حصلت على شارة «%1$s» (+%2$d نقطة).</string>
+    <string name="badge_celebration_close">رائع!</string>
+
+    <!-- تعريفات الشارات -->
+    <string name="badge_perf_first_title">الخطوة الأولى</string>
+    <string name="badge_perf_first_desc">إكمال أول تمرين اختيار من متعدد في SVT.</string>
+    <string name="badge_perf_elite_title">عالم الوراثة المتميز</string>
+    <string name="badge_perf_elite_desc">الحصول على نسبة 85% أو أكثر في تمرين.</string>
+    <string name="badge_perf_perfect_title">علامة كاملة</string>
+    <string name="badge_perf_perfect_desc">الحصول على 100% من الإجابات الصحيحة.</string>
+    <string name="badge_perf_speed_title">سريع البديهة</string>
+    <string name="badge_perf_speed_desc">النجاح بنسبة ≥ 80% في أقل من 60 ثانية.</string>
+    <string name="badge_reg_streak3_title">مستكشف مواظب</string>
+    <string name="badge_reg_streak3_desc">تسجيل الدخول لمدة 3 أيام متتالية.</string>
+    <string name="badge_reg_streak7_title">باحث مثابر</string>
+    <string name="badge_reg_streak7_desc">تسجيل الدخول لمدة 7 أيام متتالية.</string>
+    <string name="badge_reg_quiz3_title">جامع المعرفة</string>
+    <string name="badge_reg_quiz3_desc">إكمال 3 تمارين مختلفة.</string>
+    <string name="badge_reg_quiz5_title">متقن المنهاج</string>
+    <string name="badge_reg_quiz5_desc">إكمال 5 تمارين مختلفة.</string>
+    <string name="badge_vid_first_title">ملاحظ العلوم</string>
+    <string name="badge_vid_first_desc">مشاهدة فيديو تعليمي واحد بالكامل (≥ 90%).</string>
+    <string name="badge_vid_three_title">مشاهد متميز</string>
+    <string name="badge_vid_three_desc">مشاهدة 3 فيديوهات تعليمية بالكامل (≥ 90%).</string>
+
+    <!-- مستويات الخبرة -->
+    <string name="level_title_1">متدرب الأحياء</string>
+    <string name="level_title_2">ملاحظ شغوف</string>
+    <string name="level_title_3">جيولوجي متمرس</string>
+    <string name="level_title_4">خبير الخلايا</string>
+    <string name="level_title_5">متفوق علوم الحياة والأرض</string>
+
+    <!-- إدارة الأقسام (الأستاذ) -->
+    <string name="teacher_classes_title">إدارة الأقسام</string>
+    <string name="teacher_new_class">قسم جديد</string>
+    <string name="teacher_class_name">اسم القسم (مثال: الثانية باك SVT أ)</string>
+    <string name="teacher_class_level">المستوى (مثال: الثانية باكالوريا)</string>
+    <string name="teacher_class_year">السنة الدراسية (مثال: 2026-2027)</string>
+    <string name="teacher_create">إنشاء</string>
+    <string name="teacher_show_qr">رمز QR</string>
+    <string name="teacher_qr_dialog_title">رمز QR للقسم</string>
+    <string name="teacher_qr_code_label">الرمز: %1$s</string>
+    <string name="teacher_pending_requests">طلبات التسجيل (%1$d)</string>
+    <string name="teacher_approve">قبول</string>
+    <string name="teacher_reject">رفض</string>
+    <string name="teacher_students_list">التلاميذ المسجلون (%1$d)</string>
+    <string name="teacher_delete_student">حذف التلميذ</string>
+    <string name="teacher_delete_class">حذف القسم</string>
+    <string name="confirm_delete_title">تأكيد الحذف</string>
+    <string name="confirm_delete_student_msg">هل تريد حذف %1$s وجميع بياناته نهائياً (النتائج، تتبع الفيديو، الرسائل)؟</string>
+    <string name="confirm_delete_class_msg">هل تريد حذف قسم «%1$s» وجميع بياناته نهائياً؟</string>
+    <string name="cancel">إلغاء</string>
+    <string name="delete">حذف</string>
+    <string name="close">إغلاق</string>
+    <string name="no_class_selected">قم بإنشاء قسم أولاً في تبويب حسابي.</string>
+
+    <!-- التمارين -->
+    <string name="quiz_create">تمرين جديد</string>
+    <string name="quiz_ai_generate">توليد بالذكاء الاصطناعي</string>
+    <string name="quiz_ai_title">مولد تمارين SVT بالذكاء الاصطناعي</string>
+    <string name="quiz_ai_chapter">محور الدرس في SVT</string>
+    <string name="quiz_ai_level">المستوى الدراسي</string>
+    <string name="quiz_ai_count">عدد الأسئلة (1 إلى 10)</string>
+    <string name="quiz_ai_generating">جاري توليد أسئلة SVT...</string>
+    <string name="quiz_ai_error">خطأ في التوليد الذكي: %1$s</string>
+    <string name="quiz_title_label">عنوان التمرين</string>
+    <string name="quiz_chapter_label">الفصل / المحور</string>
+    <string name="quiz_desc_label">التعليمات / الوصف</string>
+    <string name="quiz_add_question">إضافة سؤال</string>
+    <string name="quiz_question_text">نص السؤال</string>
+    <string name="quiz_option_label">الخيار %1$d</string>
+    <string name="quiz_correct_option">الإجابة الصحيحة</string>
+    <string name="quiz_explanation_label">التفسير العلمي</string>
+    <string name="quiz_publish">نشر للقسم</string>
+    <string name="quiz_start">بدء التمرين</string>
+    <string name="quiz_completed_tag">مكتمل • %1$.1f / %2$.1f</string>
+    <string name="quiz_pending_tag">قيد الإنجاز</string>
+    <string name="quiz_question_progress">السؤال %1$d / %2$d</string>
+    <string name="quiz_timer_total">الوقت الكلي: %1$s</string>
+    <string name="quiz_timer_question">السؤال: %1$s</string>
+    <string name="quiz_next">السؤال التالي</string>
+    <string name="quiz_finish">إنهاء وتصحيح</string>
+    <string name="quiz_result_title">التصحيح التلقائي</string>
+    <string name="quiz_result_score">النقطة: %1$.1f / %2$.1f (%3$d%%)</string>
+    <string name="quiz_result_time">المدة الإجمالية: %1$s</string>
+    <string name="quiz_time_spent">المدة: %1$d ث</string>
+    <string name="quiz_stats_title">إحصائيات القسم</string>
+    <string name="quiz_stats_avg_score">المعدل: %1$d%%</string>
+    <string name="quiz_stats_avg_time">متوسط الوقت: %1$d ث</string>
+    <string name="quiz_stats_attempts">%1$d إجابة مرسلة</string>
+    <string name="quiz_stats_by_student">التفاصيل حسب التلميذ</string>
+    <string name="quiz_empty">لا توجد تمارين متاحة لهذا القسم حالياً.</string>
+
+    <!-- الدروس والموارد -->
+    <string name="resource_add">إضافة مورد تعليمي</string>
+    <string name="resource_type_all">الكل</string>
+    <string name="resource_type_video">فيديو</string>
+    <string name="resource_type_pdf">PDF</string>
+    <string name="resource_type_word">Word</string>
+    <string name="resource_type_image">صورة</string>
+    <string name="resource_title_label">عنوان الدرس أو الفيديو</string>
+    <string name="resource_desc_label">الوصف</string>
+    <string name="resource_url_label">رابط URL أو ملف محلي</string>
+    <string name="resource_pick_file">اختيار ملف</string>
+    <string name="resource_duration_label">مدة الفيديو (بالثواني)</string>
+    <string name="resource_open">فتح</string>
+    <string name="resource_watch">مشاهدة</string>
+    <string name="resource_video_tracking">تتبع المشاهدة</string>
+    <string name="video_status_not_started">لم يشاهد (0%)</string>
+    <string name="video_status_partial">مشاهدة جزئية (%1$d%%)</string>
+    <string name="video_status_completed">مشاهدة كاملة (%1$d%%)</string>
+    <string name="resources_empty">لا توجد دروس أو فيديوهات منشورة حالياً.</string>
+    <string name="pdf_page_label">صفحة %1$d / %2$d</string>
+    <string name="pdf_open_external">فتح في عارض خارجي</string>
+
+    <!-- الإعلانات -->
+    <string name="announcement_new">إعلان جديد</string>
+    <string name="announcement_title_label">عنوان الإعلان</string>
+    <string name="announcement_content_label">نص الإعلان</string>
+    <string name="announcement_publish">نشر الإعلان</string>
+    <string name="announcements_empty">لا توجد إعلانات لهذا القسم حالياً.</string>
+
+    <!-- المراسلة الخاصة -->
+    <string name="messaging_student_header">مراسلة خاصة مع الأستاذ</string>
+    <string name="messaging_student_notice">قناة خاصة بين التلميذ والأستاذ فقط. لا يمكن لأي تلميذ آخر رؤية رسائلك.</string>
+    <string name="messaging_teacher_inbox">صندوق الرسائل الخاصة (%1$d)</string>
+    <string name="messaging_input_hint">اكتب رسالة خاصة...</string>
+    <string name="messaging_send">إرسال</string>
+    <string name="messaging_empty">لا توجد رسائل بعد. اطرح سؤالك في SVT!</string>
+
+    <!-- الإشعارات -->
+    <string name="notifications_title">الإشعارات</string>
+    <string name="notifications_empty">لا توجد إشعارات.</string>
+    <string name="notifications_mark_all_read">تحديد الكل كمقروء</string>
+    <string name="notification_channel_name">تنبيهات BioTerre SVT</string>
+    <string name="notification_channel_desc">إشعارات التمارين الجديدة والإعلانات والشارات المفتوحة</string>
+
+    <!-- الوضع دون اتصال والمزامنة -->
+    <string name="offline_mode_banner">الوضع دون اتصال نشط • المحتوى المحمّل متاح</string>
+    <string name="offline_pending_sync_banner">%1$d عنصر في انتظار المزامنة</string>
+    <string name="offline_sync_now">مزامنة الآن</string>
+    <string name="offline_syncing">جاري المزامنة...</string>
+    <string name="offline_sync_completed">اكتملت المزامنة (تم إرسال %1$d عنصر)</string>
+    <string name="offline_attempt_cached_msg">دون اتصال: تم حفظ الإجابات محلياً وسيتم إرسالها تلقائياً عند عودة الإنترنت.</string>
+    <string name="offline_pending_sync_badge">في انتظار المزامنة</string>
+    <string name="offline_filter_downloaded">محمّل (%1$d)</string>
+    <string name="offline_download_button">تحميل</string>
+    <string name="offline_downloaded_badge">متاح دون اتصال</string>
+    <string name="offline_remove_download">إزالة النسخة المحلية</string>
+    <string name="offline_download_success">تم تحميل «%1$s» للمشاهدة دون اتصال</string>
+    <string name="offline_download_error">فشل التحميل: %1$s</string>
+    <string name="offline_not_available_msg">قم بتحميل هذا المورد أثناء الاتصال لعرضه لاحقاً دون إنترنت.</string>
+    <string name="teacher_mark_downloadable">السماح بالتحميل دون اتصال</string>
+    <string name="teacher_downloadable_on">قابل للتحميل</string>
+    <string name="teacher_downloadable_off">متاح عبر الإنترنت فقط</string>
+</resources>
