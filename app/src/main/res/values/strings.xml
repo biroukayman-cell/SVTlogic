@@ -228,4 +228,6 @@
     <string name="teacher_mark_downloadable">Autoriser le téléchargement hors ligne</string>
     <string name="teacher_downloadable_on">Téléchargeable</string>
     <string name="teacher_downloadable_off">En ligne uniquement</string>
+    <string name="firebase_missing_config_title">Configuration Firebase manquante</string>
+    <string name="firebase_missing_config_body">Cette compilation APK ne contient pas le fichier google-services.json. Téléchargez l\'APK directement depuis Google AI Studio ou ajoutez le secret GOOGLE_SERVICES_JSON dans GitHub Actions.</string>
 </resources>

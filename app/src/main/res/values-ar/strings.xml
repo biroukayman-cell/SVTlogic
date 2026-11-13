@@ -228,4 +228,6 @@
     <string name="teacher_mark_downloadable">السماح بالتحميل دون اتصال</string>
     <string name="teacher_downloadable_on">قابل للتحميل</string>
     <string name="teacher_downloadable_off">متاح عبر الإنترنت فقط</string>
+    <string name="firebase_missing_config_title">إعدادات Firebase مفقودة</string>
+    <string name="firebase_missing_config_body">نسخة التطبيق هذه لا تحتوي على ملف google-services.json. يرجى تحميل ملف APK مباشرة من Google AI Studio أو إضافة السر GOOGLE_SERVICES_JSON في GitHub Actions.</string>
 </resources>

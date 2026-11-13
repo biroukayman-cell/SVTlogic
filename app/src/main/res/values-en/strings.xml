@@ -228,4 +228,6 @@
     <string name="teacher_mark_downloadable">Allow offline download</string>
     <string name="teacher_downloadable_on">Downloadable</string>
     <string name="teacher_downloadable_off">Online only</string>
+    <string name="firebase_missing_config_title">Firebase configuration missing</string>
+    <string name="firebase_missing_config_body">This APK build does not include google-services.json. Download the APK directly from Google AI Studio or add the GOOGLE_SERVICES_JSON secret in GitHub Actions.</string>
 </resources>
