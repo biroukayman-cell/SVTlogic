@@ -85,6 +85,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
 import com.example.core.AppLanguage
@@ -174,13 +175,28 @@ fun onGoogleSignInClicked(
     }
 
     val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
-    val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
+    val primaryRequest = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
 
     scope.launch {
         try {
             val activity = context as? Activity
                 ?: throw IllegalStateException("Activity context required for sign-in")
-            val result = credentialManager.getCredential(activity, request)
+
+            val result = try {
+                credentialManager.getCredential(activity, primaryRequest)
+            } catch (cancel: GetCredentialCancellationException) {
+                throw cancel
+            } catch (primaryErr: GetCredentialException) {
+                Log.w("Auth", "GetSignInWithGoogleOption failed (${primaryErr.javaClass.simpleName}: ${primaryErr.message}), trying GetGoogleIdOption fallback")
+                val fallbackOption = GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setServerClientId(clientId)
+                    .setAutoSelectEnabled(false)
+                    .build()
+                val fallbackRequest = GetCredentialRequest.Builder().addCredentialOption(fallbackOption).build()
+                credentialManager.getCredential(activity, fallbackRequest)
+            }
+
             val credential = result.credential
             if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
@@ -188,14 +204,14 @@ fun onGoogleSignInClicked(
                 Firebase.auth.signInWithCredential(authCredential).await()
                 onAuthSuccess()
             } else {
-                onAuthError("Unexpected credential type")
+                onAuthError("Unexpected credential type: ${credential.type}")
             }
         } catch (e: GetCredentialCancellationException) {
             Log.w("Auth", "Google Sign-In cancelled or dismissed: ${e.message}", e)
             onAuthCancelled()
         } catch (e: Exception) {
             Log.e("Auth", "Google Sign-In failed", e)
-            onAuthError(e.localizedMessage ?: "Sign in failed")
+            onAuthError("${e.javaClass.simpleName}: ${e.localizedMessage ?: e.message ?: "Sign in failed"}")
         }
     }
 }
@@ -378,7 +394,8 @@ fun AccountSetupScreen(
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
     onSubmit: (fullName: String, phone: String, role: String) -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    serverError: String? = null
 ) {
     var fullName by remember(defaultName) { mutableStateOf(defaultName) }
     var phone by remember { mutableStateOf("") }
@@ -486,9 +503,10 @@ fun AccountSetupScreen(
                         .testTag("setup_phone_input")
                 )
 
-                if (!validationError.isNullOrBlank()) {
+                val displayedError = validationError ?: serverError
+                if (!displayedError.isNullOrBlank()) {
                     Text(
-                        text = validationError!!,
+                        text = displayedError,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )

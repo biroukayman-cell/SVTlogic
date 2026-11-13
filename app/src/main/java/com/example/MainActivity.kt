@@ -246,9 +246,11 @@ private fun AuthenticatedSvtFlow(
                 currentLanguage = currentLanguage,
                 onLanguageSelected = onLanguageSelected,
                 onSubmit = { fullName, phone, role ->
+                    viewModel.clearError()
                     viewModel.setupProfile(fullName, phone, role)
                 },
-                onSignOut = onSignOut
+                onSignOut = onSignOut,
+                serverError = actionError
             )
         }
 
@@ -258,9 +260,11 @@ private fun AuthenticatedSvtFlow(
                 currentLanguage = currentLanguage,
                 onLanguageSelected = onLanguageSelected,
                 onSubmit = { fullName, phone, role ->
+                    viewModel.clearError()
                     viewModel.setupProfile(fullName, phone, role)
                 },
-                onSignOut = onSignOut
+                onSignOut = onSignOut,
+                serverError = actionError ?: state.message
             )
         }
 

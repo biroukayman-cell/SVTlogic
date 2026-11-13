@@ -37,6 +37,12 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
+          if [ ! -f app/google-services.json ] && [ -f app/GOOGLE_SERVICES_JSON ]; then
+            cp app/GOOGLE_SERVICES_JSON app/google-services.json
+          fi
+          if [ ! -f app/google-services.json ] && [ -f GOOGLE_SERVICES_JSON ]; then
+            cp GOOGLE_SERVICES_JSON app/google-services.json
+          fi
           if [ ! -f app/google-services.json ] && [ -f google-services.json ]; then
             cp google-services.json app/google-services.json
           fi
