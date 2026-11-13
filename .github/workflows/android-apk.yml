@@ -19,25 +19,30 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Accept Android SDK licenses
+      - name: Accept Android SDK licenses & ensure SDK 36
         run: |
           set +o pipefail
           SDK_DIR="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           if [ -n "$SDK_DIR" ]; then
             mkdir -p "$SDK_DIR/licenses"
+            printf "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n" > "$SDK_DIR/licenses/android-sdk-license"
+            printf "\n84831b9409646a918e30573bab4c9c91346d8abd\n" > "$SDK_DIR/licenses/android-sdk-preview-license"
             SDKMANAGER="$(find "$SDK_DIR/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n1)"
             if [ -n "$SDKMANAGER" ] && [ -x "$SDKMANAGER" ]; then
               yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
             fi
           fi
 
-      - name: Restore debug keystore
+      - name: Restore debug keystore and env fallback
         run: |
           if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
             tr -d '\r\n ' < debug.keystore.base64 | base64 -d > debug.keystore
           fi
           if [ ! -s debug.keystore ]; then
             keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          if [ ! -f .env ] && [ ! -f .env.example ]; then
+            touch .env
           fi
 
       - name: Set up Gradle
@@ -46,7 +51,15 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon --no-configuration-cache -Dorg.gradle.jvmargs="-Xmx3g -Dfile.encoding=UTF-8" --stacktrace
+        run: |
+          set -o pipefail
+          if ! gradle assembleDebug --no-daemon --no-configuration-cache -Dorg.gradle.jvmargs="-Xmx3g -Dfile.encoding=UTF-8" --stacktrace 2>&1 | tee /tmp/gradle-build.log; then
+            echo "### Erreur Gradle" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 60 /tmp/gradle-build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
