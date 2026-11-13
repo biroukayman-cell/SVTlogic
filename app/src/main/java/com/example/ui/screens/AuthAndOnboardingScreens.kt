@@ -4,8 +4,10 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import android.util.Size
+import java.security.MessageDigest
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -107,6 +109,25 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
+
+private fun getAppSigningSha1(context: Context): String? = try {
+    val pm = context.packageManager
+    val sigBytes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        val info = pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+        info.signingInfo?.apkContentsSigners?.firstOrNull()?.toByteArray()
+    } else {
+        @Suppress("DEPRECATION")
+        val info = pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES)
+        @Suppress("DEPRECATION")
+        info.signatures?.firstOrNull()?.toByteArray()
+    }
+    sigBytes?.let { bytes ->
+        MessageDigest.getInstance("SHA-1").digest(bytes)
+            .joinToString(":") { "%02X".format(it) }
+    }
+} catch (_: Exception) {
+    null
+}
 
 private suspend fun signInWithGoogleBrowserInternal(activity: Activity) {
     val provider = OAuthProvider.newBuilder("google.com").apply {
@@ -371,12 +392,15 @@ fun AuthScreen(
                             },
                             onAuthError = { msg ->
                                 isLoading = false
-                                errorMessage = msg
+                                val sha1 = getAppSigningSha1(activityContext)
+                                errorMessage = if (sha1 != null) "$msg\n(APK SHA-1: $sha1)" else msg
                             },
                             scope = coroutineScope,
                             onAuthCancelled = { detail ->
                                 isLoading = false
-                                errorMessage = localizedContext.getString(R.string.auth_cancelled_hint, detail)
+                                val sha1 = getAppSigningSha1(activityContext)
+                                val baseMsg = localizedContext.getString(R.string.auth_cancelled_hint, detail)
+                                errorMessage = if (sha1 != null) "$baseMsg\n(APK SHA-1: $sha1)" else baseMsg
                             }
                         )
                     },
@@ -414,7 +438,8 @@ fun AuthScreen(
                             },
                             onAuthError = { msg ->
                                 isLoading = false
-                                errorMessage = msg
+                                val sha1 = getAppSigningSha1(activityContext)
+                                errorMessage = if (sha1 != null) "$msg\n(APK SHA-1: $sha1)" else msg
                             },
                             scope = coroutineScope
                         )

@@ -36,6 +36,7 @@ jobs:
       - name: Restore Firebase config, debug keystore, and env
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
           if [ ! -f app/google-services.json ] && [ -f app/GOOGLE_SERVICES_JSON ]; then
             cp app/GOOGLE_SERVICES_JSON app/google-services.json
@@ -66,12 +67,39 @@ jobs:
             exit 1
           fi
 
-          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
+          if [ ! -s debug.keystore ] && [ -f debug.keystore.base64 ]; then
             tr -d '\r\n ' < debug.keystore.base64 | base64 -d > debug.keystore
           fi
-          if [ ! -s debug.keystore ]; then
-            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          if [ ! -s debug.keystore ] && [ -f DEBUG_KEYSTORE_BASE64 ]; then
+            tr -d '\r\n ' < DEBUG_KEYSTORE_BASE64 | base64 -d > debug.keystore
           fi
+          if [ ! -s debug.keystore ] && [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            printf '%s' "$DEBUG_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > debug.keystore
+          fi
+
+          if [ ! -s debug.keystore ]; then
+            {
+              echo "### ❌ Clé de signature debug.keystore manquante sur GitHub"
+              echo "Sans le vrai \`debug.keystore\`, Google Sign-In échoue avec *There was an error while trying to get your package certificate hash* / *activity is cancelled by the user*."
+              echo ""
+              echo "**Solutions :**"
+              echo "1. Téléchargez l'APK directement depuis **Google AI Studio**."
+              echo "2. Ou poussez \`debug.keystore.base64\` sur GitHub, ou ajoutez le secret \`DEBUG_KEYSTORE_BASE64\` dans **GitHub → Settings → Secrets and variables → Actions** avec le contenu de \`debug.keystore.base64\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          APK_SHA1=$(keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey | grep -E "^\s*SHA1:" | sed -E 's/.*SHA1:\s*//' | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          echo "Debug keystore SHA1: $APK_SHA1"
+          if [ -n "$APK_SHA1" ] && ! grep -qi "$APK_SHA1" app/google-services.json; then
+            {
+              echo "### ❌ Empreinte SHA-1 du keystore incompatible avec Firebase"
+              echo "SHA-1 utilisé : \`$APK_SHA1\` (absent de \`app/google-services.json\`)."
+              echo "Remplacez \`debug.keystore.base64\` (ou le secret \`DEBUG_KEYSTORE_BASE64\`) par celui du projet Google AI Studio."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
           if [ ! -f .env ] && [ ! -f .env.example ]; then
             touch .env
           fi
