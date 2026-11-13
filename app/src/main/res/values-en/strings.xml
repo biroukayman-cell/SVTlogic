@@ -12,8 +12,10 @@
     <string name="auth_welcome_title">Welcome to BioTerre SVT</string>
     <string name="auth_welcome_desc">Your educational space for Biology &amp; Geology lessons, timed quizzes, video tracking, and achievement badges.</string>
     <string name="auth_google_sign_in">Continue with Google</string>
+    <string name="auth_google_browser_sign_in">Sign in with Google via browser</string>
     <string name="auth_sign_out">Sign out</string>
     <string name="auth_error_generic">Sign-in failed. Please try again.</string>
+    <string name="auth_cancelled_hint">Google sign-in interrupted (%1$s). Try again or use browser sign-in below.</string>
 
     <string name="setup_title">Account Setup</string>
     <string name="setup_subtitle">Complete your details to access your SVT classroom.</string>

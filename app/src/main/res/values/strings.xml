@@ -12,8 +12,10 @@
     <string name="auth_welcome_title">Bienvenue sur BioTerre SVT</string>
     <string name="auth_welcome_desc">Votre espace pédagogique pour les cours, QCM chronométrés, suivi vidéo et badges de progression en SVT.</string>
     <string name="auth_google_sign_in">Continuer avec Google</string>
+    <string name="auth_google_browser_sign_in">Connexion Google via navigateur</string>
     <string name="auth_sign_out">Se déconnecter</string>
     <string name="auth_error_generic">Échec de la connexion. Veuillez réessayer.</string>
+    <string name="auth_cancelled_hint">Connexion Google interrompue (%1$s). Réessayez ou utilisez la connexion via navigateur ci-dessous.</string>
 
     <string name="setup_title">Configuration du compte</string>
     <string name="setup_subtitle">Complétez vos informations pour accéder à votre classe de SVT.</string>

@@ -99,6 +99,7 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import com.google.firebase.Firebase
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.OAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
@@ -107,50 +108,32 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 
-fun attemptAutoSignIn(
+private suspend fun signInWithGoogleBrowserInternal(activity: Activity) {
+    val provider = OAuthProvider.newBuilder("google.com").apply {
+        addCustomParameter("prompt", "select_account")
+    }.build()
+    Firebase.auth.startActivityForSignInWithProvider(activity, provider).await()
+}
+
+fun onGoogleBrowserSignInClicked(
     context: Context,
-    credentialManager: CredentialManager,
     onAuthSuccess: () -> Unit,
-    onUnauthenticated: () -> Unit,
+    onAuthError: (String) -> Unit,
     scope: CoroutineScope
 ) {
-    if (Firebase.auth.currentUser != null) {
-        onAuthSuccess()
-        return
-    }
-    val clientId = try {
-        val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-        if (resId != 0) context.getString(resId) else ""
-    } catch (_: Exception) {
-        ""
-    }
-    if (clientId.isBlank()) {
-        onUnauthenticated()
-        return
-    }
-
-    val googleIdOption = GetGoogleIdOption.Builder()
-        .setFilterByAuthorizedAccounts(true)
-        .setServerClientId(clientId)
-        .setAutoSelectEnabled(true)
-        .build()
-
-    val request = GetCredentialRequest.Builder().addCredentialOption(googleIdOption).build()
-
     scope.launch {
         try {
-            val result = credentialManager.getCredential(context, request)
-            val credential = result.credential
-            if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
-                val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
-                Firebase.auth.signInWithCredential(authCredential).await()
+            val activity = context as? Activity
+                ?: throw IllegalStateException("Activity context required for sign-in")
+            signInWithGoogleBrowserInternal(activity)
+            if (Firebase.auth.currentUser != null) {
                 onAuthSuccess()
             } else {
-                onUnauthenticated()
+                onAuthError(context.getString(R.string.auth_error_generic))
             }
-        } catch (_: Exception) {
-            onUnauthenticated()
+        } catch (e: Exception) {
+            Log.e("Auth", "Google browser OAuth sign-in failed", e)
+            onAuthError("${e.javaClass.simpleName}: ${e.localizedMessage ?: e.message ?: "Sign in failed"}")
         }
     }
 }
@@ -161,7 +144,7 @@ fun onGoogleSignInClicked(
     onAuthSuccess: () -> Unit,
     onAuthError: (String) -> Unit,
     scope: CoroutineScope,
-    onAuthCancelled: () -> Unit = {}
+    onAuthCancelled: (String) -> Unit = {}
 ) {
     val clientId = try {
         val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
@@ -187,14 +170,33 @@ fun onGoogleSignInClicked(
             } catch (cancel: GetCredentialCancellationException) {
                 throw cancel
             } catch (primaryErr: GetCredentialException) {
-                Log.w("Auth", "GetSignInWithGoogleOption failed (${primaryErr.javaClass.simpleName}: ${primaryErr.message}), trying GetGoogleIdOption fallback")
+                Log.w(
+                    "Auth",
+                    "GetSignInWithGoogleOption failed (${primaryErr.javaClass.simpleName}: ${primaryErr.errorMessage ?: primaryErr.message}), trying GetGoogleIdOption fallback"
+                )
                 val fallbackOption = GetGoogleIdOption.Builder()
                     .setFilterByAuthorizedAccounts(false)
                     .setServerClientId(clientId)
                     .setAutoSelectEnabled(false)
                     .build()
                 val fallbackRequest = GetCredentialRequest.Builder().addCredentialOption(fallbackOption).build()
-                credentialManager.getCredential(activity, fallbackRequest)
+                try {
+                    credentialManager.getCredential(activity, fallbackRequest)
+                } catch (cancel: GetCredentialCancellationException) {
+                    throw cancel
+                } catch (fallbackErr: GetCredentialException) {
+                    Log.w(
+                        "Auth",
+                        "GetGoogleIdOption failed (${fallbackErr.javaClass.simpleName}: ${fallbackErr.errorMessage ?: fallbackErr.message}), falling back to browser OAuth"
+                    )
+                    signInWithGoogleBrowserInternal(activity)
+                    if (Firebase.auth.currentUser != null) {
+                        onAuthSuccess()
+                    } else {
+                        onAuthError("${fallbackErr.javaClass.simpleName}: ${fallbackErr.errorMessage ?: fallbackErr.message ?: "Sign in failed"}")
+                    }
+                    return@launch
+                }
             }
 
             val credential = result.credential
@@ -207,8 +209,11 @@ fun onGoogleSignInClicked(
                 onAuthError("Unexpected credential type: ${credential.type}")
             }
         } catch (e: GetCredentialCancellationException) {
-            Log.w("Auth", "Google Sign-In cancelled or dismissed: ${e.message}", e)
-            onAuthCancelled()
+            val detail = e.errorMessage?.toString()?.takeIf { it.isNotBlank() }
+                ?: e.message?.takeIf { it.isNotBlank() }
+                ?: e.type
+            Log.w("Auth", "Google Sign-In cancelled or interrupted: $detail", e)
+            onAuthCancelled(detail)
         } catch (e: Exception) {
             Log.e("Auth", "Google Sign-In failed", e)
             onAuthError("${e.javaClass.simpleName}: ${e.localizedMessage ?: e.message ?: "Sign in failed"}")
@@ -243,19 +248,31 @@ fun AuthScreen(
     onLanguageSelected: (AppLanguage) -> Unit,
     onAuthSuccess: () -> Unit
 ) {
+    val localizedContext = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val credentialManager = remember(activityContext) { CredentialManager.create(activityContext) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        attemptAutoSignIn(
-            context = activityContext,
-            credentialManager = credentialManager,
-            onAuthSuccess = onAuthSuccess,
-            onUnauthenticated = {},
-            scope = coroutineScope
-        )
+        if (Firebase.auth.currentUser != null) {
+            onAuthSuccess()
+            return@LaunchedEffect
+        }
+        try {
+            val pendingTask = Firebase.auth.pendingAuthResult
+            if (pendingTask != null) {
+                isLoading = true
+                pendingTask.await()
+                isLoading = false
+                if (Firebase.auth.currentUser != null) {
+                    onAuthSuccess()
+                }
+            }
+        } catch (e: Exception) {
+            isLoading = false
+            errorMessage = "${e.javaClass.simpleName}: ${e.localizedMessage ?: e.message}"
+        }
     }
 
     Surface(
@@ -357,7 +374,10 @@ fun AuthScreen(
                                 errorMessage = msg
                             },
                             scope = coroutineScope,
-                            onAuthCancelled = { isLoading = false }
+                            onAuthCancelled = { detail ->
+                                isLoading = false
+                                errorMessage = localizedContext.getString(R.string.auth_cancelled_hint, detail)
+                            }
                         )
                     },
                     enabled = !isLoading,
@@ -380,6 +400,35 @@ fun AuthScreen(
                             style = MaterialTheme.typography.labelLarge
                         )
                     }
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        errorMessage = null
+                        isLoading = true
+                        onGoogleBrowserSignInClicked(
+                            context = activityContext,
+                            onAuthSuccess = {
+                                isLoading = false
+                                onAuthSuccess()
+                            },
+                            onAuthError = { msg ->
+                                isLoading = false
+                                errorMessage = msg
+                            },
+                            scope = coroutineScope
+                        )
+                    },
+                    enabled = !isLoading,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("google_browser_sign_in_button")
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.auth_google_browser_sign_in),
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
 

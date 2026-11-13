@@ -12,8 +12,10 @@
     <string name="auth_welcome_title">مرحباً بك في BioTerre SVT</string>
     <string name="auth_welcome_desc">فضاؤك التربوي للدروس، التمارين الموقوتة، تتبع مشاهدة الفيديو، وشارات التفوق في علوم الحياة والأرض.</string>
     <string name="auth_google_sign_in">المتابعة عبر Google</string>
+    <string name="auth_google_browser_sign_in">تسجيل الدخول عبر المتصفح (Google)</string>
     <string name="auth_sign_out">تسجيل الخروج</string>
     <string name="auth_error_generic">تعذر تسجيل الدخول. يرجى المحاولة مجدداً.</string>
+    <string name="auth_cancelled_hint">توقف تسجيل الدخول عبر Google (%1$s). أعد المحاولة أو استخدم تسجيل الدخول عبر المتصفح أدناه.</string>
 
     <string name="setup_title">إعداد الحساب</string>
     <string name="setup_subtitle">أكمل بياناتك للوصول إلى قسم علوم الحياة والأرض.</string>
