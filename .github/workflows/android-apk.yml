@@ -53,10 +53,13 @@ jobs:
       - name: Build Debug APK
         run: |
           set -o pipefail
-          if ! gradle assembleDebug --no-daemon --no-configuration-cache -Dorg.gradle.jvmargs="-Xmx3g -Dfile.encoding=UTF-8" --stacktrace 2>&1 | tee /tmp/gradle-build.log; then
-            echo "### Erreur Gradle" >> "$GITHUB_STEP_SUMMARY"
+          if [ ! -f app/google-services.json ]; then
+            echo "⚠️ Attention : app/google-services.json est absent du dépôt GitHub." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if ! gradle assembleDebug --no-daemon --no-configuration-cache -Dorg.gradle.jvmargs="-Xmx3g -Dfile.encoding=UTF-8" 2>&1 | tee /tmp/gradle-build.log; then
+            echo "### Erreur de compilation Gradle / Kotlin" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
-            tail -n 60 /tmp/gradle-build.log >> "$GITHUB_STEP_SUMMARY"
+            grep -E "^(e: |FAILURE:|\\* What went wrong:|> |Caused by:)" /tmp/gradle-build.log | head -n 60 >> "$GITHUB_STEP_SUMMARY" || tail -n 60 /tmp/gradle-build.log >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
