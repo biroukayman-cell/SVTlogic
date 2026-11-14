@@ -3,6 +3,8 @@ package com.example
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivityResultRegistryOwner
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
@@ -96,7 +98,9 @@ class MainActivity : ComponentActivity() {
 
             CompositionLocalProvider(
                 LocalContext provides localizedContext,
-                LocalLayoutDirection provides currentLanguage.layoutDirection
+                LocalLayoutDirection provides currentLanguage.layoutDirection,
+                LocalActivityResultRegistryOwner provides activityContext,
+                LocalOnBackPressedDispatcherOwner provides activityContext
             ) {
                 BioTerreTheme {
                     Surface(
