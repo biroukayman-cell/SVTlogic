@@ -114,6 +114,7 @@ fun ExercisesTab(
     var activeQuizToPlay by remember { mutableStateOf<Quiz?>(null) }
     var attemptToView by remember { mutableStateOf<QuizAttempt?>(null) }
     var showCreateQuizDialog by remember { mutableStateOf(false) }
+    var preFilledManualChapter by remember { mutableStateOf("") }
     var showAiGeneratorDialog by remember { mutableStateOf(false) }
     var statsQuiz by remember { mutableStateOf<Quiz?>(null) }
     var offlineOnlyFilter by remember { mutableStateOf(false) }
@@ -161,7 +162,10 @@ fun ExercisesTab(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Button(
-                            onClick = { showCreateQuizDialog = true },
+                            onClick = {
+                                preFilledManualChapter = ""
+                                showCreateQuizDialog = true
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("create_quiz_button")
@@ -490,17 +494,27 @@ fun ExercisesTab(
                 onPublishQuiz(selectedClassId, draftTitle, draftDesc, chapter, questions, isDownloadable)
                 showAiGeneratorDialog = false
             },
+            onFallbackToManual = { chapterText ->
+                showAiGeneratorDialog = false
+                preFilledManualChapter = chapterText
+                showCreateQuizDialog = true
+            },
             onDismiss = { showAiGeneratorDialog = false }
         )
     }
 
     if (showCreateQuizDialog && selectedClassId != null) {
         ManualCreateQuizDialog(
+            initialChapter = preFilledManualChapter,
             onPublish = { title, desc, chapter, questions, isDownloadable ->
                 onPublishQuiz(selectedClassId, title, desc, chapter, questions, isDownloadable)
                 showCreateQuizDialog = false
+                preFilledManualChapter = ""
             },
-            onDismiss = { showCreateQuizDialog = false }
+            onDismiss = {
+                showCreateQuizDialog = false
+                preFilledManualChapter = ""
+            }
         )
     }
 }
@@ -868,6 +882,7 @@ private fun AiQuizGeneratorDialog(
         questions: List<QuizQuestion>,
         isDownloadable: Boolean
     ) -> Unit,
+    onFallbackToManual: (chapter: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var chapter by remember { mutableStateOf("La division cellulaire (Mitose & Méiose)") }
@@ -934,11 +949,23 @@ private fun AiQuizGeneratorDialog(
                         }
                     }
                     is AiQuizState.Error -> {
-                        Text(
-                            text = stringResource(id = R.string.quiz_ai_error, aiQuizState.message),
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = stringResource(id = R.string.quiz_ai_error, aiQuizState.message),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            OutlinedButton(
+                                onClick = { onFallbackToManual(chapter.trim()) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("ai_fallback_manual_button")
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(id = R.string.quiz_ai_fallback_manual))
+                            }
+                        }
                     }
                     is AiQuizState.Success -> {
                         val draft = aiQuizState.draft
@@ -995,6 +1022,7 @@ private fun AiQuizGeneratorDialog(
 
 @Composable
 private fun ManualCreateQuizDialog(
+    initialChapter: String = "",
     onPublish: (
         title: String,
         desc: String,
@@ -1005,7 +1033,7 @@ private fun ManualCreateQuizDialog(
     onDismiss: () -> Unit
 ) {
     var title by remember { mutableStateOf("") }
-    var chapter by remember { mutableStateOf("") }
+    var chapter by remember(initialChapter) { mutableStateOf(initialChapter) }
     var desc by remember { mutableStateOf("") }
     var isDownloadable by remember { mutableStateOf(true) }
     var qText by remember { mutableStateOf("") }

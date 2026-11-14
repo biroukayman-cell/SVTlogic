@@ -1,12 +1,16 @@
 package com.example.data.repository
 
 import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import com.example.R
 import com.example.core.OperationType
 import com.example.core.handleFirestoreError
 import com.example.data.badges.BadgeEngine
 import com.example.data.badges.SvtBadgeDefinition
 import com.example.data.model.Announcement
+import com.example.data.model.AppUpdateRelease
 import com.example.data.model.ClassCode
 import com.example.data.model.CourseResource
 import com.example.data.model.Enrollment
@@ -20,24 +24,39 @@ import com.example.data.model.StudentNotification
 import com.example.data.model.SvtClass
 import com.example.data.model.UserProfile
 import com.example.data.model.VideoTracking
+import com.example.data.offline.OfflineStorageManager
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.Blob
 import com.google.firebase.firestore.DocumentSnapshot.ServerTimestampBehavior
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.snapshots
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+
+class ResourceUploadTooLargeException(
+    val sizeBytes: Long,
+    val maxBytes: Long
+) : IllegalStateException("File size $sizeBytes exceeds max allowed $maxBytes bytes")
+
+class ResourceReadException(
+    message: String,
+    cause: Throwable? = null
+) : IllegalStateException(message, cause)
 
 class SvtRepository(private val db: FirebaseFirestore) {
 
@@ -359,9 +378,11 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 "quizzes",
                 "quiz_attempts",
                 "resources",
+                "resource_chunks",
                 "video_tracking",
                 "announcements",
-                "private_messages"
+                "private_messages",
+                "app_updates"
             )
             for (col in collectionsByClass) {
                 val snaps = db.collection(col)
@@ -988,6 +1009,182 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
     }
 
+    suspend fun uploadChunkedResource(
+        appContext: Context,
+        classId: String,
+        title: String,
+        description: String,
+        type: String,
+        contentUriString: String,
+        durationSeconds: Long,
+        approvedStudentIds: List<String>,
+        notifTitle: String,
+        notifBody: String,
+        isDownloadable: Boolean = false
+    ): String {
+        val uid = requireUserId()
+        val uri = Uri.parse(contentUriString)
+        val (fileBytes, ext) = withContext(Dispatchers.IO) {
+            val resolver = appContext.contentResolver
+            val mime = resolver.getType(uri)
+            val fromMime = mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+            val displayName = runCatching {
+                resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) c.getString(0) else null
+                }
+            }.getOrNull()
+            val extResolved = when {
+                !fromMime.isNullOrBlank() -> fromMime.lowercase(Locale.US)
+                !displayName.isNullOrBlank() && displayName.contains('.') ->
+                    displayName.substringAfterLast('.').lowercase(Locale.US).take(5)
+                else -> OfflineStorageManager.inferExtension(contentUriString, type)
+            }
+
+            val input = try {
+                resolver.openInputStream(uri)
+            } catch (e: Exception) {
+                throw ResourceReadException("Cannot read selected file", e)
+            } ?: throw ResourceReadException("Cannot open selected file")
+
+            val out = ByteArrayOutputStream()
+            val buf = ByteArray(16 * 1024)
+            var total = 0L
+            input.use { stream ->
+                while (true) {
+                    val read = stream.read(buf)
+                    if (read == -1) break
+                    total += read
+                    if (total > MAX_CHUNKED_UPLOAD_BYTES) {
+                        throw ResourceUploadTooLargeException(total, MAX_CHUNKED_UPLOAD_BYTES)
+                    }
+                    out.write(buf, 0, read)
+                }
+            }
+            val bytes = out.toByteArray()
+            if (bytes.isEmpty()) {
+                throw ResourceReadException("Selected file is empty")
+            }
+            bytes to extResolved
+        }
+
+        val resRef = db.collection("resources").document()
+        val resourceId = resRef.id
+        val chunkSize = 600 * 1024
+        val chunks = mutableListOf<ByteArray>()
+        var offset = 0
+        while (offset < fileBytes.size) {
+            val end = minOf(offset + chunkSize, fileBytes.size)
+            chunks.add(fileBytes.copyOfRange(offset, end))
+            offset = end
+        }
+        val totalChunks = chunks.size
+        val createdChunkRefs = mutableListOf<com.google.firebase.firestore.DocumentReference>()
+
+        try {
+            // Upload chunks in batches of 8 (each batch <= ~4.8 MiB, well under Firestore 10 MiB write limit)
+            chunks.withIndex().chunked(8).forEach { group ->
+                val chunkBatch = db.batch()
+                group.forEach { (idx, chunkBytes) ->
+                    val chunkRef = db.collection("resource_chunks").document("${resourceId}_$idx")
+                    createdChunkRefs.add(chunkRef)
+                    chunkBatch.set(
+                        chunkRef,
+                        mapOf(
+                            "resourceId" to resourceId,
+                            "classId" to classId,
+                            "teacherId" to uid,
+                            "chunkIndex" to idx,
+                            "totalChunks" to totalChunks,
+                            "data" to Blob.fromBytes(chunkBytes),
+                            "createdAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+                chunkBatch.commit().await()
+            }
+
+            val chunkSchemeUrl = "${OfflineStorageManager.FIRESTORE_CHUNK_SCHEME}://${OfflineStorageManager.FIRESTORE_CHUNK_HOST}/$resourceId?ext=$ext"
+            val payload = mapOf(
+                "classId" to classId,
+                "teacherId" to uid,
+                "title" to title.trim(),
+                "description" to description.trim(),
+                "type" to type,
+                "fileUrl" to chunkSchemeUrl,
+                "durationSeconds" to durationSeconds.coerceAtLeast(0L),
+                "approvedStudentIds" to approvedStudentIds.distinct().take(100),
+                "isDownloadable" to isDownloadable,
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            val batch = db.batch()
+            batch.set(resRef, payload)
+            for (studentId in approvedStudentIds.distinct()) {
+                val notifRef = db.collection("student_notifications").document()
+                batch.set(
+                    notifRef,
+                    mapOf(
+                        "studentId" to studentId,
+                        "teacherId" to uid,
+                        "type" to "resource",
+                        "title" to notifTitle,
+                        "body" to notifBody,
+                        "isRead" to false,
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+                )
+            }
+            batch.commit().await()
+            return resourceId
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            createdChunkRefs.chunked(200).forEach { group ->
+                runCatching {
+                    val cleanup = db.batch()
+                    group.forEach { cleanup.delete(it) }
+                    cleanup.commit().await()
+                }
+            }
+            handleFirestoreError(e, OperationType.CREATE, resRef.path)
+            throw e
+        }
+    }
+
+    suspend fun deleteResource(resource: CourseResource) {
+        val uid = requireUserId()
+        if (resource.id.isBlank()) return
+        try {
+            val refsToDelete = mutableListOf(
+                db.collection("resources").document(resource.id)
+            )
+            val chunkSnaps = db.collection("resource_chunks")
+                .whereEqualTo("teacherId", uid)
+                .whereEqualTo("resourceId", resource.id)
+                .get()
+                .await()
+            refsToDelete.addAll(chunkSnaps.documents.map { it.reference })
+
+            val trackingSnaps = db.collection("video_tracking")
+                .whereEqualTo("teacherId", uid)
+                .whereEqualTo("resourceId", resource.id)
+                .get()
+                .await()
+            refsToDelete.addAll(trackingSnaps.documents.map { it.reference })
+
+            refsToDelete.chunked(400).forEach { group ->
+                val batch = db.batch()
+                group.forEach { batch.delete(it) }
+                batch.commit().await()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, "resources/${resource.id}")
+            throw e
+        }
+    }
+
     suspend fun updateResourceDownloadable(resourceId: String, isDownloadable: Boolean) {
         requireUserId()
         val docRef = db.collection("resources").document(resourceId)
@@ -1388,6 +1585,79 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
     }
 
+    // ---------------------------------------------------------
+    // 10. Teacher-Published App Updates (HTTPS distribution URL)
+    // ---------------------------------------------------------
+    fun observeTeacherAppUpdates(teacherId: String): Flow<List<AppUpdateRelease>> = flow {
+        db.collection("app_updates")
+            .whereEqualTo("teacherId", teacherId)
+            .snapshots()
+            .map { snapshot ->
+                snapshot.toObjects(AppUpdateRelease::class.java, ServerTimestampBehavior.ESTIMATE)
+                    .sortedByDescending { it.versionCode }
+            }
+            .logFirestoreErrors(OperationType.LIST, "app_updates", teacherId)
+            .collect { emit(it) }
+    }
+
+    fun observeClassAppUpdates(classId: String): Flow<List<AppUpdateRelease>> = flow {
+        db.collection("app_updates")
+            .whereEqualTo("classId", classId)
+            .snapshots()
+            .map { snapshot ->
+                snapshot.toObjects(AppUpdateRelease::class.java, ServerTimestampBehavior.ESTIMATE)
+                    .sortedByDescending { it.versionCode }
+            }
+            .logFirestoreErrors(OperationType.LIST, "app_updates", classId)
+            .collect { emit(it) }
+    }
+
+    suspend fun publishAppUpdate(
+        classId: String,
+        teacherName: String,
+        versionCode: Int,
+        versionName: String,
+        releaseNotes: String,
+        downloadUrl: String
+    ): String {
+        val uid = requireUserId()
+        val updateRef = db.collection("app_updates").document()
+        val payload = mapOf(
+            "classId" to classId,
+            "teacherId" to uid,
+            "teacherName" to teacherName.trim().ifBlank { "Professeur" },
+            "versionCode" to versionCode,
+            "versionName" to versionName.trim(),
+            "releaseNotes" to releaseNotes.trim(),
+            "downloadUrl" to downloadUrl.trim(),
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        try {
+            updateRef.set(payload).await()
+            return updateRef.id
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, updateRef.path)
+            throw e
+        }
+    }
+
+    suspend fun deleteAppUpdate(updateId: String) {
+        requireUserId()
+        if (updateId.isBlank()) return
+        val docRef = db.collection("app_updates").document(updateId)
+        try {
+            docRef.delete().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docRef.path)
+            throw e
+        }
+    }
+
     private fun todayDateString(): String {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         return sdf.format(Date())
@@ -1396,5 +1666,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
     private fun yesterdayDateString(): String {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         return sdf.format(Date(System.currentTimeMillis() - 86_400_000L))
+    }
+
+    companion object {
+        const val MAX_CHUNKED_UPLOAD_BYTES: Long = 20L * 1024L * 1024L
     }
 }

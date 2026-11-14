@@ -6,6 +6,8 @@ import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,6 +36,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DownloadForOffline
@@ -44,8 +47,10 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -79,6 +84,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
@@ -87,6 +94,8 @@ import com.example.data.model.CourseResource
 import com.example.data.model.Enrollment
 import com.example.data.model.VideoTracking
 import com.example.data.offline.DownloadedResource
+import com.example.data.offline.OfflineStorageManager
+import com.example.data.repository.SvtRepository
 import com.example.ui.components.SvtEmptyStateCard
 import com.example.ui.theme.SvtCoralError
 import com.example.ui.theme.SvtEmeraldPrimary
@@ -108,6 +117,7 @@ fun ResourcesTab(
     classEnrollments: List<Enrollment>,
     downloadedResources: Map<String, DownloadedResource>,
     downloadingProgress: Map<String, Float>,
+    isUploadingResource: Boolean,
     onAddResource: (
         classId: String,
         title: String,
@@ -117,6 +127,8 @@ fun ResourcesTab(
         durationSec: Long,
         isDownloadable: Boolean
     ) -> Unit,
+    onDeleteResource: (CourseResource) -> Unit,
+    onPrepareResourceForOpen: (resource: CourseResource, currentUri: String, onReady: (String) -> Unit) -> Unit,
     onToggleResourceDownloadable: (CourseResource) -> Unit,
     onDownloadResourceOffline: (CourseResource) -> Unit,
     onRemoveOfflineResource: (String) -> Unit,
@@ -129,6 +141,7 @@ fun ResourcesTab(
     var pdfToView by remember { mutableStateOf<Pair<CourseResource, String>?>(null) }
     var imageToView by remember { mutableStateOf<Pair<CourseResource, String>?>(null) }
     var trackingVideoResource by remember { mutableStateOf<CourseResource?>(null) }
+    var resourceToDelete by remember { mutableStateOf<CourseResource?>(null) }
 
     val classFiltered = remember(resources, selectedClassId, isTeacher) {
         if (isTeacher && selectedClassId != null) resources.filter { it.classId == selectedClassId }
@@ -157,15 +170,38 @@ fun ResourcesTab(
                         )
                     }
                 } else {
-                    Button(
-                        onClick = { showAddDialog = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("add_resource_button")
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(id = R.string.resource_add))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { showAddDialog = true },
+                            enabled = !isUploadingResource,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("add_resource_button")
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(id = R.string.resource_add))
+                        }
+                        if (isUploadingResource) {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(id = R.string.resource_uploading_progress),
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -265,6 +301,18 @@ fun ResourcesTab(
                                         resource.description,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            if (isTeacher) {
+                                IconButton(
+                                    onClick = { resourceToDelete = resource },
+                                    modifier = Modifier.testTag("delete_resource_${resource.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = stringResource(id = R.string.delete),
+                                        tint = MaterialTheme.colorScheme.error
                                     )
                                 }
                             }
@@ -372,16 +420,26 @@ fun ResourcesTab(
                         ) {
                             Button(
                                 onClick = {
-                                    when (resource.type) {
-                                        "video" -> videoToPlay = resource to effectiveUri
-                                        "pdf" -> pdfToView = resource to effectiveUri
-                                        "image" -> imageToView = resource to effectiveUri
-                                        else -> openExternalUrl(context, effectiveUri)
+                                    onPrepareResourceForOpen(resource, effectiveUri) { readyUri ->
+                                        when (resource.type) {
+                                            "video" -> videoToPlay = resource to readyUri
+                                            "pdf" -> pdfToView = resource to readyUri
+                                            "image" -> imageToView = resource to readyUri
+                                            else -> openExternalUrl(context, readyUri, resource.type)
+                                        }
                                     }
                                 },
-                                enabled = canOpenNow,
+                                enabled = canOpenNow && downloadFraction == null,
                                 modifier = Modifier.weight(1f)
                             ) {
+                                if (downloadFraction != null) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                }
                                 Text(
                                     stringResource(
                                         id = if (resource.type == "video") R.string.resource_watch
@@ -461,8 +519,32 @@ fun ResourcesTab(
         PdfViewerDialog(
             resource = res,
             fileUri = fileUri,
-            onOpenExternal = { openExternalUrl(context, fileUri) },
+            onOpenExternal = { openExternalUrl(context, fileUri, res.type) },
             onDismiss = { pdfToView = null }
+        )
+    }
+
+    resourceToDelete?.let { res ->
+        AlertDialog(
+            onDismissRequest = { resourceToDelete = null },
+            title = { Text(stringResource(id = R.string.confirm_delete_title)) },
+            text = { Text(stringResource(id = R.string.confirm_delete_resource_msg, res.title)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteResource(res)
+                        resourceToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(stringResource(id = R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { resourceToDelete = null }) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
         )
     }
 
@@ -507,6 +589,7 @@ private fun VideoPlayerTrackingDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    var playbackError by remember(playbackUri) { mutableStateOf(false) }
     val player = remember(playbackUri) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(Uri.parse(playbackUri)))
@@ -516,7 +599,14 @@ private fun VideoPlayerTrackingDialog(
     }
 
     DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                playbackError = true
+            }
+        }
+        player.addListener(listener)
         onDispose {
+            player.removeListener(listener)
             val pos = (player.currentPosition / 1000L).coerceAtLeast(0L)
             val dur = (player.duration / 1000L).takeIf { it > 0L } ?: resource.durationSeconds.coerceAtLeast(1L)
             onProgressUpdate(pos, dur)
@@ -552,6 +642,26 @@ private fun VideoPlayerTrackingDialog(
                         .height(220.dp)
                         .clip(MaterialTheme.shapes.medium)
                 )
+                if (playbackError) {
+                    Text(
+                        text = stringResource(id = R.string.video_playback_error_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                val externalTarget = if (playbackUri.startsWith("http", ignoreCase = true)) {
+                    playbackUri
+                } else {
+                    resource.fileUrl.takeUnless { it.startsWith("firestore://") } ?: playbackUri
+                }
+                OutlinedButton(
+                    onClick = { openExternalUrl(context, externalTarget, "video") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(id = R.string.pdf_open_external))
+                }
             }
         },
         confirmButton = {
@@ -734,13 +844,35 @@ private fun AddResourceDialog(
     var desc by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf("pdf") }
     var fileUrl by remember { mutableStateOf("") }
+    var pickedFileLabel by remember { mutableStateOf<String?>(null) }
+    var fileSizeError by remember { mutableStateOf<String?>(null) }
     var durationText by remember { mutableStateOf("120") }
     var isDownloadable by remember { mutableStateOf(true) }
+
+    val handlePickedUri: (Uri) -> Unit = { uri ->
+        val (name, sizeBytes) = resolvePickedFileMeta(context, uri)
+        if (sizeBytes != null && sizeBytes > SvtRepository.MAX_CHUNKED_UPLOAD_BYTES) {
+            val maxMb = (SvtRepository.MAX_CHUNKED_UPLOAD_BYTES / (1024L * 1024L)).toInt()
+            fileSizeError = context.getString(R.string.resource_too_large_error, maxMb)
+            pickedFileLabel = null
+            fileUrl = ""
+        } else {
+            fileSizeError = null
+            fileUrl = uri.toString()
+            val sizeText = sizeBytes?.let { formatBytesReadable(it) } ?: ""
+            pickedFileLabel = listOfNotNull(name.takeIf { it.isNotBlank() }, sizeText.takeIf { it.isNotBlank() })
+                .joinToString(" • ")
+                .ifBlank { null }
+            if (title.isBlank() && name.isNotBlank()) {
+                title = name.substringBeforeLast('.').take(80)
+            }
+        }
+    }
 
     val visualMediaLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
-        uri?.let { fileUrl = it.toString() }
+        uri?.let(handlePickedUri)
     }
 
     val documentPickerLauncher = rememberLauncherForActivityResult(
@@ -754,7 +886,7 @@ private fun AddResourceDialog(
                 )
             } catch (_: Exception) {
             }
-            fileUrl = it.toString()
+            handlePickedUri(it)
         }
     }
 
@@ -794,7 +926,11 @@ private fun AddResourceDialog(
                 )
                 OutlinedTextField(
                     value = fileUrl,
-                    onValueChange = { fileUrl = it },
+                    onValueChange = {
+                        fileUrl = it
+                        pickedFileLabel = null
+                        fileSizeError = null
+                    },
                     label = { Text(stringResource(id = R.string.resource_url_label)) }
                 )
                 OutlinedButton(
@@ -818,6 +954,20 @@ private fun AddResourceDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(stringResource(id = R.string.resource_pick_file))
+                }
+                if (!pickedFileLabel.isNullOrBlank()) {
+                    Text(
+                        text = pickedFileLabel!!,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (!fileSizeError.isNullOrBlank()) {
+                    Text(
+                        text = fileSizeError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
                 if (selectedType == "video") {
                     OutlinedTextField(
@@ -848,7 +998,7 @@ private fun AddResourceDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (title.trim().length >= 2 && fileUrl.isNotBlank()) {
+                    if (title.trim().length >= 2 && fileUrl.isNotBlank() && fileSizeError == null) {
                         onSave(
                             title.trim(),
                             desc.trim(),
@@ -858,7 +1008,8 @@ private fun AddResourceDialog(
                             isDownloadable
                         )
                     }
-                }
+                },
+                enabled = title.trim().length >= 2 && fileUrl.isNotBlank() && fileSizeError == null
             ) {
                 Text(stringResource(id = R.string.profile_save))
             }
@@ -869,10 +1020,44 @@ private fun AddResourceDialog(
     )
 }
 
-private fun openExternalUrl(context: Context, url: String) {
+private fun resolvePickedFileMeta(context: Context, uri: Uri): Pair<String, Long?> {
+    var name = ""
+    var size: Long? = null
+    runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIdx >= 0) name = cursor.getString(nameIdx).orEmpty()
+                val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (sizeIdx >= 0 && !cursor.isNull(sizeIdx)) {
+                    size = cursor.getLong(sizeIdx)
+                }
+            }
+        }
+    }
+    return name to size
+}
+
+private fun formatBytesReadable(bytes: Long): String {
+    return when {
+        bytes >= 1024L * 1024L -> "%.1f Mo".format(bytes / (1024.0 * 1024.0))
+        bytes >= 1024L -> "${bytes / 1024L} Ko"
+        else -> "$bytes o"
+    }
+}
+
+private fun openExternalUrl(context: Context, url: String, resourceType: String) {
     try {
-        val parsed = Uri.parse(url)
-        val finalUri = if (parsed.scheme == "file" && parsed.path != null) {
+        val normalized = OfflineStorageManager.normalizeDownloadUrl(url)
+        val parsed = Uri.parse(normalized)
+        val isLocalFile = parsed.scheme == "file" && parsed.path != null
+        val finalUri = if (isLocalFile) {
             FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
@@ -881,10 +1066,23 @@ private fun openExternalUrl(context: Context, url: String) {
         } else {
             parsed
         }
-        val intent = Intent(Intent.ACTION_VIEW, finalUri).apply {
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val intent = if (isLocalFile || parsed.scheme == "content") {
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(
+                    finalUri,
+                    OfflineStorageManager.mimeTypeForResource(resourceType, normalized)
+                )
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        } else {
+            Intent(Intent.ACTION_VIEW, finalUri)
         }
         context.startActivity(intent)
     } catch (_: Exception) {
+        Toast.makeText(
+            context,
+            context.getString(R.string.resource_no_viewer_error),
+            Toast.LENGTH_SHORT
+        ).show()
     }
 }

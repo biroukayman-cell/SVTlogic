@@ -438,3 +438,124 @@ test("Class rosters: teacher creates/reads roster, student only sees own entry, 
   );
 });
 
+test("Resource chunks & app updates: teacher writes, only approved students in same class can read", async () => {
+  const teacherDb = testEnv.authenticatedContext(TEACHER_UID).firestore();
+  const studentADb = testEnv.authenticatedContext(STUDENT_A_UID).firestore();
+  const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
+  const now = serverNow();
+
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.collection("classes").doc("class_1").set({
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      name: "2Bac SVT",
+      academicYear: "2026-2027",
+      level: "2Bac",
+      qrToken: "SVT_CHUNK1",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.collection("enrollments").doc(STUDENT_A_UID).set({
+      studentId: STUDENT_A_UID,
+      classId: "class_1",
+      className: "2Bac SVT",
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      studentName: "Amina",
+      studentPhone: "0600000000",
+      status: "approved",
+      requestedAt: now,
+      updatedAt: now,
+    });
+    await db.collection("enrollments").doc(STUDENT_B_UID).set({
+      studentId: STUDENT_B_UID,
+      classId: "class_1",
+      className: "2Bac SVT",
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      studentName: "Youssef",
+      studentPhone: "0611111111",
+      status: "pending",
+      requestedAt: now,
+      updatedAt: now,
+    });
+  });
+
+  const rulesPkgDir = require.resolve("@firebase/rules-unit-testing");
+  const fbCompat = require(require.resolve("firebase/compat/app", { paths: [rulesPkgDir] }));
+  require(require.resolve("firebase/compat/firestore", { paths: [rulesPkgDir] }));
+  const sampleBytes = fbCompat.firestore.Blob.fromUint8Array(new Uint8Array([37, 80, 68, 70]));
+  await assertSucceeds(
+    teacherDb.collection("resource_chunks").doc("res_1_chunk_0").set({
+      resourceId: "res_1",
+      classId: "class_1",
+      teacherId: TEACHER_UID,
+      chunkIndex: 0,
+      totalChunks: 1,
+      data: sampleBytes,
+      createdAt: now,
+    })
+  );
+
+  // Approved student A can query chunks for class_1; pending student B cannot
+  await assertSucceeds(
+    studentADb.collection("resource_chunks")
+      .where("resourceId", "==", "res_1")
+      .where("classId", "==", "class_1")
+      .get()
+  );
+  await assertFails(
+    studentBDb.collection("resource_chunks")
+      .where("resourceId", "==", "res_1")
+      .where("classId", "==", "class_1")
+      .get()
+  );
+  await assertFails(
+    studentADb.collection("resource_chunks").doc("res_1_chunk_1").set({
+      resourceId: "res_1",
+      classId: "class_1",
+      teacherId: STUDENT_A_UID,
+      chunkIndex: 1,
+      totalChunks: 2,
+      data: sampleBytes,
+      createdAt: now,
+    })
+  );
+
+  // Teacher can publish HTTPS app update; non-https link fails; approved student reads, pending denied
+  await assertFails(
+    teacherDb.collection("app_updates").doc("upd_bad").set({
+      classId: "class_1",
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      versionCode: 2,
+      versionName: "1.1",
+      releaseNotes: "Nouvelle version",
+      downloadUrl: "http://insecure.example.com/app.apk",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(
+    teacherDb.collection("app_updates").doc("upd_1").set({
+      classId: "class_1",
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      versionCode: 2,
+      versionName: "1.1",
+      releaseNotes: "Correction lecture vidéos et fichiers",
+      downloadUrl: "https://github.com/example/bioterre/releases/latest",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(
+    studentADb.collection("app_updates").where("classId", "==", "class_1").get()
+  );
+  await assertFails(
+    studentBDb.collection("app_updates").where("classId", "==", "class_1").get()
+  );
+});
+
+

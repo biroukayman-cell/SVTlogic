@@ -298,4 +298,32 @@
     <string name="teacher_downloadable_off">متاح عبر الإنترنت فقط</string>
     <string name="firebase_missing_config_title">إعدادات Firebase مفقودة</string>
     <string name="firebase_missing_config_body">نسخة التطبيق هذه لا تحتوي على ملف google-services.json. يرجى تحميل ملف APK مباشرة من Google AI Studio أو إضافة السر GOOGLE_SERVICES_JSON في GitHub Actions.</string>
+
+    <!-- الموارد المشتركة والبديل اليدوي وتحديثات التطبيق -->
+    <string name="quiz_ai_error_appcheck">يتطلب التوليد بالذكاء الاصطناعي رمز App Check صالحاً في هذا التطبيق (غير متوفر في هذه النسخة). يمكنك إنشاء الاختبار يدوياً أدناه.</string>
+    <string name="quiz_ai_fallback_manual">إنشاء يدوياً</string>
+    <string name="resource_upload_success">تم رفع «%1$s» ومشاركته مع القسم</string>
+    <string name="resource_too_large_error">يتجاوز الملف المحدد الحد المسموح به (%1$d ميغابايت). استخدم رابط Google Drive أو قم بضغط الملف.</string>
+    <string name="resource_read_error">تعذر قراءة الملف المحدد على هذا الجهاز.</string>
+    <string name="resource_legacy_local_uri_error">هذا الملف مرتبط بمسار محلي على جهاز الأستاذ. اطلب من الأستاذ إعادة نشره ليتمكن القسم من فتحه.</string>
+    <string name="resource_uploading_progress">جاري رفع الملف ومشاركته مع القسم...</string>
+    <string name="confirm_delete_resource_msg">حذف «%1$s» من القسم بأكمله؟</string>
+    <string name="video_playback_error_hint">تعذر التشغيل المدمج على هذا الجهاز. جرب فتح الفيديو في مشغل خارجي.</string>
+    <string name="resource_no_viewer_error">لم يتم العثور على تطبيق متوافق لفتح هذا الملف.</string>
+    <string name="app_update_section_title">تحديثات التطبيق</string>
+    <string name="app_update_current_version">النسخة المثبتة: v%1$s (الإصدار %2$d)</string>
+    <string name="app_update_available_title">التحديث v%1$s (الإصدار %2$d) متوفر</string>
+    <string name="app_update_download_btn">تحميل وتثبيت</string>
+    <string name="app_update_up_to_date">تطبيقك محدّث إلى آخر نسخة.</string>
+    <string name="app_update_no_uninstall_hint">قم بتثبيت ملف APK الجديد مباشرة دون حذف التطبيق الحالي: ستبقى أقسامك وحساباتك وبياناتك محفوظة.</string>
+    <string name="app_update_publish_btn">نشر تحديث جديد</string>
+    <string name="app_update_delete_confirm">حذف إشعار التحديث v%1$s؟</string>
+    <string name="app_update_publish_dialog_title">نشر تحديث APK</string>
+    <string name="app_update_version_code_label">رقم البناء (مثال: 3)</string>
+    <string name="app_update_version_name_label">اسم الإصدار (مثال: 1.2)</string>
+    <string name="app_update_url_label">رابط HTTPS لملف APK (GitHub / Drive)</string>
+    <string name="app_update_notes_label">مستجدات هذا الإصدار</string>
+    <string name="app_update_invalid_url">يرجى إدخال رابط HTTPS صالح لملف APK أو لصفحة التحميل.</string>
+    <string name="app_update_invalid_version">يرجى إدخال رقم بناء أكبر من 0 واسم للإصدار.</string>
+    <string name="app_update_published_success">تم نشر التحديث v%1$s للقسم</string>
 </resources>

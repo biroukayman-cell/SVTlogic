@@ -73,9 +73,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.BuildConfig
 import com.example.R
 import com.example.core.AppLanguage
 import com.example.core.StudentCredentialsPdfExporter
+import com.example.data.model.AppUpdateRelease
 import com.example.data.model.UserProfile
 import com.example.ui.components.BadgeCelebrationDialog
 import com.example.ui.components.LanguageSwitcherRow
@@ -84,6 +86,7 @@ import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtWarning
 import com.example.ui.viewmodel.SvtMainViewModel
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.SystemUpdate
 
 enum class SvtTab(
     @StringRes val labelRes: Int,
@@ -147,8 +150,11 @@ fun MainDashboardScreen(
 
     val aiQuizState by viewModel.aiQuizState.collectAsStateWithLifecycle()
     val unlockedBadges by viewModel.newlyUnlockedBadges.collectAsStateWithLifecycle()
+    val isUploadingResource by viewModel.isUploadingResource.collectAsStateWithLifecycle()
+    val appUpdates by viewModel.appUpdates.collectAsStateWithLifecycle()
     val actionError by viewModel.actionError.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
+    var dismissedUpdateId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Request POST_NOTIFICATIONS politely on Android 13+ for badge unlock alerts
     val notifPermissionLauncher = rememberLauncherForActivityResult(
@@ -187,6 +193,10 @@ fun MainDashboardScreen(
     val unreadNotifications = studentNotifications.count { !it.isRead }
     val selectedClass = teacherClasses.firstOrNull { it.id == selectedClassId }
     val pendingSyncCount = pendingAttempts.size + pendingVideoTrackings.size
+    val latestUpdate = appUpdates.maxByOrNull { it.versionCode }
+    val availableUpdate = latestUpdate?.takeIf {
+        it.versionCode > BuildConfig.VERSION_CODE && it.id != dismissedUpdateId
+    }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val useNavigationRail = maxWidth >= 680.dp
@@ -324,6 +334,16 @@ fun MainDashboardScreen(
                 }
 
                 Column(modifier = Modifier.weight(1f).fillMaxSize()) {
+                    AnimatedVisibility(visible = availableUpdate != null) {
+                        availableUpdate?.let { upd ->
+                            AppUpdateAvailableBanner(
+                                update = upd,
+                                onDownloadClick = { openAppUpdateLink(context, upd.downloadUrl) },
+                                onDismiss = { dismissedUpdateId = upd.id }
+                            )
+                        }
+                    }
+
                     AnimatedVisibility(visible = !isOnline || pendingSyncCount > 0 || isSyncingOffline) {
                         OfflineStatusBanner(
                             isOnline = isOnline,
@@ -384,9 +404,11 @@ fun MainDashboardScreen(
                                 classEnrollments = teacherEnrollments,
                                 downloadedResources = downloadedResources,
                                 downloadingProgress = downloadingProgress,
+                                isUploadingResource = isUploadingResource,
                                 onAddResource = { clsId, title, desc, type, url, dur, isDownloadable ->
                                     val notifTitle = context.getString(R.string.tab_resources)
                                     viewModel.addResource(
+                                        context,
                                         clsId,
                                         title,
                                         desc,
@@ -397,6 +419,12 @@ fun MainDashboardScreen(
                                         title,
                                         isDownloadable
                                     )
+                                },
+                                onDeleteResource = { resource ->
+                                    viewModel.deleteResource(resource)
+                                },
+                                onPrepareResourceForOpen = { resource, currentUri, onReady ->
+                                    viewModel.prepareResourceUriForViewing(context, resource, currentUri, onReady)
                                 },
                                 onToggleResourceDownloadable = { resource ->
                                     viewModel.toggleResourceDownloadable(resource)
@@ -438,12 +466,14 @@ fun MainDashboardScreen(
 
                             SvtTab.PROFILE -> ProfileAndBadgesTab(
                                 profile = profile,
+                                selectedClassId = selectedClassId,
                                 studentEnrollment = studentEnrollment,
                                 studentAttempts = studentAttempts,
                                 studentVideoTrackings = studentVideoTracking,
                                 teacherClasses = teacherClasses,
                                 teacherEnrollments = teacherEnrollments,
                                 teacherRoster = teacherRoster,
+                                appUpdates = appUpdates,
                                 isImportingRoster = isImportingRoster,
                                 onUpdateProfile = { name, phone, avatar, birthDate ->
                                     viewModel.updateProfile(name, phone, avatar, birthDate)
@@ -488,6 +518,20 @@ fun MainDashboardScreen(
                                                 )
                                             }
                                         }
+                                },
+                                onPublishAppUpdate = { clsId, vCode, vName, notes, url ->
+                                    viewModel.publishAppUpdate(
+                                        context,
+                                        clsId,
+                                        profile.fullName,
+                                        vCode,
+                                        vName,
+                                        notes,
+                                        url
+                                    )
+                                },
+                                onDeleteAppUpdate = { updateId ->
+                                    viewModel.deleteAppUpdate(updateId)
                                 },
                                 onShowError = { msg ->
                                     coroutineScope.launch {
@@ -591,6 +635,61 @@ private fun OfflineStatusBanner(
                 ) {
                     Text(stringResource(id = R.string.offline_sync_now))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppUpdateAvailableBanner(
+    update: AppUpdateRelease,
+    onDownloadClick: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("app_update_banner")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.SystemUpdate,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(
+                        id = R.string.app_update_available_title,
+                        update.versionName,
+                        update.versionCode
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                if (update.releaseNotes.isNotBlank()) {
+                    Text(
+                        text = update.releaseNotes,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            TextButton(onClick = onDownloadClick) {
+                Text(stringResource(id = R.string.offline_download_button))
+            }
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(id = R.string.close))
             }
         }
     }

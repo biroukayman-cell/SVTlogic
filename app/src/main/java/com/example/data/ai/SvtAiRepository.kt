@@ -18,6 +18,11 @@ data class GeneratedQuizDraft(
     val questions: List<QuizQuestion>
 )
 
+class AiAppCheckException(cause: Throwable) : IllegalStateException(
+    cause.message ?: "Firebase App Check token missing",
+    cause
+)
+
 class SvtAiRepository {
 
     private val quizSchema = Schema.obj(
@@ -41,9 +46,19 @@ class SvtAiRepository {
         )
     )
 
-    private val model by lazy {
+    private val primaryModel by lazy {
         Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
+            modelName = PRIMARY_MODEL,
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = quizSchema
+            }
+        )
+    }
+
+    private val fallbackModel by lazy {
+        Firebase.ai.generativeModel(
+            modelName = FALLBACK_MODEL,
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = quizSchema
@@ -75,46 +90,84 @@ class SvtAiRepository {
         """.trimIndent()
 
         try {
-            val response = withTimeout(60_000L) {
-                model.generateContent(prompt)
-            }
-            val jsonText = response.text?.takeIf { it.isNotBlank() }
-                ?: throw IllegalStateException("Empty response from Gemini.")
-
-            val root = JSONObject(jsonText)
-            val title = root.optString("title", chapter).ifBlank { chapter }
-            val description = root.optString("description", "")
-            val questionsJson = root.getJSONArray("questions")
-
-            val questions = (0 until questionsJson.length()).map { idx ->
-                val qObj = questionsJson.getJSONObject(idx)
-                val optsJson = qObj.getJSONArray("options")
-                val options = (0 until optsJson.length()).map { oIdx -> optsJson.getString(oIdx) }
-                val correctIdx = qObj.optInt("correctIndex", 0).coerceIn(0, (options.size - 1).coerceAtLeast(0))
-                QuizQuestion(
-                    questionText = qObj.getString("questionText"),
-                    options = options,
-                    correctIndex = correctIdx,
-                    explanation = qObj.optString("explanation", "")
-                )
-            }
-            return GeneratedQuizDraft(
-                title = title,
-                description = description,
-                questions = questions
-            )
+            return generateWithModel(primaryModel, prompt)
         } catch (e: TimeoutCancellationException) {
-            Log.e(TAG, "AI quiz generation timed out", e)
+            Log.e(TAG, "Primary AI model timed out", e)
             throw IllegalStateException("AI request timed out after 60s. Please retry.", e)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            Log.e(TAG, "AI quiz generation failed", e)
-            throw e
+        } catch (primaryError: Exception) {
+            Log.w(TAG, "Primary model ($PRIMARY_MODEL) failed, trying fallback ($FALLBACK_MODEL)", primaryError)
+            return try {
+                generateWithModel(fallbackModel, prompt)
+            } catch (e: TimeoutCancellationException) {
+                Log.e(TAG, "Fallback AI model timed out", e)
+                throw IllegalStateException("AI request timed out after 60s. Please retry.", e)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (fallbackError: Exception) {
+                Log.e(TAG, "Fallback AI model failed", fallbackError)
+                if (isAppCheckOrTokenError(fallbackError) || isAppCheckOrTokenError(primaryError)) {
+                    throw AiAppCheckException(fallbackError)
+                }
+                throw fallbackError
+            }
         }
     }
 
-    private companion object {
-        const val TAG = "SvtAiRepository"
+    private suspend fun generateWithModel(
+        model: com.google.firebase.ai.GenerativeModel,
+        prompt: String
+    ): GeneratedQuizDraft {
+        val response = withTimeout(60_000L) {
+            model.generateContent(prompt)
+        }
+        val jsonText = response.text?.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("Empty response from Gemini.")
+
+        val root = JSONObject(jsonText)
+        val title = root.optString("title", "").ifBlank { "QCM SVT" }
+        val description = root.optString("description", "")
+        val questionsJson = root.getJSONArray("questions")
+
+        val questions = (0 until questionsJson.length()).map { idx ->
+            val qObj = questionsJson.getJSONObject(idx)
+            val optsJson = qObj.getJSONArray("options")
+            val options = (0 until optsJson.length()).map { oIdx -> optsJson.getString(oIdx) }
+            val correctIdx = qObj.optInt("correctIndex", 0).coerceIn(0, (options.size - 1).coerceAtLeast(0))
+            QuizQuestion(
+                questionText = qObj.getString("questionText"),
+                options = options,
+                correctIndex = correctIdx,
+                explanation = qObj.optString("explanation", "")
+            )
+        }
+        return GeneratedQuizDraft(
+            title = title,
+            description = description,
+            questions = questions
+        )
+    }
+
+    companion object {
+        private const val TAG = "SvtAiRepository"
+        private const val PRIMARY_MODEL = "gemini-3.8-flash"
+        private const val FALLBACK_MODEL = "gemini-3.5-flash-lite"
+
+        fun isAppCheckOrTokenError(error: Throwable): Boolean {
+            return generateSequence(error) { it.cause }.any { cause ->
+                val cls = cause::class.java.name
+                val msg = cause.message.orEmpty()
+                cls.contains("AppCheck", ignoreCase = true) ||
+                    msg.contains("app check", ignoreCase = true) ||
+                    msg.contains("appcheck", ignoreCase = true) ||
+                    msg.contains("attestation", ignoreCase = true) ||
+                    msg.contains("app token", ignoreCase = true) ||
+                    msg.contains("firebase token", ignoreCase = true) ||
+                    msg.contains("Too many attempts", ignoreCase = true) ||
+                    msg.contains("403", ignoreCase = true)
+            }
+        }
     }
 }
+

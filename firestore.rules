@@ -209,6 +209,29 @@ service cloud.firestore {
              isValidTimestamp(data.createdAt);
     }
 
+    function isValidResourceChunk(data) {
+      return data.resourceId is string && data.resourceId.size() >= 1 && data.resourceId.size() <= 128 &&
+             data.classId is string && data.classId.size() >= 1 && data.classId.size() <= 128 &&
+             data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 128 &&
+             data.chunkIndex is int && data.chunkIndex >= 0 && data.chunkIndex <= 200 &&
+             data.totalChunks is int && data.totalChunks >= 1 && data.totalChunks <= 200 &&
+             data.data is bytes && data.data.size() >= 1 && data.data.size() <= 900000 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidAppUpdate(data) {
+      return data.classId is string && data.classId.size() >= 1 && data.classId.size() <= 128 &&
+             data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 128 &&
+             data.teacherName is string && data.teacherName.size() >= 1 && data.teacherName.size() <= 100 &&
+             data.versionCode is int && data.versionCode >= 1 && data.versionCode <= 1000000 &&
+             data.versionName is string && data.versionName.size() >= 1 && data.versionName.size() <= 40 &&
+             data.releaseNotes is string && data.releaseNotes.size() <= 2000 &&
+             data.downloadUrl is string && data.downloadUrl.size() >= 10 && data.downloadUrl.size() <= 1000 &&
+             data.downloadUrl.matches('^https://.+') &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
     // ---------------------------------------------------------
     // Collection Rules
     // ---------------------------------------------------------
@@ -630,6 +653,67 @@ service cloud.firestore {
                        incoming().diff(existing()).affectedKeys().hasOnly(['className', 'teacherName', 'qrToken', 'fullName', 'massarNumber', 'provisionalPassword', 'studentUid', 'qrPayload', 'updatedAt']);
 
       allow delete: if isSignedIn() && isValidId(rosterId) && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // 13. Chunked Course Resource Files (cross-device sync via Firestore)
+    match /resource_chunks/{chunkId} {
+      allow get, list: if isSignedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/enrollments/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/enrollments/$(request.auth.uid)).data.classId == resource.data.classId &&
+         get(/databases/$(database)/documents/enrollments/$(request.auth.uid)).data.status == 'approved')
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(chunkId) &&
+                       incoming().keys().hasAll(['resourceId', 'classId', 'teacherId', 'chunkIndex', 'totalChunks', 'data', 'createdAt']) &&
+                       incoming().keys().hasOnly(['resourceId', 'classId', 'teacherId', 'chunkIndex', 'totalChunks', 'data', 'createdAt']) &&
+                       isValidResourceChunk(incoming()) &&
+                       incoming().teacherId == request.auth.uid &&
+                       exists(/databases/$(database)/documents/classes/$(incoming().classId)) &&
+                       get(/databases/$(database)/documents/classes/$(incoming().classId)).data.teacherId == request.auth.uid;
+
+      allow update: if false;
+
+      allow delete: if isSignedIn() && isValidId(chunkId) && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // 14. Teacher-Published App Updates (HTTPS distribution URL, zero DCL)
+    match /app_updates/{updateId} {
+      allow get, list: if isSignedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/enrollments/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/enrollments/$(request.auth.uid)).data.classId == resource.data.classId &&
+         get(/databases/$(database)/documents/enrollments/$(request.auth.uid)).data.status == 'approved')
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(updateId) &&
+                       incoming().keys().hasAll(['classId', 'teacherId', 'teacherName', 'versionCode', 'versionName', 'releaseNotes', 'downloadUrl', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['classId', 'teacherId', 'teacherName', 'versionCode', 'versionName', 'releaseNotes', 'downloadUrl', 'createdAt', 'updatedAt']) &&
+                       isValidAppUpdate(incoming()) &&
+                       incoming().teacherId == request.auth.uid &&
+                       exists(/databases/$(database)/documents/classes/$(incoming().classId)) &&
+                       get(/databases/$(database)/documents/classes/$(incoming().classId)).data.teacherId == request.auth.uid;
+
+      allow update: if isSignedIn() &&
+                       isValidId(updateId) &&
+                       isValidAppUpdate(incoming()) &&
+                       (resource.data.teacherId == request.auth.uid || isAdmin()) &&
+                       incoming().teacherId == existing().teacherId &&
+                       incoming().classId == existing().classId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['teacherName', 'versionCode', 'versionName', 'releaseNotes', 'downloadUrl', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(updateId) && (
         resource.data.teacherId == request.auth.uid ||
         isAdmin()
       );

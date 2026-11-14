@@ -298,4 +298,32 @@
     <string name="teacher_downloadable_off">En ligne uniquement</string>
     <string name="firebase_missing_config_title">Configuration Firebase manquante</string>
     <string name="firebase_missing_config_body">Cette compilation APK ne contient pas le fichier google-services.json. Téléchargez l\'APK directement depuis Google AI Studio ou ajoutez le secret GOOGLE_SERVICES_JSON dans GitHub Actions.</string>
+
+    <!-- Ressources partagées, repli IA QCM & Mises à jour -->
+    <string name="quiz_ai_error_appcheck">La génération IA requiert un jeton App Check valide sur cet APK (non disponible sur une compilation hors ligne). Vous pouvez créer le QCM manuellement ci-dessous.</string>
+    <string name="quiz_ai_fallback_manual">Créer manuellement</string>
+    <string name="resource_upload_success">« %1$s » envoyé et partagé avec la classe</string>
+    <string name="resource_too_large_error">Le fichier sélectionné dépasse la limite autorisée de %1$d Mo. Utilisez un lien Google Drive ou compressez le fichier.</string>
+    <string name="resource_read_error">Impossible de lire le fichier sélectionné sur cet appareil.</string>
+    <string name="resource_legacy_local_uri_error">Ce fichier provient d\'un lien local sur l\'appareil du professeur. Demandez au professeur de le republier pour le partager avec la classe.</string>
+    <string name="resource_uploading_progress">Envoi du fichier vers la classe en cours...</string>
+    <string name="confirm_delete_resource_msg">Supprimer « %1$s » pour toute la classe ?</string>
+    <string name="video_playback_error_hint">Lecture intégrée impossible sur cet appareil. Essayez avec un lecteur externe.</string>
+    <string name="resource_no_viewer_error">Aucune application compatible trouvée pour ouvrir ce fichier.</string>
+    <string name="app_update_section_title">Mises à jour de l\'application</string>
+    <string name="app_update_current_version">Version installée : v%1$s (build %2$d)</string>
+    <string name="app_update_available_title">Mise à jour v%1$s (build %2$d) disponible</string>
+    <string name="app_update_download_btn">Télécharger et installer</string>
+    <string name="app_update_up_to_date">Votre application est à jour.</string>
+    <string name="app_update_no_uninstall_hint">Installez simplement le nouvel APK sans désinstaller l\'application : vos classes, comptes et données restent conservés.</string>
+    <string name="app_update_publish_btn">Publier une mise à jour</string>
+    <string name="app_update_delete_confirm">Supprimer l\'annonce de mise à jour v%1$s ?</string>
+    <string name="app_update_publish_dialog_title">Publier une mise à jour APK</string>
+    <string name="app_update_version_code_label">Numéro de build (ex: 3)</string>
+    <string name="app_update_version_name_label">Nom de version (ex: 1.2)</string>
+    <string name="app_update_url_label">Lien HTTPS de l\'APK (GitHub / Drive)</string>
+    <string name="app_update_notes_label">Nouveautés de cette version</string>
+    <string name="app_update_invalid_url">Veuillez saisir un lien HTTPS valide vers le fichier APK ou la page de téléchargement.</string>
+    <string name="app_update_invalid_version">Veuillez saisir un numéro de build supérieur à 0 et un nom de version.</string>
+    <string name="app_update_published_success">Mise à jour v%1$s publiée pour la classe</string>
 </resources>

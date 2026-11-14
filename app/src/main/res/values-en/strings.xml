@@ -298,4 +298,32 @@
     <string name="teacher_downloadable_off">Online only</string>
     <string name="firebase_missing_config_title">Firebase configuration missing</string>
     <string name="firebase_missing_config_body">This APK build does not include google-services.json. Download the APK directly from Google AI Studio or add the GOOGLE_SERVICES_JSON secret in GitHub Actions.</string>
+
+    <!-- Shared resources, AI QCM fallback & App updates -->
+    <string name="quiz_ai_error_appcheck">AI generation requires a valid App Check token on this APK (not available on an unsigned/sideloaded build). You can create the quiz manually below.</string>
+    <string name="quiz_ai_fallback_manual">Create manually</string>
+    <string name="resource_upload_success">\"%1$s\" uploaded and shared with the class</string>
+    <string name="resource_too_large_error">The selected file exceeds the %1$d MB limit. Please use a Google Drive link or compress the file.</string>
+    <string name="resource_read_error">Unable to read the selected file on this device.</string>
+    <string name="resource_legacy_local_uri_error">This file points to a local path on the teacher\'s device. Ask the teacher to re-upload it so the class can access it.</string>
+    <string name="resource_uploading_progress">Uploading file to the class...</string>
+    <string name="confirm_delete_resource_msg">Delete \"%1$s\" for the entire class?</string>
+    <string name="video_playback_error_hint">In-app playback failed on this device. Try opening it with an external player.</string>
+    <string name="resource_no_viewer_error">No compatible app found to open this file.</string>
+    <string name="app_update_section_title">App Updates</string>
+    <string name="app_update_current_version">Installed version: v%1$s (build %2$d)</string>
+    <string name="app_update_available_title">Update v%1$s (build %2$d) available</string>
+    <string name="app_update_download_btn">Download &amp; install</string>
+    <string name="app_update_up_to_date">Your app is up to date.</string>
+    <string name="app_update_no_uninstall_hint">Install the new APK directly without uninstalling the app: your classes, accounts, and data will be preserved.</string>
+    <string name="app_update_publish_btn">Publish an update</string>
+    <string name="app_update_delete_confirm">Delete the v%1$s update notice?</string>
+    <string name="app_update_publish_dialog_title">Publish APK Update</string>
+    <string name="app_update_version_code_label">Build number (e.g. 3)</string>
+    <string name="app_update_version_name_label">Version name (e.g. 1.2)</string>
+    <string name="app_update_url_label">HTTPS link to APK (GitHub / Drive)</string>
+    <string name="app_update_notes_label">Release notes</string>
+    <string name="app_update_invalid_url">Please enter a valid HTTPS link to the APK file or release page.</string>
+    <string name="app_update_invalid_version">Please enter a build number greater than 0 and a version name.</string>
+    <string name="app_update_published_success">Update v%1$s published to the class</string>
 </resources>

@@ -10,10 +10,12 @@ import com.example.data.model.QuizAttempt
 import com.example.data.model.QuizQuestion
 import com.example.data.model.VideoTracking
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -22,6 +24,12 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Date
+import java.util.Locale
+
+class LocalUriUnavailableException(
+    message: String,
+    cause: Throwable? = null
+) : IllegalStateException(message, cause)
 
 data class DownloadedResource(
     val resourceId: String,
@@ -114,7 +122,8 @@ data class PendingVideoTracking(
 
 class OfflineStorageManager(
     context: Context,
-    private val userId: String
+    private val userId: String,
+    private val firestore: FirebaseFirestore? = null
 ) {
     private val appContext = context.applicationContext
     private val safeUserDirName = userId.replace(Regex("[^a-zA-Z0-9_-]"), "_").ifBlank { "default" }
@@ -156,18 +165,36 @@ class OfflineStorageManager(
         }
     }
 
+    suspend fun ensureLocalCacheForViewing(resource: CourseResource): File = withContext(Dispatchers.IO) {
+        val existing = _downloadedResources.value[resource.id]
+        if (existing != null) {
+            val f = File(existing.localFilePath)
+            if (f.exists() && f.length() > 0L) return@withContext f
+        }
+        val downloaded = downloadResource(resource)
+        File(downloaded.localFilePath)
+    }
+
     suspend fun downloadResource(resource: CourseResource): DownloadedResource = withContext(Dispatchers.IO) {
         val safeResId = resource.id.replace(Regex("[^a-zA-Z0-9_-]"), "_").ifBlank { "res_${System.currentTimeMillis()}" }
-        val ext = inferExtension(resource.fileUrl, resource.type)
+        val normalizedUrl = normalizeDownloadUrl(resource.fileUrl)
+        val ext = inferExtension(normalizedUrl, resource.type)
         val targetFile = File(resourcesFilesDir, "$safeResId.$ext")
         val tempFile = File(resourcesFilesDir, "$safeResId.$ext.tmp")
 
         _downloadingProgress.value = _downloadingProgress.value + (resource.id to 0.05f)
         try {
-            val uri = Uri.parse(resource.fileUrl)
-            when (uri.scheme?.lowercase()) {
+            val uri = Uri.parse(normalizedUrl)
+            when (uri.scheme?.lowercase(Locale.US)) {
+                FIRESTORE_CHUNK_SCHEME -> {
+                    val chunkResourceId = parseChunkResourceId(normalizedUrl)
+                        ?: throw IllegalArgumentException("Invalid Firestore chunk URI: $normalizedUrl")
+                    downloadFirestoreChunks(chunkResourceId, resource.classId, tempFile) { fraction ->
+                        _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
+                    }
+                }
                 "http", "https" -> {
-                    downloadHttpFile(resource.fileUrl, tempFile) { fraction ->
+                    downloadHttpFile(normalizedUrl, tempFile) { fraction ->
                         _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
                     }
                 }
@@ -336,9 +363,50 @@ class OfflineStorageManager(
         }
     }
 
+    private suspend fun downloadFirestoreChunks(
+        chunkResourceId: String,
+        classId: String,
+        target: File,
+        onProgress: (Float) -> Unit
+    ) {
+        val db = firestore ?: throw IllegalStateException("Firestore instance missing for chunk download")
+        var query = db.collection("resource_chunks")
+            .whereEqualTo("resourceId", chunkResourceId)
+        if (classId.isNotBlank()) {
+            query = query.whereEqualTo("classId", classId)
+        }
+        val snap = query
+            .get()
+            .await()
+        if (snap.isEmpty) {
+            throw LocalUriUnavailableException("Resource file chunks not found on server ($chunkResourceId)")
+        }
+        val sortedDocs = snap.documents.sortedBy { it.getLong("chunkIndex") ?: 0L }
+        val expectedTotal = sortedDocs.firstOrNull()?.getLong("totalChunks")?.toInt() ?: sortedDocs.size
+        if (sortedDocs.size < expectedTotal) {
+            throw IllegalStateException("Incomplete resource file (${sortedDocs.size}/$expectedTotal parts)")
+        }
+        FileOutputStream(target).use { output ->
+            sortedDocs.forEachIndexed { index, doc ->
+                val bytes = doc.getBlob("data")?.toBytes()
+                    ?: throw IllegalStateException("Corrupt chunk $index for $chunkResourceId")
+                output.write(bytes)
+                onProgress(((index + 1).toFloat() / sortedDocs.size.toFloat()).coerceIn(0.05f, 0.99f))
+            }
+            output.flush()
+        }
+        onProgress(1f)
+    }
+
     private fun copyUriFile(uri: Uri, target: File, onProgress: (Float) -> Unit) {
-        val input = appContext.contentResolver.openInputStream(uri)
-            ?: throw IllegalStateException("Cannot open local file URI for offline caching")
+        val input = try {
+            appContext.contentResolver.openInputStream(uri)
+        } catch (sec: SecurityException) {
+            throw LocalUriUnavailableException("Local URI permission denied: $uri", sec)
+        } catch (e: Exception) {
+            throw LocalUriUnavailableException("Cannot open local URI: $uri", e)
+        } ?: throw LocalUriUnavailableException("Cannot open local file URI for offline caching")
+
         input.use { stream ->
             FileOutputStream(target).use { output ->
                 val buffer = ByteArray(16 * 1024)
@@ -353,15 +421,76 @@ class OfflineStorageManager(
         onProgress(1f)
     }
 
-    private fun inferExtension(urlString: String, type: String): String {
-        val fromUrl = MimeTypeMap.getFileExtensionFromUrl(urlString).orEmpty().lowercase()
-        if (fromUrl.isNotBlank() && fromUrl.length <= 5) return fromUrl
-        return when (type) {
-            "pdf" -> "pdf"
-            "word" -> "docx"
-            "image" -> "jpg"
-            "video" -> "mp4"
-            else -> "bin"
+    companion object {
+        const val FIRESTORE_CHUNK_SCHEME = "firestore"
+        const val FIRESTORE_CHUNK_HOST = "resource_chunks"
+
+        fun parseChunkResourceId(fileUrl: String): String? {
+            val trimmed = fileUrl.trim()
+            val prefix = "$FIRESTORE_CHUNK_SCHEME://$FIRESTORE_CHUNK_HOST/"
+            if (!trimmed.startsWith(prefix, ignoreCase = true)) return null
+            val remainder = trimmed.substring(prefix.length)
+            val idPart = remainder.substringBefore('?').substringBefore('/').trim()
+            return idPart.takeIf { it.isNotEmpty() }
+        }
+
+        fun normalizeDownloadUrl(rawUrl: String): String {
+            val trimmed = rawUrl.trim()
+            val fileMatch = Regex("""https?://drive\.google\.com/file/d/([a-zA-Z0-9_-]+)""").find(trimmed)
+            if (fileMatch != null) {
+                return "https://drive.google.com/uc?export=download&id=${fileMatch.groupValues[1]}"
+            }
+            val openMatch = Regex("""https?://drive\.google\.com/(?:open|uc)\?[^#]*\bid=([a-zA-Z0-9_-]+)""").find(trimmed)
+            if (openMatch != null && !trimmed.contains("export=download")) {
+                return "https://drive.google.com/uc?export=download&id=${openMatch.groupValues[1]}"
+            }
+            return trimmed
+        }
+
+        fun inferExtension(urlString: String, type: String): String {
+            val extQuery = Regex("""[?&]ext=([a-zA-Z0-9]{1,6})""").find(urlString)?.groupValues?.getOrNull(1)
+            if (!extQuery.isNullOrBlank()) return extQuery.lowercase(Locale.US)
+            val pathNoQuery = urlString.substringBefore('?').substringBefore('#')
+            val dotIdx = pathNoQuery.lastIndexOf('.')
+            val slashIdx = pathNoQuery.lastIndexOf('/')
+            if (dotIdx > slashIdx && dotIdx >= 0 && dotIdx < pathNoQuery.length - 1) {
+                val candidate = pathNoQuery.substring(dotIdx + 1).lowercase(Locale.US)
+                if (candidate.length in 1..5 && candidate.all { it.isLetterOrDigit() }) {
+                    return candidate
+                }
+            }
+            val fromUrl = runCatching { MimeTypeMap.getFileExtensionFromUrl(urlString) }.getOrNull().orEmpty().lowercase(Locale.US)
+            if (fromUrl.isNotBlank() && fromUrl.length <= 5) return fromUrl
+            return when (type) {
+                "pdf" -> "pdf"
+                "word" -> "docx"
+                "image" -> "jpg"
+                "video" -> "mp4"
+                else -> "bin"
+            }
+        }
+
+        fun mimeTypeForResource(type: String, pathOrUrl: String): String {
+            val ext = inferExtension(pathOrUrl, type)
+            return when (ext) {
+                "pdf" -> "application/pdf"
+                "doc" -> "application/msword"
+                "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                "jpg", "jpeg" -> "image/jpeg"
+                "png" -> "image/png"
+                "webp" -> "image/webp"
+                "mp4" -> "video/mp4"
+                "mkv" -> "video/x-matroska"
+                "webm" -> "video/webm"
+                "3gp" -> "video/3gpp"
+                else -> when (type) {
+                    "pdf" -> "application/pdf"
+                    "word" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    "image" -> "image/*"
+                    "video" -> "video/*"
+                    else -> "*/*"
+                }
+            }
         }
     }
 

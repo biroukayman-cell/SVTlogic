@@ -218,6 +218,38 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["studentId", "teacherId", "type", "title", "body", "isRead", "createdAt"]
+    },
+    "ResourceChunk": {
+      "title": "ResourceChunk",
+      "description": "Chunked binary payload stored in Firestore so teacher-picked files sync across student devices.",
+      "type": "object",
+      "properties": {
+        "resourceId": { "type": "string" },
+        "classId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "chunkIndex": { "type": "integer" },
+        "totalChunks": { "type": "integer" },
+        "data": { "type": "string", "format": "byte" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["resourceId", "classId", "teacherId", "chunkIndex", "totalChunks", "data", "createdAt"]
+    },
+    "AppUpdateRelease": {
+      "title": "AppUpdateRelease",
+      "description": "Teacher-published application update metadata and HTTPS distribution link.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "versionCode": { "type": "integer" },
+        "versionName": { "type": "string" },
+        "releaseNotes": { "type": "string" },
+        "downloadUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "teacherId", "teacherName", "versionCode", "versionName", "releaseNotes", "downloadUrl", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -249,6 +281,10 @@
       "schema": { "$ref": "#/entities/Resource" },
       "description": "Shared PDF, Word, Image, and Video courses."
     },
+    "/resource_chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/ResourceChunk" },
+      "description": "Binary chunks for teacher-picked files shared via Firestore."
+    },
     "/video_tracking/{trackingId}": {
       "schema": { "$ref": "#/entities/VideoTracking" },
       "description": "Student video watch progress tracking."
@@ -268,6 +304,10 @@
     "/class_rosters/{rosterId}": {
       "schema": { "$ref": "#/entities/ClassRoster" },
       "description": "Teacher-imported student Massar credentials and QR payloads."
+    },
+    "/app_updates/{updateId}": {
+      "schema": { "$ref": "#/entities/AppUpdateRelease" },
+      "description": "Teacher-published app update announcements and external HTTPS download links."
     }
   }
 }

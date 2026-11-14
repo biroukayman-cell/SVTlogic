@@ -1,6 +1,9 @@
 package com.example.ui.screens
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -47,6 +50,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -55,6 +59,7 @@ import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.WorkspacePremium
@@ -97,6 +102,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.BuildConfig
 import com.example.R
 import com.example.core.ExcelParseErrorReason
 import com.example.core.ExcelParseResult
@@ -106,6 +112,7 @@ import com.example.core.QrCodeUtils
 import com.example.data.badges.BadgeCategory
 import com.example.data.badges.BadgeEngine
 import com.example.data.badges.BadgeProgressItem
+import com.example.data.model.AppUpdateRelease
 import com.example.data.model.Enrollment
 import com.example.data.model.QuizAttempt
 import com.example.data.model.RosterStudent
@@ -122,12 +129,14 @@ import java.util.Locale
 @Composable
 fun ProfileAndBadgesTab(
     profile: UserProfile,
+    selectedClassId: String?,
     studentEnrollment: Enrollment?,
     studentAttempts: List<QuizAttempt>,
     studentVideoTrackings: List<VideoTracking>,
     teacherClasses: List<SvtClass>,
     teacherEnrollments: List<Enrollment>,
     teacherRoster: List<RosterStudent>,
+    appUpdates: List<AppUpdateRelease>,
     isImportingRoster: Boolean,
     onUpdateProfile: (fullName: String, phone: String, avatarUrl: String?, birthDate: String?) -> Unit,
     onChangePassword: (currentPassword: String?, newPassword: String, onResult: (Boolean, String?) -> Unit) -> Unit,
@@ -141,6 +150,8 @@ fun ProfileAndBadgesTab(
     onAddManualStudent: (SvtClass, String, String) -> Unit,
     onDeleteRosterStudent: (RosterStudent) -> Unit,
     onExportRosterPdf: (SvtClass, List<RosterStudent>) -> Unit,
+    onPublishAppUpdate: (classId: String, versionCode: Int, versionName: String, releaseNotes: String, downloadUrl: String) -> Unit,
+    onDeleteAppUpdate: (String) -> Unit,
     onShowError: (String) -> Unit,
     onSignOut: () -> Unit
 ) {
@@ -148,9 +159,11 @@ fun ProfileAndBadgesTab(
     var showEditDialog by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showNewClassDialog by remember { mutableStateOf(false) }
+    var showPublishUpdateDialog by remember { mutableStateOf(false) }
     var qrDialogClass by remember { mutableStateOf<SvtClass?>(null) }
     var classToDelete by remember { mutableStateOf<SvtClass?>(null) }
     var studentToDelete by remember { mutableStateOf<Enrollment?>(null) }
+    var updateToDelete by remember { mutableStateOf<AppUpdateRelease?>(null) }
     var selectedBadgeCategory by remember { mutableStateOf<BadgeCategory?>(null) }
 
     var pendingExcelTargetClass by remember { mutableStateOf<SvtClass?>(null) }
@@ -383,6 +396,19 @@ fun ProfileAndBadgesTab(
                     }
                 }
             }
+        }
+
+        // 1b. App Updates Card (Play-policy compliant HTTPS update link + Teacher publisher)
+        item {
+            AppUpdatesCard(
+                isTeacher = profile.role == "teacher",
+                hasTeacherClasses = teacherClasses.isNotEmpty(),
+                teacherClasses = teacherClasses,
+                appUpdates = appUpdates,
+                onOpenUpdateUrl = { url -> openAppUpdateLink(context, url) },
+                onPublishClick = { showPublishUpdateDialog = true },
+                onDeleteUpdate = { updateToDelete = it }
+            )
         }
 
         // 2. Student Badges & Rewards Section
@@ -965,6 +991,329 @@ fun ProfileAndBadgesTab(
                 }
             }
         )
+    }
+
+    if (showPublishUpdateDialog) {
+        val defaultClassId = selectedClassId ?: teacherClasses.firstOrNull()?.id.orEmpty()
+        PublishAppUpdateDialog(
+            teacherClasses = teacherClasses,
+            initialClassId = defaultClassId,
+            onPublish = { clsId, vCode, vName, notes, url ->
+                onPublishAppUpdate(clsId, vCode, vName, notes, url)
+                showPublishUpdateDialog = false
+            },
+            onDismiss = { showPublishUpdateDialog = false }
+        )
+    }
+
+    updateToDelete?.let { upd ->
+        AlertDialog(
+            onDismissRequest = { updateToDelete = null },
+            title = { Text(stringResource(id = R.string.confirm_delete_title)) },
+            text = { Text(stringResource(id = R.string.app_update_delete_confirm, upd.versionName)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteAppUpdate(upd.id)
+                        updateToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(stringResource(id = R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateToDelete = null }) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AppUpdatesCard(
+    isTeacher: Boolean,
+    hasTeacherClasses: Boolean,
+    teacherClasses: List<SvtClass>,
+    appUpdates: List<AppUpdateRelease>,
+    onOpenUpdateUrl: (String) -> Unit,
+    onPublishClick: () -> Unit,
+    onDeleteUpdate: (AppUpdateRelease) -> Unit
+) {
+    val latestUpdate = appUpdates.maxByOrNull { it.versionCode }
+    val hasNewerVersion = latestUpdate != null && latestUpdate.versionCode > BuildConfig.VERSION_CODE
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.SystemUpdate,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(id = R.string.app_update_section_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = stringResource(
+                            id = R.string.app_update_current_version,
+                            BuildConfig.VERSION_NAME,
+                            BuildConfig.VERSION_CODE
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (hasNewerVersion && latestUpdate != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(
+                                id = R.string.app_update_available_title,
+                                latestUpdate.versionName,
+                                latestUpdate.versionCode
+                            ),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (latestUpdate.releaseNotes.isNotBlank()) {
+                            Text(
+                                text = latestUpdate.releaseNotes,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        Button(
+                            onClick = { onOpenUpdateUrl(latestUpdate.downloadUrl) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("download_app_update_button")
+                        ) {
+                            Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(id = R.string.app_update_download_btn))
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    text = stringResource(id = R.string.app_update_up_to_date),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvtSuccess
+                )
+            }
+
+            Text(
+                text = stringResource(id = R.string.app_update_no_uninstall_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (isTeacher) {
+                OutlinedButton(
+                    onClick = onPublishClick,
+                    enabled = hasTeacherClasses,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("publish_app_update_button")
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(id = R.string.app_update_publish_btn))
+                }
+
+                if (appUpdates.isNotEmpty()) {
+                    appUpdates.take(5).forEach { upd ->
+                        val clsName = teacherClasses.firstOrNull { it.id == upd.classId }?.name
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "v${upd.versionName} (code ${upd.versionCode})" +
+                                            (clsName?.let { " • $it" } ?: ""),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    if (upd.releaseNotes.isNotBlank()) {
+                                        Text(
+                                            text = upd.releaseNotes,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Row {
+                                    IconButton(onClick = { onOpenUpdateUrl(upd.downloadUrl) }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.OpenInNew,
+                                            contentDescription = stringResource(id = R.string.app_update_download_btn),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = { onDeleteUpdate(upd) }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Delete,
+                                            contentDescription = stringResource(id = R.string.delete),
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PublishAppUpdateDialog(
+    teacherClasses: List<SvtClass>,
+    initialClassId: String,
+    onPublish: (classId: String, versionCode: Int, versionName: String, releaseNotes: String, downloadUrl: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedClassId by remember { mutableStateOf(initialClassId) }
+    var versionCodeText by remember { mutableStateOf((BuildConfig.VERSION_CODE + 1).toString()) }
+    var versionName by remember { mutableStateOf("1.${BuildConfig.VERSION_CODE + 1}") }
+    var releaseNotes by remember { mutableStateOf("") }
+    var downloadUrl by remember { mutableStateOf("") }
+    var localError by remember { mutableStateOf<String?>(null) }
+
+    val invalidUrlMsg = stringResource(id = R.string.app_update_invalid_url)
+    val invalidVersionMsg = stringResource(id = R.string.app_update_invalid_version)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(id = R.string.app_update_publish_dialog_title)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (teacherClasses.size > 1) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(teacherClasses, key = { it.id }) { cls ->
+                            FilterChip(
+                                selected = selectedClassId == cls.id,
+                                onClick = { selectedClassId = cls.id },
+                                label = { Text(cls.name) }
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = versionCodeText,
+                    onValueChange = { versionCodeText = it.filter { ch -> ch.isDigit() } },
+                    label = { Text(stringResource(id = R.string.app_update_version_code_label)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = versionName,
+                    onValueChange = { versionName = it },
+                    label = { Text(stringResource(id = R.string.app_update_version_name_label)) },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = downloadUrl,
+                    onValueChange = { downloadUrl = it },
+                    label = { Text(stringResource(id = R.string.app_update_url_label)) },
+                    placeholder = { Text("https://github.com/.../releases/latest") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = releaseNotes,
+                    onValueChange = { releaseNotes = it },
+                    label = { Text(stringResource(id = R.string.app_update_notes_label)) }
+                )
+                if (!localError.isNullOrBlank()) {
+                    Text(
+                        text = localError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val vCode = versionCodeText.toIntOrNull() ?: 0
+                    val cleanUrl = downloadUrl.trim()
+                    when {
+                        vCode < 1 || versionName.trim().isEmpty() -> localError = invalidVersionMsg
+                        !cleanUrl.startsWith("https://", ignoreCase = true) || cleanUrl.length < 10 ->
+                            localError = invalidUrlMsg
+                        else -> {
+                            localError = null
+                            onPublish(selectedClassId, vCode, versionName.trim(), releaseNotes.trim(), cleanUrl)
+                        }
+                    }
+                },
+                enabled = selectedClassId.isNotBlank()
+            ) {
+                Text(stringResource(id = R.string.announcement_publish))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(id = R.string.cancel))
+            }
+        }
+    )
+}
+
+internal fun openAppUpdateLink(context: Context, url: String) {
+    try {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url.trim()))
+        context.startActivity(intent)
+    } catch (_: Exception) {
+        Toast.makeText(
+            context,
+            context.getString(R.string.app_update_invalid_url),
+            Toast.LENGTH_SHORT
+        ).show()
     }
 }
 

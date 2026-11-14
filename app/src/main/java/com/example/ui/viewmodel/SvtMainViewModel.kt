@@ -1,6 +1,7 @@
 package com.example.ui.viewmodel
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,10 +11,12 @@ import com.example.core.AuthSessionDraft
 import com.example.core.ConnectivityObserver
 import com.example.core.ImportedStudentRow
 import com.example.core.NotificationHelper
+import com.example.data.ai.AiAppCheckException
 import com.example.data.ai.GeneratedQuizDraft
 import com.example.data.ai.SvtAiRepository
 import com.example.data.badges.SvtBadgeDefinition
 import com.example.data.model.Announcement
+import com.example.data.model.AppUpdateRelease
 import com.example.data.model.CourseResource
 import com.example.data.model.Enrollment
 import com.example.data.model.PrivateMessage
@@ -27,9 +30,12 @@ import com.example.data.model.SvtClass
 import com.example.data.model.UserProfile
 import com.example.data.model.VideoTracking
 import com.example.data.offline.DownloadedResource
+import com.example.data.offline.LocalUriUnavailableException
 import com.example.data.offline.OfflineStorageManager
 import com.example.data.offline.PendingQuizAttempt
 import com.example.data.offline.PendingVideoTracking
+import com.example.data.repository.ResourceReadException
+import com.example.data.repository.ResourceUploadTooLargeException
 import com.example.data.repository.SvtRepository
 import com.google.firebase.Firebase
 import com.google.firebase.auth.EmailAuthProvider
@@ -275,6 +281,20 @@ class SvtMainViewModel(
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
+    val appUpdates: StateFlow<List<AppUpdateRelease>> = combine(
+        roleFlow,
+        studentEnrollment
+    ) { role, enrollment ->
+        role to enrollment
+    }.flatMapLatest { (role, enrollment) ->
+        when {
+            role == "teacher" -> repository.observeTeacherAppUpdates(currentUserId).catch { emit(emptyList()) }
+            role == "student" && enrollment?.status == "approved" && enrollment.classId.isNotBlank() ->
+                repository.observeClassAppUpdates(enrollment.classId).catch { emit(emptyList()) }
+            else -> flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
     private val _selectedClassId = MutableStateFlow<String?>(null)
     val selectedClassId: StateFlow<String?> = combine(teacherClasses, _selectedClassId) { classes, chosen ->
         if (chosen != null && classes.any { it.id == chosen }) chosen
@@ -295,6 +315,9 @@ class SvtMainViewModel(
 
     private val _isImportingRoster = MutableStateFlow(false)
     val isImportingRoster: StateFlow<Boolean> = _isImportingRoster.asStateFlow()
+
+    private val _isUploadingResource = MutableStateFlow(false)
+    val isUploadingResource: StateFlow<Boolean> = _isUploadingResource.asStateFlow()
 
     private var streakCheckedThisSession = false
 
@@ -700,6 +723,8 @@ class SvtMainViewModel(
                 _aiQuizState.value = AiQuizState.Success(draft)
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: AiAppCheckException) {
+                _aiQuizState.value = AiQuizState.Error(context.getString(R.string.quiz_ai_error_appcheck))
             } catch (e: Exception) {
                 _aiQuizState.value = AiQuizState.Error(e.localizedMessage ?: "AI generation error")
             }
@@ -940,6 +965,7 @@ class SvtMainViewModel(
     }
 
     fun addResource(
+        uiContext: Context,
         classId: String,
         title: String,
         description: String,
@@ -953,24 +979,102 @@ class SvtMainViewModel(
         val approvedIds = teacherEnrollments.value
             .filter { it.classId == classId && it.status == "approved" }
             .map { it.studentId }
+        val trimmedUrl = fileUrl.trim()
+        val isLocalPickedUri = trimmedUrl.startsWith("content://", ignoreCase = true) ||
+            trimmedUrl.startsWith("file://", ignoreCase = true)
+
+        viewModelScope.launch {
+            if (isLocalPickedUri) {
+                _isUploadingResource.value = true
+            }
+            try {
+                if (isLocalPickedUri) {
+                    repository.uploadChunkedResource(
+                        appContext = uiContext.applicationContext,
+                        classId = classId,
+                        title = title,
+                        description = description,
+                        type = type,
+                        contentUriString = trimmedUrl,
+                        durationSeconds = durationSeconds,
+                        approvedStudentIds = approvedIds,
+                        notifTitle = notifTitle,
+                        notifBody = notifBody,
+                        isDownloadable = isDownloadable
+                    )
+                    _statusMessage.value = uiContext.getString(R.string.resource_upload_success, title.trim())
+                } else {
+                    val normalized = OfflineStorageManager.normalizeDownloadUrl(trimmedUrl)
+                    repository.createResource(
+                        classId = classId,
+                        title = title,
+                        description = description,
+                        type = type,
+                        fileUrl = normalized,
+                        durationSeconds = durationSeconds,
+                        approvedStudentIds = approvedIds,
+                        notifTitle = notifTitle,
+                        notifBody = notifBody,
+                        isDownloadable = isDownloadable
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ResourceUploadTooLargeException) {
+                val maxMb = (e.maxBytes / (1024L * 1024L)).toInt()
+                _actionError.value = uiContext.getString(R.string.resource_too_large_error, maxMb)
+            } catch (_: ResourceReadException) {
+                _actionError.value = uiContext.getString(R.string.resource_read_error)
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage ?: uiContext.getString(R.string.resource_read_error)
+            } finally {
+                _isUploadingResource.value = false
+            }
+        }
+    }
+
+    fun deleteResource(resource: CourseResource) {
         viewModelScope.launch {
             try {
-                repository.createResource(
-                    classId = classId,
-                    title = title,
-                    description = description,
-                    type = type,
-                    fileUrl = fileUrl,
-                    durationSeconds = durationSeconds,
-                    approvedStudentIds = approvedIds,
-                    notifTitle = notifTitle,
-                    notifBody = notifBody,
-                    isDownloadable = isDownloadable
-                )
+                repository.deleteResource(resource)
+                offlineStorage.removeDownloadedResource(resource.id)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun prepareResourceUriForViewing(
+        uiContext: Context,
+        resource: CourseResource,
+        currentUri: String,
+        onReady: (String) -> Unit
+    ) {
+        val scheme = Uri.parse(currentUri).scheme?.lowercase()
+        val shouldCacheLocally = scheme == OfflineStorageManager.FIRESTORE_CHUNK_SCHEME ||
+            scheme == "content" ||
+            (resource.type in listOf("pdf", "word", "image") && (scheme == "http" || scheme == "https"))
+
+        if (!shouldCacheLocally) {
+            onReady(currentUri)
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val cachedFile = offlineStorage.ensureLocalCacheForViewing(resource)
+                onReady(Uri.fromFile(cachedFile).toString())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: LocalUriUnavailableException) {
+                _actionError.value = uiContext.getString(R.string.resource_legacy_local_uri_error)
+            } catch (e: Exception) {
+                _actionError.value = uiContext.getString(
+                    R.string.offline_download_error,
+                    e.localizedMessage ?: "Error"
+                )
             }
         }
     }
@@ -994,6 +1098,8 @@ class SvtMainViewModel(
                 _statusMessage.value = uiContext.getString(R.string.offline_download_success, resource.title)
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: LocalUriUnavailableException) {
+                _actionError.value = uiContext.getString(R.string.resource_legacy_local_uri_error)
             } catch (e: Exception) {
                 _actionError.value = uiContext.getString(
                     R.string.offline_download_error,
@@ -1151,6 +1257,55 @@ class SvtMainViewModel(
     fun markAllNotificationsRead() {
         viewModelScope.launch {
             repository.markAllNotificationsRead(studentNotifications.value)
+        }
+    }
+
+    fun publishAppUpdate(
+        uiContext: Context,
+        classId: String,
+        teacherName: String,
+        versionCode: Int,
+        versionName: String,
+        releaseNotes: String,
+        downloadUrl: String
+    ) {
+        val cleanUrl = downloadUrl.trim()
+        if (!cleanUrl.startsWith("https://", ignoreCase = true) || cleanUrl.length < 10) {
+            _actionError.value = uiContext.getString(R.string.app_update_invalid_url)
+            return
+        }
+        if (versionCode < 1 || versionName.trim().isEmpty()) {
+            _actionError.value = uiContext.getString(R.string.app_update_invalid_version)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                repository.publishAppUpdate(
+                    classId = classId,
+                    teacherName = teacherName,
+                    versionCode = versionCode,
+                    versionName = versionName,
+                    releaseNotes = releaseNotes,
+                    downloadUrl = cleanUrl
+                )
+                _statusMessage.value = uiContext.getString(R.string.app_update_published_success, versionName.trim())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun deleteAppUpdate(updateId: String) {
+        viewModelScope.launch {
+            try {
+                repository.deleteAppUpdate(updateId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
         }
     }
 

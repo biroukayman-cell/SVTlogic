@@ -223,7 +223,7 @@ private fun AuthenticatedSvtFlow(
                     appContext = app,
                     repository = SvtRepository(db),
                     aiRepository = SvtAiRepository(),
-                    offlineStorage = OfflineStorageManager(app, currentUser.uid),
+                    offlineStorage = OfflineStorageManager(app, currentUser.uid, db),
                     connectivityObserver = NetworkConnectivityObserver(app),
                     currentUserId = currentUser.uid
                 )

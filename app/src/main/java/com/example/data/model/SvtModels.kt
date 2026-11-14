@@ -210,3 +210,18 @@ data class StudentNotification(
     val isRead: Boolean = false,
     @ServerTimestamp val createdAt: Timestamp? = null
 )
+
+@IgnoreExtraProperties
+data class AppUpdateRelease(
+    @DocumentId val id: String = "",
+    val classId: String = "",
+    val teacherId: String = "",
+    val teacherName: String = "",
+    val versionCode: Int = 1,
+    val versionName: String = "",
+    val releaseNotes: String = "",
+    val downloadUrl: String = "",
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
