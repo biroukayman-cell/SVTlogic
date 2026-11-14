@@ -326,4 +326,17 @@
     <string name="app_update_invalid_url">يرجى إدخال رابط HTTPS صالح لملف APK أو لصفحة التحميل.</string>
     <string name="app_update_invalid_version">يرجى إدخال رقم بناء أكبر من 0 واسم للإصدار.</string>
     <string name="app_update_published_success">تم نشر التحديث v%1$s للقسم</string>
+    <string name="resource_video_summary">المتابعة: %1$d / %2$d تلميذ • المتوسط %3$d%%</string>
+
+    <!-- المظهر والألوان -->
+    <string name="theme_section_title">المظهر والألوان</string>
+    <string name="theme_mode_label">وضع العرض</string>
+    <string name="theme_mode_system">النظام</string>
+    <string name="theme_mode_light">فاتح</string>
+    <string name="theme_mode_dark">داكن</string>
+    <string name="theme_palette_label">لوحة الألوان</string>
+    <string name="theme_palette_emerald">زمردي</string>
+    <string name="theme_palette_ocean">أزرق محيطي</string>
+    <string name="theme_palette_earth">جيولوجي دافئ</string>
+    <string name="theme_palette_botanical">بنفسجي نباتي</string>
 </resources>

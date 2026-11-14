@@ -40,6 +40,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -59,6 +61,8 @@ class ResourceReadException(
 ) : IllegalStateException(message, cause)
 
 class SvtRepository(private val db: FirebaseFirestore) {
+
+    private val videoTrackingMutex = Mutex()
 
     constructor(context: Context) : this(
         FirebaseFirestore.getInstance(
@@ -1208,30 +1212,41 @@ class SvtRepository(private val db: FirebaseFirestore) {
         studentName: String,
         positionSeconds: Long,
         totalDurationSeconds: Long,
-        existingTracking: VideoTracking?
-    ): VideoTracking {
+        existingTracking: VideoTracking?,
+        watchedPercentOverride: Double? = null
+    ): VideoTracking = videoTrackingMutex.withLock {
         val uid = requireUserId()
         val trackingId = "${resource.id}_$uid"
         val docRef = db.collection("video_tracking").document(trackingId)
-        val safeDuration = totalDurationSeconds.coerceAtLeast(resource.durationSeconds).coerceAtLeast(1L)
-        val prevMax = existingTracking?.maxPositionSeconds ?: 0L
-        val maxPos = maxOf(prevMax, positionSeconds).coerceIn(0L, safeDuration)
-        val pct = ((maxPos.toDouble() / safeDuration.toDouble()) * 100.0).coerceIn(0.0, 100.0)
-        val status = when {
-            pct >= 90.0 -> "completed"
-            pct > 0.0 -> "partial"
-            else -> "not_started"
-        }
+        val safeStudentName = studentName.trim().ifBlank { "Élève" }.take(100)
 
         try {
             val existingSnap = docRef.get().await()
+            val remotePrevPos = if (existingSnap.exists()) {
+                existingSnap.getLong("maxPositionSeconds") ?: 0L
+            } else 0L
+            val remotePrevPct = if (existingSnap.exists()) {
+                existingSnap.getDouble("watchedPercentage") ?: 0.0
+            } else 0.0
+
+            val prevMax = maxOf(existingTracking?.maxPositionSeconds ?: 0L, remotePrevPos)
+            val prevPct = maxOf(existingTracking?.watchedPercentage ?: 0.0, remotePrevPct)
+            val (safeDuration, maxPos, pct, status) = computeVideoTrackingMetrics(
+                positionSeconds = positionSeconds,
+                totalDurationSeconds = totalDurationSeconds,
+                resourceDurationSeconds = resource.durationSeconds,
+                prevPositionSeconds = prevMax,
+                prevPercentage = prevPct,
+                watchedPercentOverride = watchedPercentOverride
+            )
+
             if (!existingSnap.exists()) {
                 val createPayload = mapOf(
                     "resourceId" to resource.id,
                     "classId" to resource.classId,
                     "teacherId" to resource.teacherId,
                     "studentId" to uid,
-                    "studentName" to studentName,
+                    "studentName" to safeStudentName,
                     "maxPositionSeconds" to maxPos,
                     "durationSeconds" to safeDuration,
                     "watchedPercentage" to pct,
@@ -1243,7 +1258,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 docRef.set(createPayload).await()
             } else {
                 val updatePayload = mapOf(
-                    "studentName" to studentName,
+                    "studentName" to safeStudentName,
                     "maxPositionSeconds" to maxPos,
                     "durationSeconds" to safeDuration,
                     "watchedPercentage" to pct,
@@ -1253,13 +1268,13 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 )
                 docRef.update(updatePayload).await()
             }
-            return VideoTracking(
+            return@withLock VideoTracking(
                 id = trackingId,
                 resourceId = resource.id,
                 classId = resource.classId,
                 teacherId = resource.teacherId,
                 studentId = uid,
-                studentName = studentName,
+                studentName = safeStudentName,
                 maxPositionSeconds = maxPos,
                 durationSeconds = safeDuration,
                 watchedPercentage = pct,
@@ -1668,7 +1683,44 @@ class SvtRepository(private val db: FirebaseFirestore) {
         return sdf.format(Date(System.currentTimeMillis() - 86_400_000L))
     }
 
+    data class VideoTrackingMetrics(
+        val durationSeconds: Long,
+        val maxPositionSeconds: Long,
+        val watchedPercentage: Double,
+        val status: String
+    )
+
     companion object {
         const val MAX_CHUNKED_UPLOAD_BYTES: Long = 20L * 1024L * 1024L
+
+        fun computeVideoTrackingMetrics(
+            positionSeconds: Long,
+            totalDurationSeconds: Long,
+            resourceDurationSeconds: Long,
+            prevPositionSeconds: Long = 0L,
+            prevPercentage: Double = 0.0,
+            watchedPercentOverride: Double? = null
+        ): VideoTrackingMetrics {
+            val safeDuration = (if (totalDurationSeconds > 0L) totalDurationSeconds else resourceDurationSeconds)
+                .coerceIn(1L, 86400L)
+            val maxPos = maxOf(prevPositionSeconds, positionSeconds).coerceIn(0L, safeDuration)
+            val computedPct = ((maxPos.toDouble() / safeDuration.toDouble()) * 100.0).coerceIn(0.0, 100.0)
+            val pct = maxOf(
+                prevPercentage.coerceIn(0.0, 100.0),
+                computedPct,
+                watchedPercentOverride?.coerceIn(0.0, 100.0) ?: 0.0
+            ).coerceIn(0.0, 100.0)
+            val status = when {
+                pct >= 90.0 -> "completed"
+                pct > 0.0 -> "partial"
+                else -> "not_started"
+            }
+            return VideoTrackingMetrics(
+                durationSeconds = safeDuration,
+                maxPositionSeconds = maxPos,
+                watchedPercentage = pct,
+                status = status
+            )
+        }
     }
 }

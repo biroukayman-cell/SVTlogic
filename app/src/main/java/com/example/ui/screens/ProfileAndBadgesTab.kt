@@ -104,11 +104,18 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.BuildConfig
 import com.example.R
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Palette
+import com.example.core.AppThemePalette
 import com.example.core.ExcelParseErrorReason
 import com.example.core.ExcelParseResult
 import com.example.core.ExcelRosterParser
 import com.example.core.ImportedStudentRow
 import com.example.core.QrCodeUtils
+import com.example.core.ThemeConfig
+import com.example.core.ThemeMode
 import com.example.data.badges.BadgeCategory
 import com.example.data.badges.BadgeEngine
 import com.example.data.badges.BadgeProgressItem
@@ -123,6 +130,7 @@ import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtGoldTertiary
 import com.example.ui.theme.SvtOceanSecondary
 import com.example.ui.theme.SvtSuccess
+import com.example.ui.theme.previewSwatchColors
 import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -130,6 +138,8 @@ import java.util.Locale
 fun ProfileAndBadgesTab(
     profile: UserProfile,
     selectedClassId: String?,
+    currentTheme: ThemeConfig,
+    onThemeChanged: (ThemeConfig) -> Unit,
     studentEnrollment: Enrollment?,
     studentAttempts: List<QuizAttempt>,
     studentVideoTrackings: List<VideoTracking>,
@@ -396,6 +406,14 @@ fun ProfileAndBadgesTab(
                     }
                 }
             }
+        }
+
+        // 1a. Theme & Appearance Card
+        item {
+            ThemeSelectorCard(
+                currentTheme = currentTheme,
+                onThemeChanged = onThemeChanged
+            )
         }
 
         // 1b. App Updates Card (Play-policy compliant HTTPS update link + Teacher publisher)
@@ -1028,6 +1046,162 @@ fun ProfileAndBadgesTab(
                 }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ThemeSelectorCard(
+    currentTheme: ThemeConfig,
+    onThemeChanged: (ThemeConfig) -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Palette,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = stringResource(id = R.string.theme_section_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Text(
+                text = stringResource(id = R.string.theme_mode_label),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val modes = listOf(
+                    Triple(ThemeMode.SYSTEM, R.string.theme_mode_system, Icons.Filled.BrightnessAuto),
+                    Triple(ThemeMode.LIGHT, R.string.theme_mode_light, Icons.Filled.LightMode),
+                    Triple(ThemeMode.DARK, R.string.theme_mode_dark, Icons.Filled.DarkMode)
+                )
+                modes.forEach { (mode, labelRes, icon) ->
+                    val selected = currentTheme.mode == mode
+                    FilterChip(
+                        selected = selected,
+                        onClick = { onThemeChanged(currentTheme.copy(mode = mode)) },
+                        leadingIcon = {
+                            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+                        },
+                        label = {
+                            Text(
+                                text = stringResource(id = labelRes),
+                                maxLines = 1
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("theme_mode_${mode.key}")
+                    )
+                }
+            }
+
+            Text(
+                text = stringResource(id = R.string.theme_palette_label),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                maxItemsInEachRow = 2
+            ) {
+                val palettes = listOf(
+                    AppThemePalette.EMERALD to R.string.theme_palette_emerald,
+                    AppThemePalette.OCEAN to R.string.theme_palette_ocean,
+                    AppThemePalette.EARTH to R.string.theme_palette_earth,
+                    AppThemePalette.BOTANICAL to R.string.theme_palette_botanical
+                )
+                palettes.forEach { (palette, labelRes) ->
+                    val selected = currentTheme.palette == palette
+                    val (primarySwatch, secondarySwatch) = palette.previewSwatchColors()
+                    Surface(
+                        color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .clip(MaterialTheme.shapes.medium)
+                            .then(
+                                if (selected) {
+                                    Modifier.border(
+                                        width = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        shape = MaterialTheme.shapes.medium
+                                    )
+                                } else Modifier
+                            )
+                            .clickable { onThemeChanged(currentTheme.copy(palette = palette)) }
+                            .testTag("theme_palette_${palette.key}")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clip(CircleShape)
+                                        .background(primarySwatch)
+                                        .border(1.dp, Color.White, CircleShape)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clip(CircleShape)
+                                        .background(secondarySwatch)
+                                        .border(1.dp, Color.White, CircleShape)
+                                )
+                            }
+                            Text(
+                                text = stringResource(id = labelRes),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (selected) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

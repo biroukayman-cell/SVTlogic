@@ -326,4 +326,17 @@
     <string name="app_update_invalid_url">Veuillez saisir un lien HTTPS valide vers le fichier APK ou la page de téléchargement.</string>
     <string name="app_update_invalid_version">Veuillez saisir un numéro de build supérieur à 0 et un nom de version.</string>
     <string name="app_update_published_success">Mise à jour v%1$s publiée pour la classe</string>
+    <string name="resource_video_summary">Suivi : %1$d / %2$d élève(s) • Moy. %3$d%%</string>
+
+    <!-- Thèmes et apparence -->
+    <string name="theme_section_title">Thème et apparence</string>
+    <string name="theme_mode_label">Mode d\'affichage</string>
+    <string name="theme_mode_system">Système</string>
+    <string name="theme_mode_light">Clair</string>
+    <string name="theme_mode_dark">Sombre</string>
+    <string name="theme_palette_label">Palette de couleurs</string>
+    <string name="theme_palette_emerald">Émeraude SVT</string>
+    <string name="theme_palette_ocean">Océan Minéral</string>
+    <string name="theme_palette_earth">Terre &amp; Géologie</string>
+    <string name="theme_palette_botanical">Violet Botanique</string>
 </resources>

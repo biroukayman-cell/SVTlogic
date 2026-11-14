@@ -932,7 +932,8 @@ class SvtMainViewModel(
                                 studentName = tracking.studentName,
                                 positionSeconds = tracking.maxPositionSeconds,
                                 totalDurationSeconds = tracking.totalDurationSeconds,
-                                existingTracking = existing
+                                existingTracking = existing,
+                                watchedPercentOverride = tracking.watchedPercentageOverride.takeIf { it > 0.0 }
                             )
                             offlineStorage.removePendingVideoTracking(tracking.resource.id)
                             lastTeacherId = tracking.resource.teacherId
@@ -1119,11 +1120,16 @@ class SvtMainViewModel(
         uiContext: Context,
         resource: CourseResource,
         positionSeconds: Long,
-        durationSeconds: Long
+        durationSeconds: Long,
+        watchedPercentOverride: Double? = null
     ) {
         val profile = (profileState.value as? ProfileGateState.Ready)?.profile ?: return
         if (profile.role != "student") return
+        val hasProgress = positionSeconds > 0L || (watchedPercentOverride != null && watchedPercentOverride > 0.0)
+        if (!hasProgress) return
+
         val existing = studentVideoTracking.value.firstOrNull { it.resourceId == resource.id }
+        val safeOverride = watchedPercentOverride?.coerceIn(0.0, 100.0) ?: 0.0
         viewModelScope.launch {
             if (!isOnline.value) {
                 offlineStorage.enqueuePendingVideoTracking(
@@ -1132,7 +1138,8 @@ class SvtMainViewModel(
                         studentName = profile.fullName,
                         maxPositionSeconds = positionSeconds,
                         totalDurationSeconds = durationSeconds,
-                        updatedAtMillis = System.currentTimeMillis()
+                        updatedAtMillis = System.currentTimeMillis(),
+                        watchedPercentageOverride = safeOverride
                     )
                 )
                 return@launch
@@ -1143,7 +1150,8 @@ class SvtMainViewModel(
                     studentName = profile.fullName,
                     positionSeconds = positionSeconds,
                     totalDurationSeconds = durationSeconds,
-                    existingTracking = existing
+                    existingTracking = existing,
+                    watchedPercentOverride = watchedPercentOverride
                 )
                 val mergedTrackings = studentVideoTracking.value
                     .filterNot { it.resourceId == resource.id } + updated
@@ -1164,7 +1172,8 @@ class SvtMainViewModel(
                         studentName = profile.fullName,
                         maxPositionSeconds = positionSeconds,
                         totalDurationSeconds = durationSeconds,
-                        updatedAtMillis = System.currentTimeMillis()
+                        updatedAtMillis = System.currentTimeMillis(),
+                        watchedPercentageOverride = safeOverride
                     )
                 )
             }

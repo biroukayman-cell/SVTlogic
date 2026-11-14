@@ -77,6 +77,7 @@ import com.example.BuildConfig
 import com.example.R
 import com.example.core.AppLanguage
 import com.example.core.StudentCredentialsPdfExporter
+import com.example.core.ThemeConfig
 import com.example.data.model.AppUpdateRelease
 import com.example.data.model.UserProfile
 import com.example.ui.components.BadgeCelebrationDialog
@@ -109,6 +110,8 @@ fun MainDashboardScreen(
     viewModel: SvtMainViewModel,
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
+    currentTheme: ThemeConfig,
+    onThemeChanged: (ThemeConfig) -> Unit,
     onSignOut: () -> Unit
 ) {
     val context = LocalContext.current
@@ -435,8 +438,8 @@ fun MainDashboardScreen(
                                 onRemoveOfflineResource = { resourceId ->
                                     viewModel.removeOfflineResource(resourceId)
                                 },
-                                onRecordVideoProgress = { res, posSec, durSec ->
-                                    viewModel.recordVideoProgress(context, res, posSec, durSec)
+                                onRecordVideoProgress = { res, posSec, durSec, pctOverride ->
+                                    viewModel.recordVideoProgress(context, res, posSec, durSec, pctOverride)
                                 }
                             )
 
@@ -467,6 +470,8 @@ fun MainDashboardScreen(
                             SvtTab.PROFILE -> ProfileAndBadgesTab(
                                 profile = profile,
                                 selectedClassId = selectedClassId,
+                                currentTheme = currentTheme,
+                                onThemeChanged = onThemeChanged,
                                 studentEnrollment = studentEnrollment,
                                 studentAttempts = studentAttempts,
                                 studentVideoTrackings = studentVideoTracking,

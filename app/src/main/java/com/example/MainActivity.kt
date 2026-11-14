@@ -44,6 +44,8 @@ import com.example.core.AuthSessionDraft
 import com.example.core.LanguagePreferences
 import com.example.core.NetworkConnectivityObserver
 import com.example.core.NotificationHelper
+import com.example.core.ThemeConfig
+import com.example.core.ThemePreferences
 import com.example.core.configureAppCheck
 import com.example.core.rememberLocalizedContext
 import com.example.data.ai.SvtAiRepository
@@ -94,6 +96,9 @@ class MainActivity : ComponentActivity() {
             var currentLanguage by remember {
                 mutableStateOf(LanguagePreferences.loadLanguage(activityContext))
             }
+            var currentTheme by remember {
+                mutableStateOf(ThemePreferences.loadThemeConfig(activityContext))
+            }
             val localizedContext = rememberLocalizedContext(activityContext, currentLanguage)
 
             CompositionLocalProvider(
@@ -102,7 +107,7 @@ class MainActivity : ComponentActivity() {
                 LocalActivityResultRegistryOwner provides activityContext,
                 LocalOnBackPressedDispatcherOwner provides activityContext
             ) {
-                BioTerreTheme {
+                BioTerreTheme(themeConfig = currentTheme) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
@@ -120,6 +125,11 @@ class MainActivity : ComponentActivity() {
                                 onLanguageSelected = { lang ->
                                     LanguagePreferences.saveLanguage(activityContext, lang)
                                     currentLanguage = lang
+                                },
+                                currentTheme = currentTheme,
+                                onThemeChanged = { cfg ->
+                                    ThemePreferences.saveThemeConfig(activityContext, cfg)
+                                    currentTheme = cfg
                                 }
                             )
                         }
@@ -171,6 +181,8 @@ fun AppNavigation(
     activityContext: Context,
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
+    currentTheme: ThemeConfig,
+    onThemeChanged: (ThemeConfig) -> Unit,
     auth: FirebaseAuth = Firebase.auth
 ) {
     val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
@@ -189,7 +201,9 @@ fun AppNavigation(
                 activityContext = activityContext,
                 currentUser = user,
                 currentLanguage = currentLanguage,
-                onLanguageSelected = onLanguageSelected
+                onLanguageSelected = onLanguageSelected,
+                currentTheme = currentTheme,
+                onThemeChanged = onThemeChanged
             )
         }
     }
@@ -200,7 +214,9 @@ private fun AuthenticatedSvtFlow(
     activityContext: Context,
     currentUser: FirebaseUser,
     currentLanguage: AppLanguage,
-    onLanguageSelected: (AppLanguage) -> Unit
+    onLanguageSelected: (AppLanguage) -> Unit,
+    currentTheme: ThemeConfig,
+    onThemeChanged: (ThemeConfig) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val viewModel: SvtMainViewModel = viewModel(
@@ -362,6 +378,8 @@ private fun AuthenticatedSvtFlow(
                             viewModel = viewModel,
                             currentLanguage = currentLanguage,
                             onLanguageSelected = onLanguageSelected,
+                            currentTheme = currentTheme,
+                            onThemeChanged = onThemeChanged,
                             onSignOut = onSignOut
                         )
                     }
@@ -373,6 +391,8 @@ private fun AuthenticatedSvtFlow(
                     viewModel = viewModel,
                     currentLanguage = currentLanguage,
                     onLanguageSelected = onLanguageSelected,
+                    currentTheme = currentTheme,
+                    onThemeChanged = onThemeChanged,
                     onSignOut = onSignOut
                 )
             }

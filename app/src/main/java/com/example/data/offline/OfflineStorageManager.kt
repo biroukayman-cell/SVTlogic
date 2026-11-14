@@ -95,11 +95,14 @@ data class PendingVideoTracking(
     val studentName: String,
     val maxPositionSeconds: Long,
     val totalDurationSeconds: Long,
-    val updatedAtMillis: Long
+    val updatedAtMillis: Long,
+    val watchedPercentageOverride: Double = 0.0
 ) {
     fun toVideoTracking(studentId: String): VideoTracking {
-        val safeDur = totalDurationSeconds.coerceAtLeast(resource.durationSeconds).coerceAtLeast(1L)
-        val pct = ((maxPositionSeconds.toDouble() / safeDur.toDouble()) * 100.0).coerceIn(0.0, 100.0)
+        val safeDur = (if (totalDurationSeconds > 0L) totalDurationSeconds else resource.durationSeconds).coerceAtLeast(1L)
+        val safePos = maxPositionSeconds.coerceIn(0L, safeDur)
+        val computedPct = ((safePos.toDouble() / safeDur.toDouble()) * 100.0).coerceIn(0.0, 100.0)
+        val pct = maxOf(computedPct, watchedPercentageOverride.coerceIn(0.0, 100.0)).coerceIn(0.0, 100.0)
         val status = when {
             pct >= 90.0 -> "completed"
             pct > 0.0 -> "partial"
@@ -112,7 +115,7 @@ data class PendingVideoTracking(
             teacherId = resource.teacherId,
             studentId = studentId,
             studentName = studentName,
-            maxPositionSeconds = maxPositionSeconds,
+            maxPositionSeconds = safePos,
             durationSeconds = safeDur,
             watchedPercentage = pct,
             status = status
@@ -292,10 +295,12 @@ class OfflineStorageManager(
         synchronized(lock) {
             val existing = _pendingVideoTrackings.value.firstOrNull { it.resource.id == tracking.resource.id }
             val mergedPos = maxOf(existing?.maxPositionSeconds ?: 0L, tracking.maxPositionSeconds)
-            val mergedDur = maxOf(existing?.totalDurationSeconds ?: 0L, tracking.totalDurationSeconds)
+            val mergedDur = if (tracking.totalDurationSeconds > 0L) tracking.totalDurationSeconds else (existing?.totalDurationSeconds ?: 0L)
+            val mergedPct = maxOf(existing?.watchedPercentageOverride ?: 0.0, tracking.watchedPercentageOverride)
             val merged = tracking.copy(
                 maxPositionSeconds = mergedPos,
-                totalDurationSeconds = mergedDur
+                totalDurationSeconds = mergedDur,
+                watchedPercentageOverride = mergedPct
             )
             val updated = _pendingVideoTrackings.value.filterNot { it.resource.id == tracking.resource.id } + merged
             writePendingVideoTrackings(updated)
@@ -676,7 +681,8 @@ class OfflineStorageManager(
                         studentName = obj.optString("studentName"),
                         maxPositionSeconds = obj.optLong("maxPositionSeconds", 0L),
                         totalDurationSeconds = obj.optLong("totalDurationSeconds", 0L),
-                        updatedAtMillis = obj.optLong("updatedAtMillis", System.currentTimeMillis())
+                        updatedAtMillis = obj.optLong("updatedAtMillis", System.currentTimeMillis()),
+                        watchedPercentageOverride = obj.optDouble("watchedPercentageOverride", 0.0)
                     )
                 )
             }
@@ -709,6 +715,7 @@ class OfflineStorageManager(
                     put("maxPositionSeconds", tr.maxPositionSeconds)
                     put("totalDurationSeconds", tr.totalDurationSeconds)
                     put("updatedAtMillis", tr.updatedAtMillis)
+                    put("watchedPercentageOverride", tr.watchedPercentageOverride)
                 }
             )
         }

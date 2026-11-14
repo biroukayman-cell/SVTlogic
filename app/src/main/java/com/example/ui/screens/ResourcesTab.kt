@@ -104,6 +104,7 @@ import com.example.ui.theme.SvtSuccess
 import com.example.ui.theme.SvtWarning
 import kotlinx.coroutines.delay
 import java.io.File
+import kotlin.math.roundToInt
 
 private const val FILTER_OFFLINE_ONLY = "__offline__"
 
@@ -132,7 +133,12 @@ fun ResourcesTab(
     onToggleResourceDownloadable: (CourseResource) -> Unit,
     onDownloadResourceOffline: (CourseResource) -> Unit,
     onRemoveOfflineResource: (String) -> Unit,
-    onRecordVideoProgress: (resource: CourseResource, positionSec: Long, durationSec: Long) -> Unit
+    onRecordVideoProgress: (
+        resource: CourseResource,
+        positionSec: Long,
+        durationSec: Long,
+        watchedPercentOverride: Double?
+    ) -> Unit
 ) {
     val context = LocalContext.current
     var typeFilter by remember { mutableStateOf<String?>(null) }
@@ -354,7 +360,7 @@ fun ResourcesTab(
                         }
 
                         if (!isTeacher && resource.type == "video") {
-                            val pct = (studentTracking?.watchedPercentage ?: 0.0).toInt()
+                            val pct = (studentTracking?.watchedPercentage ?: 0.0).roundToInt().coerceIn(0, 100)
                             val statusText = when {
                                 pct >= 90 -> stringResource(id = R.string.video_status_completed, pct)
                                 pct > 0 -> stringResource(id = R.string.video_status_partial, pct)
@@ -378,6 +384,49 @@ fun ResourcesTab(
                                         .height(6.dp)
                                         .clip(RoundedCornerShape(4.dp)),
                                     color = statusColor
+                                )
+                            }
+                        } else if (isTeacher && resource.type == "video") {
+                            val approvedInClass = classEnrollments.filter {
+                                it.classId == resource.classId && it.status == "approved"
+                            }
+                            val resTrackings = videoTrackings.filter { it.resourceId == resource.id }
+                            val trackedByStudent = resTrackings.associateBy { it.studentId }
+                            val totalStudents = maxOf(approvedInClass.size, trackedByStudent.size)
+                            val watchedCount = resTrackings.count { it.watchedPercentage > 0.0 }
+                            val avgPct = if (totalStudents > 0) {
+                                val sumPct = if (approvedInClass.isNotEmpty()) {
+                                    approvedInClass.sumOf { st ->
+                                        (trackedByStudent[st.studentId]?.watchedPercentage ?: 0.0)
+                                    }
+                                } else {
+                                    resTrackings.sumOf { it.watchedPercentage }
+                                }
+                                (sumPct / totalStudents.toDouble()).roundToInt().coerceIn(0, 100)
+                            } else 0
+                            val summaryColor = when {
+                                avgPct >= 90 -> SvtSuccess
+                                avgPct > 0 -> SvtOceanSecondary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = stringResource(
+                                        id = R.string.resource_video_summary,
+                                        watchedCount,
+                                        totalStudents,
+                                        avgPct
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = summaryColor
+                                )
+                                LinearProgressIndicator(
+                                    progress = { (avgPct / 100f).coerceIn(0f, 1f) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(5.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    color = summaryColor
                                 )
                             }
                         }
@@ -508,8 +557,8 @@ fun ResourcesTab(
         VideoPlayerTrackingDialog(
             resource = res,
             playbackUri = playbackUri,
-            onProgressUpdate = { posSec, durSec ->
-                onRecordVideoProgress(res, posSec, durSec)
+            onProgressUpdate = { posSec, durSec, pctOverride ->
+                onRecordVideoProgress(res, posSec, durSec, pctOverride)
             },
             onDismiss = { videoToPlay = null }
         )
@@ -585,7 +634,7 @@ fun ResourcesTab(
 private fun VideoPlayerTrackingDialog(
     resource: CourseResource,
     playbackUri: String,
-    onProgressUpdate: (positionSec: Long, durationSec: Long) -> Unit,
+    onProgressUpdate: (positionSec: Long, durationSec: Long, pctOverride: Double?) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -598,29 +647,49 @@ private fun VideoPlayerTrackingDialog(
         }
     }
 
+    fun dispatchPlayerProgress(forceEnded: Boolean = false) {
+        val rawDurMs = player.duration.takeIf { it > 0L }
+        val durMs = (rawDurMs ?: (resource.durationSeconds.coerceAtLeast(1L) * 1000L)).coerceAtLeast(1000L)
+        val durSec = ((durMs + 500L) / 1000L).coerceAtLeast(1L)
+        val ended = forceEnded || player.playbackState == Player.STATE_ENDED
+        val posMs = if (ended) durMs else player.currentPosition.coerceIn(0L, durMs)
+        if (!ended && posMs <= 0L) return
+        val posSec = if (ended) durSec else ((posMs + 500L) / 1000L).coerceIn(1L, durSec)
+        val pctExact = if (ended) 100.0 else ((posMs.toDouble() / durMs.toDouble()) * 100.0).coerceIn(0.0, 100.0)
+        onProgressUpdate(posSec, durSec, pctExact)
+    }
+
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 playbackError = true
             }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED) {
+                    dispatchPlayerProgress(forceEnded = true)
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (!isPlaying) {
+                    dispatchPlayerProgress(forceEnded = player.playbackState == Player.STATE_ENDED)
+                }
+            }
         }
         player.addListener(listener)
         onDispose {
             player.removeListener(listener)
-            val pos = (player.currentPosition / 1000L).coerceAtLeast(0L)
-            val dur = (player.duration / 1000L).takeIf { it > 0L } ?: resource.durationSeconds.coerceAtLeast(1L)
-            onProgressUpdate(pos, dur)
+            dispatchPlayerProgress(forceEnded = player.playbackState == Player.STATE_ENDED)
             player.release()
         }
     }
 
     LaunchedEffect(player) {
         while (true) {
-            delay(3000L)
+            delay(1500L)
             if (player.isPlaying) {
-                val pos = (player.currentPosition / 1000L).coerceAtLeast(0L)
-                val dur = (player.duration / 1000L).takeIf { it > 0L } ?: resource.durationSeconds.coerceAtLeast(1L)
-                onProgressUpdate(pos, dur)
+                dispatchPlayerProgress(forceEnded = false)
             }
         }
     }
@@ -655,7 +724,19 @@ private fun VideoPlayerTrackingDialog(
                     resource.fileUrl.takeUnless { it.startsWith("firestore://") } ?: playbackUri
                 }
                 OutlinedButton(
-                    onClick = { openExternalUrl(context, externalTarget, "video") },
+                    onClick = {
+                        val fallbackDur = (player.duration / 1000L).takeIf { it > 0L }
+                            ?: resource.durationSeconds.coerceAtLeast(1L)
+                        if (playbackError) {
+                            onProgressUpdate(fallbackDur, fallbackDur, 100.0)
+                        } else {
+                            val curPos = (player.currentPosition / 1000L).coerceIn(1L, fallbackDur)
+                            val curPct = maxOf((curPos.toDouble() / fallbackDur.toDouble()) * 100.0, 10.0)
+                                .coerceIn(0.0, 100.0)
+                            onProgressUpdate(curPos, fallbackDur, curPct)
+                        }
+                        openExternalUrl(context, externalTarget, "video")
+                    },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -771,6 +852,13 @@ private fun TeacherVideoTrackingDialog(
     trackings: List<VideoTracking>,
     onDismiss: () -> Unit
 ) {
+    val trackingByStudentId = trackings.associateBy { it.studentId }
+    val enrolledIds = students.map { it.studentId }.toSet()
+    val extraRows = trackings
+        .filterNot { enrolledIds.contains(it.studentId) }
+        .map { tr -> tr.studentId to tr.studentName.ifBlank { "Élève" } }
+    val displayRows = students.map { it.studentId to it.studentName } + extraRows
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${stringResource(id = R.string.resource_video_tracking)} — ${resource.title}") },
@@ -781,9 +869,9 @@ private fun TeacherVideoTrackingDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                students.forEach { student ->
-                    val track = trackings.firstOrNull { it.studentId == student.studentId }
-                    val pct = (track?.watchedPercentage ?: 0.0).toInt()
+                displayRows.forEach { (studentId, studentName) ->
+                    val track = trackingByStudentId[studentId]
+                    val pct = (track?.watchedPercentage ?: 0.0).roundToInt().coerceIn(0, 100)
                     val statusLabel = when {
                         pct >= 90 -> stringResource(id = R.string.video_status_completed, pct)
                         pct > 0 -> stringResource(id = R.string.video_status_partial, pct)
@@ -806,9 +894,15 @@ private fun TeacherVideoTrackingDialog(
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(student.studentName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = studentName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
                                 Text(statusLabel, style = MaterialTheme.typography.labelSmall, color = color)
                             }
                             LinearProgressIndicator(
