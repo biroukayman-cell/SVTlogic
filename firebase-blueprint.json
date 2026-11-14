@@ -9,6 +9,10 @@
         "fullName": { "type": "string", "description": "Full display name" },
         "phoneNumber": { "type": "string", "description": "Phone number for student registration" },
         "role": { "type": "string", "enum": ["teacher", "student"], "description": "Account role" },
+        "massarNumber": { "type": "string", "description": "Student Massar identifier" },
+        "birthDate": { "type": "string", "description": "Student birth date (DD/MM/YYYY)" },
+        "email": { "type": "string", "description": "Teacher professional email" },
+        "mustChangePassword": { "type": "boolean", "description": "Whether provisional password should be updated" },
         "avatarUrl": { "type": "string", "description": "Profile avatar URL or preset key" },
         "xp": { "type": "integer", "description": "Total SVT badge experience points" },
         "loginStreak": { "type": "integer", "description": "Consecutive active login days" },
@@ -61,12 +65,33 @@
         "teacherName": { "type": "string" },
         "studentName": { "type": "string" },
         "studentPhone": { "type": "string" },
+        "massarNumber": { "type": "string" },
         "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
         "requestedAt": { "type": "string", "format": "date-time" },
         "validatedAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["studentId", "classId", "className", "teacherId", "teacherName", "studentName", "studentPhone", "status", "requestedAt", "updatedAt"]
+    },
+    "ClassRoster": {
+      "title": "ClassRoster",
+      "description": "Teacher-imported student roster entry with Massar code, provisional password, and class QR payload.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "qrToken": { "type": "string" },
+        "fullName": { "type": "string" },
+        "massarNumber": { "type": "string" },
+        "provisionalPassword": { "type": "string" },
+        "studentUid": { "type": "string" },
+        "qrPayload": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "className", "teacherId", "teacherName", "qrToken", "fullName", "massarNumber", "provisionalPassword", "studentUid", "qrPayload", "createdAt", "updatedAt"]
     },
     "Quiz": {
       "title": "Quiz",
@@ -239,6 +264,10 @@
     "/student_notifications/{notificationId}": {
       "schema": { "$ref": "#/entities/StudentNotification" },
       "description": "Student notifications including badge unlocks."
+    },
+    "/class_rosters/{rosterId}": {
+      "schema": { "$ref": "#/entities/ClassRoster" },
+      "description": "Teacher-imported student Massar credentials and QR payloads."
     }
   }
 }

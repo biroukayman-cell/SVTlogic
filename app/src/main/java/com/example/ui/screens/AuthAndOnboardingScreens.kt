@@ -1,13 +1,11 @@
 package com.example.ui.screens
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.util.Log
+import android.util.Patterns
 import android.util.Size
-import java.security.MessageDigest
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +14,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,6 +30,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,27 +38,38 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -71,195 +82,89 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.credentials.ClearCredentialStateRequest
-import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.exceptions.GetCredentialCancellationException
-import androidx.credentials.exceptions.GetCredentialException
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
 import com.example.core.AppLanguage
+import com.example.core.AuthSessionDraft
 import com.example.core.QrCodeUtils
 import com.example.core.QrImageAnalyzer
 import com.example.data.model.Enrollment
+import com.example.data.model.RosterStudent
 import com.example.ui.components.LanguageSwitcherRow
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import com.google.firebase.Firebase
-import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.auth.OAuthProvider
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.Executors
-
-private fun getAppSigningSha1(context: Context): String? = try {
-    val pm = context.packageManager
-    val sigBytes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        val info = pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-        info.signingInfo?.apkContentsSigners?.firstOrNull()?.toByteArray()
-    } else {
-        @Suppress("DEPRECATION")
-        val info = pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES)
-        @Suppress("DEPRECATION")
-        info.signatures?.firstOrNull()?.toByteArray()
-    }
-    sigBytes?.let { bytes ->
-        MessageDigest.getInstance("SHA-1").digest(bytes)
-            .joinToString(":") { "%02X".format(it) }
-    }
-} catch (_: Exception) {
-    null
-}
-
-private suspend fun signInWithGoogleBrowserInternal(activity: Activity) {
-    val provider = OAuthProvider.newBuilder("google.com").apply {
-        addCustomParameter("prompt", "select_account")
-    }.build()
-    Firebase.auth.startActivityForSignInWithProvider(activity, provider).await()
-}
-
-fun onGoogleBrowserSignInClicked(
-    context: Context,
-    onAuthSuccess: () -> Unit,
-    onAuthError: (String) -> Unit,
-    scope: CoroutineScope
-) {
-    scope.launch {
-        try {
-            val activity = context as? Activity
-                ?: throw IllegalStateException("Activity context required for sign-in")
-            signInWithGoogleBrowserInternal(activity)
-            if (Firebase.auth.currentUser != null) {
-                onAuthSuccess()
-            } else {
-                onAuthError(context.getString(R.string.auth_error_generic))
-            }
-        } catch (e: Exception) {
-            Log.e("Auth", "Google browser OAuth sign-in failed", e)
-            onAuthError("${e.javaClass.simpleName}: ${e.localizedMessage ?: e.message ?: "Sign in failed"}")
-        }
-    }
-}
-
-fun onGoogleSignInClicked(
-    context: Context,
-    credentialManager: CredentialManager,
-    onAuthSuccess: () -> Unit,
-    onAuthError: (String) -> Unit,
-    scope: CoroutineScope,
-    onAuthCancelled: (String) -> Unit = {}
-) {
-    val clientId = try {
-        val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-        if (resId != 0) context.getString(resId) else ""
-    } catch (_: Exception) {
-        ""
-    }
-    if (clientId.isBlank()) {
-        onAuthError("Google Sign-In configuration missing: default_web_client_id not found")
-        return
-    }
-
-    val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
-    val primaryRequest = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
-
-    scope.launch {
-        try {
-            val activity = context as? Activity
-                ?: throw IllegalStateException("Activity context required for sign-in")
-
-            val result = try {
-                credentialManager.getCredential(activity, primaryRequest)
-            } catch (cancel: GetCredentialCancellationException) {
-                throw cancel
-            } catch (primaryErr: GetCredentialException) {
-                Log.w(
-                    "Auth",
-                    "GetSignInWithGoogleOption failed (${primaryErr.javaClass.simpleName}: ${primaryErr.errorMessage ?: primaryErr.message}), trying GetGoogleIdOption fallback"
-                )
-                val fallbackOption = GetGoogleIdOption.Builder()
-                    .setFilterByAuthorizedAccounts(false)
-                    .setServerClientId(clientId)
-                    .setAutoSelectEnabled(false)
-                    .build()
-                val fallbackRequest = GetCredentialRequest.Builder().addCredentialOption(fallbackOption).build()
-                try {
-                    credentialManager.getCredential(activity, fallbackRequest)
-                } catch (cancel: GetCredentialCancellationException) {
-                    throw cancel
-                } catch (fallbackErr: GetCredentialException) {
-                    Log.w(
-                        "Auth",
-                        "GetGoogleIdOption failed (${fallbackErr.javaClass.simpleName}: ${fallbackErr.errorMessage ?: fallbackErr.message}), falling back to browser OAuth"
-                    )
-                    signInWithGoogleBrowserInternal(activity)
-                    if (Firebase.auth.currentUser != null) {
-                        onAuthSuccess()
-                    } else {
-                        onAuthError("${fallbackErr.javaClass.simpleName}: ${fallbackErr.errorMessage ?: fallbackErr.message ?: "Sign in failed"}")
-                    }
-                    return@launch
-                }
-            }
-
-            val credential = result.credential
-            if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
-                val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
-                Firebase.auth.signInWithCredential(authCredential).await()
-                onAuthSuccess()
-            } else {
-                onAuthError("Unexpected credential type: ${credential.type}")
-            }
-        } catch (e: GetCredentialCancellationException) {
-            val detail = e.errorMessage?.toString()?.takeIf { it.isNotBlank() }
-                ?: e.message?.takeIf { it.isNotBlank() }
-                ?: e.type
-            Log.w("Auth", "Google Sign-In cancelled or interrupted: $detail", e)
-            onAuthCancelled(detail)
-        } catch (e: Exception) {
-            Log.e("Auth", "Google Sign-In failed", e)
-            onAuthError("${e.javaClass.simpleName}: ${e.localizedMessage ?: e.message ?: "Sign in failed"}")
-        }
-    }
-}
 
 fun signOutUser(
     context: Context,
     scope: CoroutineScope,
     onSignOutComplete: () -> Unit = {}
 ) {
-    val credentialManager = CredentialManager.create(context)
     scope.launch {
-        withContext(NonCancellable) {
-            try {
-                credentialManager.clearCredentialState(ClearCredentialStateRequest())
-            } catch (e: Exception) {
-                Log.w("Auth", "Failed to clear credential state: ${e.message}")
-            } finally {
-                Firebase.auth.signOut()
-                onSignOutComplete()
-            }
+        AuthSessionDraft.clear(context)
+        Firebase.auth.signOut()
+        onSignOutComplete()
+    }
+}
+
+private fun mapFirebaseAuthError(context: Context, e: Exception): String {
+    if (e is FirebaseAuthUserCollisionException) {
+        return context.getString(R.string.auth_error_email_in_use)
+    }
+    if (e is FirebaseAuthWeakPasswordException) {
+        return context.getString(R.string.auth_error_weak_password)
+    }
+    if (e is FirebaseAuthInvalidUserException || e is FirebaseAuthInvalidCredentialsException) {
+        val code = (e as? FirebaseAuthException)?.errorCode.orEmpty()
+        if (code == "ERROR_INVALID_EMAIL") {
+            return context.getString(R.string.auth_error_email_invalid)
+        }
+        return context.getString(R.string.auth_error_invalid_credentials)
+    }
+    if (e is FirebaseAuthException) {
+        val msg = e.message.orEmpty()
+        if (e.errorCode == "ERROR_OPERATION_NOT_ALLOWED" ||
+            e.errorCode == "CONFIGURATION_NOT_FOUND" ||
+            msg.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) ||
+            msg.contains("PASSWORD_LOGIN_DISABLED", ignoreCase = true)
+        ) {
+            return context.getString(R.string.auth_error_email_disabled)
         }
     }
+    val rawMsg = e.localizedMessage ?: e.message.orEmpty()
+    if (rawMsg.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) ||
+        rawMsg.contains("PASSWORD_LOGIN_DISABLED", ignoreCase = true)
+    ) {
+        return context.getString(R.string.auth_error_email_disabled)
+    }
+    return rawMsg.ifBlank { context.getString(R.string.auth_error_generic) }
 }
 
 @Composable
@@ -271,28 +176,33 @@ fun AuthScreen(
 ) {
     val localizedContext = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val credentialManager = remember(activityContext) { CredentialManager.create(activityContext) }
+
+    var selectedAuthRole by remember { mutableStateOf<String?>(null) } // null -> role question, "student", "teacher"
+    var isTeacherRegister by remember { mutableStateOf(false) }
+
+    var massarInput by remember { mutableStateOf("") }
+    var studentPassword by remember { mutableStateOf("") }
+
+    var teacherFullName by remember { mutableStateOf("") }
+    var teacherEmail by remember { mutableStateOf("") }
+    var teacherPassword by remember { mutableStateOf("") }
+    var teacherConfirmPassword by remember { mutableStateOf("") }
+
+    var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         if (Firebase.auth.currentUser != null) {
             onAuthSuccess()
-            return@LaunchedEffect
         }
-        try {
-            val pendingTask = Firebase.auth.pendingAuthResult
-            if (pendingTask != null) {
-                isLoading = true
-                pendingTask.await()
-                isLoading = false
-                if (Firebase.auth.currentUser != null) {
-                    onAuthSuccess()
-                }
-            }
-        } catch (e: Exception) {
-            isLoading = false
-            errorMessage = "${e.javaClass.simpleName}: ${e.localizedMessage ?: e.message}"
+    }
+
+    if (selectedAuthRole != null) {
+        BackHandler {
+            selectedAuthRole = null
+            errorMessage = null
+            passwordVisible = false
         }
     }
 
@@ -311,8 +221,27 @@ fun AuthScreen(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = if (selectedAuthRole != null) Arrangement.SpaceBetween else Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                if (selectedAuthRole != null) {
+                    TextButton(
+                        onClick = {
+                            selectedAuthRole = null
+                            errorMessage = null
+                            passwordVisible = false
+                        },
+                        modifier = Modifier.testTag("change_role_back_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(id = R.string.auth_change_role))
+                    }
+                }
                 LanguageSwitcherRow(
                     currentLanguage = currentLanguage,
                     onLanguageSelected = onLanguageSelected
@@ -322,21 +251,21 @@ fun AuthScreen(
             Column(
                 modifier = Modifier
                     .widthIn(max = 520.dp)
-                    .padding(vertical = 24.dp),
+                    .padding(vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.ic_svt_logo),
                     contentDescription = stringResource(id = R.string.app_name),
                     modifier = Modifier
-                        .size(96.dp)
-                        .clip(RoundedCornerShape(24.dp))
+                        .size(84.dp)
+                        .clip(RoundedCornerShape(22.dp))
                 )
 
                 Text(
                     text = stringResource(id = R.string.auth_welcome_title),
-                    style = MaterialTheme.typography.displaySmall,
+                    style = MaterialTheme.typography.headlineMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -347,113 +276,350 @@ fun AuthScreen(
                     textAlign = TextAlign.Center
                 )
 
-                Image(
-                    painter = painterResource(id = R.drawable.img_svt_hero),
-                    contentDescription = stringResource(id = R.string.app_subtitle),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(170.dp)
-                        .clip(MaterialTheme.shapes.large),
-                    contentScale = ContentScale.Crop
-                )
-
-                Text(
-                    text = stringResource(id = R.string.auth_welcome_desc),
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                if (!errorMessage.isNullOrBlank()) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
+                AnimatedVisibility(visible = selectedAuthRole == null) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.img_svt_hero),
+                            contentDescription = stringResource(id = R.string.app_subtitle),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(150.dp)
+                                .clip(MaterialTheme.shapes.large),
+                            contentScale = ContentScale.Crop
                         )
+
+                        Text(
+                            text = stringResource(id = R.string.auth_welcome_desc),
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Text(
+                            text = stringResource(id = R.string.auth_role_question),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+
+                        RoleGatewayCard(
+                            title = stringResource(id = R.string.auth_role_student_btn),
+                            subtitle = stringResource(id = R.string.auth_role_student_sub),
+                            icon = Icons.Filled.School,
+                            accentColor = MaterialTheme.colorScheme.primary,
+                            onClick = {
+                                errorMessage = null
+                                selectedAuthRole = "student"
+                            },
+                            modifier = Modifier.testTag("choose_role_student_button")
+                        )
+
+                        RoleGatewayCard(
+                            title = stringResource(id = R.string.auth_role_teacher_btn),
+                            subtitle = stringResource(id = R.string.auth_role_teacher_sub),
+                            icon = Icons.Filled.Science,
+                            accentColor = MaterialTheme.colorScheme.secondary,
+                            onClick = {
+                                errorMessage = null
+                                selectedAuthRole = "teacher"
+                            },
+                            modifier = Modifier.testTag("choose_role_teacher_button")
+                        )
+                    }
+                }
+
+                AnimatedVisibility(visible = selectedAuthRole == "student") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Text(
-                            text = errorMessage!!,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(12.dp)
+                            text = stringResource(id = R.string.auth_student_title),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
                         )
-                    }
-                }
 
-                Button(
-                    onClick = {
-                        errorMessage = null
-                        isLoading = true
-                        onGoogleSignInClicked(
-                            context = activityContext,
-                            credentialManager = credentialManager,
-                            onAuthSuccess = {
-                                isLoading = false
-                                onAuthSuccess()
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text(
+                                text = stringResource(id = R.string.auth_student_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = massarInput,
+                            onValueChange = { massarInput = it.uppercase(Locale.US) },
+                            label = { Text(stringResource(id = R.string.field_massar)) },
+                            placeholder = { Text(stringResource(id = R.string.field_massar_hint)) },
+                            leadingIcon = { Icon(Icons.Filled.Badge, contentDescription = null) },
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Characters,
+                                autoCorrectEnabled = false
+                            ),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("student_massar_input")
+                        )
+
+                        OutlinedTextField(
+                            value = studentPassword,
+                            onValueChange = { studentPassword = it },
+                            label = { Text(stringResource(id = R.string.field_password)) },
+                            leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(
+                                        imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                        contentDescription = stringResource(id = R.string.field_password)
+                                    )
+                                }
                             },
-                            onAuthError = { msg ->
-                                isLoading = false
-                                val sha1 = getAppSigningSha1(activityContext)
-                                errorMessage = if (sha1 != null) "$msg\n(APK SHA-1: $sha1)" else msg
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("student_password_input")
+                        )
+
+                        AuthErrorCard(errorMessage = errorMessage)
+
+                        Button(
+                            onClick = {
+                                val cleanMassar = AuthSessionDraft.normalizeMassar(massarInput)
+                                when {
+                                    cleanMassar.length < 4 -> {
+                                        errorMessage = localizedContext.getString(R.string.error_massar_required)
+                                    }
+                                    studentPassword.length < 6 -> {
+                                        errorMessage = localizedContext.getString(R.string.auth_error_weak_password)
+                                    }
+                                    else -> {
+                                        errorMessage = null
+                                        isLoading = true
+                                        coroutineScope.launch {
+                                            try {
+                                                val synthEmail = AuthSessionDraft.massarToAuthEmail(cleanMassar)
+                                                AuthSessionDraft.save(
+                                                    context = activityContext,
+                                                    role = "student",
+                                                    massarNumber = cleanMassar
+                                                )
+                                                Firebase.auth.signInWithEmailAndPassword(synthEmail, studentPassword).await()
+                                                isLoading = false
+                                                onAuthSuccess()
+                                            } catch (e: Exception) {
+                                                isLoading = false
+                                                Log.e("Auth", "Student Massar sign-in failed", e)
+                                                errorMessage = mapFirebaseAuthError(localizedContext, e)
+                                            }
+                                        }
+                                    }
+                                }
                             },
-                            scope = coroutineScope,
-                            onAuthCancelled = { detail ->
-                                isLoading = false
-                                val sha1 = getAppSigningSha1(activityContext)
-                                val baseMsg = localizedContext.getString(R.string.auth_cancelled_hint, detail)
-                                errorMessage = if (sha1 != null) "$baseMsg\n(APK SHA-1: $sha1)" else baseMsg
+                            enabled = !isLoading,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(54.dp)
+                                .testTag("student_login_submit_button")
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = stringResource(id = R.string.auth_sign_in_btn),
+                                    style = MaterialTheme.typography.labelLarge
+                                )
                             }
-                        )
-                    },
-                    enabled = !isLoading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .testTag("google_sign_in_button")
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(Icons.Filled.Science, contentDescription = null)
-                        Spacer(Modifier.size(10.dp))
-                        Text(
-                            text = stringResource(id = R.string.auth_google_sign_in),
-                            style = MaterialTheme.typography.labelLarge
-                        )
+                        }
                     }
                 }
 
-                OutlinedButton(
-                    onClick = {
-                        errorMessage = null
-                        isLoading = true
-                        onGoogleBrowserSignInClicked(
-                            context = activityContext,
-                            onAuthSuccess = {
-                                isLoading = false
-                                onAuthSuccess()
-                            },
-                            onAuthError = { msg ->
-                                isLoading = false
-                                val sha1 = getAppSigningSha1(activityContext)
-                                errorMessage = if (sha1 != null) "$msg\n(APK SHA-1: $sha1)" else msg
-                            },
-                            scope = coroutineScope
+                AnimatedVisibility(visible = selectedAuthRole == "teacher") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.auth_teacher_title),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
                         )
-                    },
-                    enabled = !isLoading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .testTag("google_browser_sign_in_button")
-                ) {
-                    Text(
-                        text = stringResource(id = R.string.auth_google_browser_sign_in),
-                        style = MaterialTheme.typography.labelLarge
-                    )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            FilterChip(
+                                selected = !isTeacherRegister,
+                                onClick = {
+                                    isTeacherRegister = false
+                                    errorMessage = null
+                                },
+                                label = { Text(stringResource(id = R.string.auth_mode_login)) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("teacher_mode_login_chip")
+                            )
+                            FilterChip(
+                                selected = isTeacherRegister,
+                                onClick = {
+                                    isTeacherRegister = true
+                                    errorMessage = null
+                                },
+                                label = { Text(stringResource(id = R.string.auth_mode_register)) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("teacher_mode_register_chip")
+                            )
+                        }
+
+                        if (isTeacherRegister) {
+                            OutlinedTextField(
+                                value = teacherFullName,
+                                onValueChange = { teacherFullName = it },
+                                label = { Text(stringResource(id = R.string.field_full_name)) },
+                                leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("teacher_fullname_input")
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = teacherEmail,
+                            onValueChange = { teacherEmail = it },
+                            label = { Text(stringResource(id = R.string.field_email_pro)) },
+                            placeholder = { Text(stringResource(id = R.string.field_email_pro_hint)) },
+                            leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("teacher_email_input")
+                        )
+
+                        OutlinedTextField(
+                            value = teacherPassword,
+                            onValueChange = { teacherPassword = it },
+                            label = { Text(stringResource(id = R.string.field_password)) },
+                            leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(
+                                        imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                        contentDescription = stringResource(id = R.string.field_password)
+                                    )
+                                }
+                            },
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("teacher_password_input")
+                        )
+
+                        if (isTeacherRegister) {
+                            OutlinedTextField(
+                                value = teacherConfirmPassword,
+                                onValueChange = { teacherConfirmPassword = it },
+                                label = { Text(stringResource(id = R.string.field_password_confirm)) },
+                                leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("teacher_confirm_password_input")
+                            )
+                        }
+
+                        AuthErrorCard(errorMessage = errorMessage)
+
+                        Button(
+                            onClick = {
+                                val cleanEmail = teacherEmail.trim()
+                                val cleanName = teacherFullName.trim()
+                                when {
+                                    isTeacherRegister && cleanName.length < 2 -> {
+                                        errorMessage = localizedContext.getString(R.string.error_name_required)
+                                    }
+                                    cleanEmail.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches() -> {
+                                        errorMessage = localizedContext.getString(R.string.auth_error_email_invalid)
+                                    }
+                                    teacherPassword.length < 6 -> {
+                                        errorMessage = localizedContext.getString(R.string.auth_error_weak_password)
+                                    }
+                                    isTeacherRegister && teacherPassword != teacherConfirmPassword -> {
+                                        errorMessage = localizedContext.getString(R.string.auth_error_password_mismatch)
+                                    }
+                                    else -> {
+                                        errorMessage = null
+                                        isLoading = true
+                                        coroutineScope.launch {
+                                            try {
+                                                AuthSessionDraft.save(
+                                                    context = activityContext,
+                                                    role = "teacher",
+                                                    email = cleanEmail,
+                                                    fullName = cleanName
+                                                )
+                                                if (isTeacherRegister) {
+                                                    Firebase.auth.createUserWithEmailAndPassword(cleanEmail, teacherPassword).await()
+                                                } else {
+                                                    Firebase.auth.signInWithEmailAndPassword(cleanEmail, teacherPassword).await()
+                                                }
+                                                isLoading = false
+                                                onAuthSuccess()
+                                            } catch (e: Exception) {
+                                                isLoading = false
+                                                Log.e("Auth", "Teacher email auth failed", e)
+                                                errorMessage = mapFirebaseAuthError(localizedContext, e)
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !isLoading,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(54.dp)
+                                .testTag("teacher_auth_submit_button")
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = stringResource(
+                                        id = if (isTeacherRegister) R.string.auth_register_btn else R.string.auth_sign_in_btn
+                                    ),
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -463,21 +629,123 @@ fun AuthScreen(
 }
 
 @Composable
+private fun RoleGatewayCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    accentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .border(
+                width = 1.5.dp,
+                color = accentColor.copy(alpha = 0.45f),
+                shape = MaterialTheme.shapes.large
+            )
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = accentColor.copy(alpha = 0.08f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(CircleShape)
+                    .background(accentColor.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = accentColor,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuthErrorCard(errorMessage: String?) {
+    if (!errorMessage.isNullOrBlank()) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = errorMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.padding(12.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun AccountSetupScreen(
     defaultName: String,
+    defaultRole: String,
+    defaultMassar: String,
+    defaultEmail: String,
+    studentRoster: RosterStudent?,
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
-    onSubmit: (fullName: String, phone: String, role: String) -> Unit,
+    onSubmit: (
+        fullName: String,
+        phone: String,
+        role: String,
+        massarNumber: String,
+        birthDate: String,
+        email: String,
+        newPassword: String?
+    ) -> Unit,
     onSignOut: () -> Unit,
     serverError: String? = null
 ) {
-    var fullName by remember(defaultName) { mutableStateOf(defaultName) }
+    val resolvedRole = if (studentRoster != null) "student" else defaultRole
+    val initialName = studentRoster?.fullName?.takeIf { it.isNotBlank() } ?: defaultName
+    val resolvedMassar = studentRoster?.massarNumber?.takeIf { it.isNotBlank() } ?: defaultMassar
+
+    var fullName by remember(initialName) { mutableStateOf(initialName) }
+    var birthDate by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
-    var selectedRole by remember { mutableStateOf("student") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmNewPassword by remember { mutableStateOf("") }
+    var showDatePicker by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
     val nameRequiredErr = stringResource(id = R.string.error_name_required)
-    val phoneRequiredErr = stringResource(id = R.string.error_phone_required)
+    val birthDateRequiredErr = stringResource(id = R.string.error_birthdate_required)
+    val weakPassErr = stringResource(id = R.string.auth_error_weak_password)
+    val mismatchPassErr = stringResource(id = R.string.auth_error_password_mismatch)
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -512,7 +780,7 @@ fun AccountSetupScreen(
 
             Column(
                 modifier = Modifier.widthIn(max = 520.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Text(
                     text = stringResource(id = R.string.setup_title),
@@ -520,38 +788,48 @@ fun AccountSetupScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = stringResource(id = R.string.setup_subtitle),
+                    text = stringResource(
+                        id = if (resolvedRole == "teacher") R.string.setup_subtitle_teacher
+                        else R.string.setup_subtitle_student
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Text(
-                    text = stringResource(id = R.string.setup_role_label),
-                    style = MaterialTheme.typography.titleSmall
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                    shape = MaterialTheme.shapes.medium
                 ) {
-                    RoleChoiceCard(
-                        title = stringResource(id = R.string.role_student),
-                        icon = Icons.Filled.School,
-                        selected = selectedRole == "student",
-                        onClick = { selectedRole = "student" },
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .testTag("role_student_card")
-                    )
-                    RoleChoiceCard(
-                        title = stringResource(id = R.string.role_teacher),
-                        icon = Icons.Filled.Science,
-                        selected = selectedRole == "teacher",
-                        onClick = { selectedRole = "teacher" },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("role_teacher_card")
-                    )
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (resolvedRole == "teacher") Icons.Filled.Science else Icons.Filled.School,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column {
+                            Text(
+                                text = stringResource(
+                                    id = if (resolvedRole == "teacher") R.string.role_teacher else R.string.role_student
+                                ),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            val identityText = if (resolvedRole == "teacher") defaultEmail else resolvedMassar
+                            if (identityText.isNotBlank()) {
+                                Text(
+                                    text = identityText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
                 }
 
                 OutlinedTextField(
@@ -565,6 +843,31 @@ fun AccountSetupScreen(
                         .testTag("setup_fullname_input")
                 )
 
+                if (resolvedRole == "student") {
+                    OutlinedTextField(
+                        value = birthDate,
+                        onValueChange = { birthDate = it },
+                        label = { Text(stringResource(id = R.string.field_birth_date)) },
+                        placeholder = { Text(stringResource(id = R.string.field_birth_date_hint)) },
+                        leadingIcon = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
+                        trailingIcon = {
+                            IconButton(
+                                onClick = { showDatePicker = true },
+                                modifier = Modifier.testTag("setup_birthdate_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.CalendarMonth,
+                                    contentDescription = stringResource(id = R.string.field_birth_date)
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("setup_birthdate_input")
+                    )
+                }
+
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
@@ -576,6 +879,37 @@ fun AccountSetupScreen(
                         .fillMaxWidth()
                         .testTag("setup_phone_input")
                 )
+
+                if (resolvedRole == "student") {
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it },
+                        label = { Text(stringResource(id = R.string.field_new_password_optional)) },
+                        placeholder = { Text(stringResource(id = R.string.field_new_password_hint)) },
+                        leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("setup_new_password_input")
+                    )
+
+                    if (newPassword.isNotBlank()) {
+                        OutlinedTextField(
+                            value = confirmNewPassword,
+                            onValueChange = { confirmNewPassword = it },
+                            label = { Text(stringResource(id = R.string.field_password_confirm)) },
+                            leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("setup_confirm_password_input")
+                        )
+                    }
+                }
 
                 val displayedError = validationError ?: serverError
                 if (!displayedError.isNullOrBlank()) {
@@ -590,10 +924,26 @@ fun AccountSetupScreen(
                     onClick = {
                         when {
                             fullName.trim().length < 2 -> validationError = nameRequiredErr
-                            selectedRole == "student" && phone.trim().length < 6 -> validationError = phoneRequiredErr
+                            resolvedRole == "student" && birthDate.trim().length < 6 -> {
+                                validationError = birthDateRequiredErr
+                            }
+                            newPassword.isNotBlank() && newPassword.length < 6 -> {
+                                validationError = weakPassErr
+                            }
+                            newPassword.isNotBlank() && newPassword != confirmNewPassword -> {
+                                validationError = mismatchPassErr
+                            }
                             else -> {
                                 validationError = null
-                                onSubmit(fullName.trim(), phone.trim(), selectedRole)
+                                onSubmit(
+                                    fullName.trim(),
+                                    phone.trim(),
+                                    resolvedRole,
+                                    resolvedMassar,
+                                    birthDate.trim(),
+                                    defaultEmail.trim(),
+                                    newPassword.takeIf { it.isNotBlank() }
+                                )
                             }
                         }
                     },
@@ -607,48 +957,33 @@ fun AccountSetupScreen(
             }
         }
     }
-}
 
-@Composable
-private fun RoleChoiceCard(
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .clip(MaterialTheme.shapes.medium)
-            .border(
-                width = if (selected) 2.dp else 1.dp,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                shape = MaterialTheme.shapes.medium
-            )
-            .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-            else MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState()
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.US).apply {
+                                timeZone = TimeZone.getTimeZone("UTC")
+                            }
+                            birthDate = sdf.format(Date(millis))
+                        }
+                        showDatePicker = false
+                    }
+                ) {
+                    Text(stringResource(id = R.string.setup_continue))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                textAlign = TextAlign.Center
-            )
-            RadioButton(selected = selected, onClick = onClick)
+            DatePicker(state = datePickerState)
         }
     }
 }
@@ -657,13 +992,16 @@ private fun RoleChoiceCard(
 fun QrJoinClassScreen(
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
+    studentRoster: RosterStudent?,
     errorMessage: String?,
     onJoinCode: (String) -> Unit,
     onSignOut: () -> Unit
 ) {
     val context = LocalContext.current
     var showScanner by remember { mutableStateOf(false) }
-    var manualCode by remember { mutableStateOf("") }
+    var manualCode by remember(studentRoster?.qrToken) {
+        mutableStateOf(studentRoster?.qrToken.orEmpty())
+    }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -746,6 +1084,34 @@ fun QrJoinClassScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
+                    if (studentRoster != null && studentRoster.qrToken.isNotBlank()) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(id = R.string.qr_assigned_hint, studentRoster.className),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Button(
+                                    onClick = { onJoinCode(studentRoster.qrToken) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("qr_quick_join_button")
+                                ) {
+                                    Text(stringResource(id = R.string.qr_assigned_join_now, studentRoster.className))
+                                }
+                            }
+                        }
+                    }
+
                     Button(
                         onClick = {
                             if (hasCameraPermission) {
@@ -818,7 +1184,6 @@ private fun QrCameraScannerView(
     onCodeScanned: (String) -> Unit,
     onClose: () -> Unit
 ) {
-    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 

@@ -13,6 +13,10 @@ data class UserProfile(
     val fullName: String = "",
     val phoneNumber: String = "",
     val role: String = "student", // "teacher" or "student"
+    val massarNumber: String = "",
+    val birthDate: String = "",
+    val email: String = "",
+    val mustChangePassword: Boolean = false,
     val avatarUrl: String? = null,
     val xp: Long = 0L,
     val loginStreak: Long = 1L,
@@ -56,9 +60,27 @@ data class Enrollment(
     val teacherName: String = "",
     val studentName: String = "",
     val studentPhone: String = "",
+    val massarNumber: String = "",
     val status: String = "pending", // "pending", "approved", "rejected"
     @ServerTimestamp val requestedAt: Timestamp? = null,
     @ServerTimestamp val validatedAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class RosterStudent(
+    @DocumentId val id: String = "",
+    val classId: String = "",
+    val className: String = "",
+    val teacherId: String = "",
+    val teacherName: String = "",
+    val qrToken: String = "",
+    val fullName: String = "",
+    val massarNumber: String = "",
+    val provisionalPassword: String = "",
+    val studentUid: String = "",
+    val qrPayload: String = "",
+    @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
 

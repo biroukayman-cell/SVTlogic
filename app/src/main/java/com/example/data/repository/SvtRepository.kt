@@ -15,6 +15,7 @@ import com.example.data.model.QuestionAnswerRecord
 import com.example.data.model.Quiz
 import com.example.data.model.QuizAttempt
 import com.example.data.model.QuizQuestion
+import com.example.data.model.RosterStudent
 import com.example.data.model.StudentNotification
 import com.example.data.model.SvtClass
 import com.example.data.model.UserProfile
@@ -89,16 +90,27 @@ class SvtRepository(private val db: FirebaseFirestore) {
         fullName: String,
         phoneNumber: String,
         role: String,
-        avatarUrl: String? = null
+        avatarUrl: String? = null,
+        massarNumber: String = "",
+        birthDate: String = "",
+        email: String = "",
+        mustChangePassword: Boolean = false
     ): UserProfile {
         val uid = requireUserId()
         val today = todayDateString()
         val docRef = db.collection("users").document(uid)
+        val cleanMassar = massarNumber.trim()
+        val cleanBirthDate = birthDate.trim()
+        val cleanEmail = email.trim()
         val payload = mutableMapOf<String, Any>(
             "userId" to uid,
             "fullName" to fullName.trim(),
             "phoneNumber" to phoneNumber.trim(),
             "role" to role,
+            "massarNumber" to cleanMassar,
+            "birthDate" to cleanBirthDate,
+            "email" to cleanEmail,
+            "mustChangePassword" to mustChangePassword,
             "xp" to 0L,
             "loginStreak" to 1L,
             "lastLoginDate" to today,
@@ -117,6 +129,10 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 fullName = fullName.trim(),
                 phoneNumber = phoneNumber.trim(),
                 role = role,
+                massarNumber = cleanMassar,
+                birthDate = cleanBirthDate,
+                email = cleanEmail,
+                mustChangePassword = mustChangePassword,
                 avatarUrl = avatarUrl,
                 xp = 0L,
                 loginStreak = 1L,
@@ -134,7 +150,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
     suspend fun updateProfileInfo(
         fullName: String,
         phoneNumber: String,
-        avatarUrl: String?
+        avatarUrl: String?,
+        birthDate: String? = null,
+        mustChangePassword: Boolean? = null
     ) {
         val uid = requireUserId()
         val docRef = db.collection("users").document(uid)
@@ -146,8 +164,32 @@ class SvtRepository(private val db: FirebaseFirestore) {
         if (!avatarUrl.isNullOrBlank()) {
             updates["avatarUrl"] = avatarUrl
         }
+        if (birthDate != null) {
+            updates["birthDate"] = birthDate.trim()
+        }
+        if (mustChangePassword != null) {
+            updates["mustChangePassword"] = mustChangePassword
+        }
         try {
             docRef.update(updates).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun markPasswordChanged() {
+        val uid = requireUserId()
+        val docRef = db.collection("users").document(uid)
+        try {
+            docRef.update(
+                mapOf(
+                    "mustChangePassword" to false,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -313,6 +355,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
             )
             val collectionsByClass = listOf(
                 "enrollments",
+                "class_rosters",
                 "quizzes",
                 "quiz_attempts",
                 "resources",
@@ -376,7 +419,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
     suspend fun requestEnrollment(
         classCode: ClassCode,
         studentName: String,
-        studentPhone: String
+        studentPhone: String,
+        massarNumber: String = ""
     ) {
         val uid = requireUserId()
         val docRef = db.collection("enrollments").document(uid)
@@ -393,6 +437,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
             "teacherName" to classCode.teacherName,
             "studentName" to studentName.trim(),
             "studentPhone" to studentPhone.trim(),
+            "massarNumber" to massarNumber.trim(),
             "status" to "pending",
             "requestedAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
@@ -540,6 +585,16 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 for (doc in docs.documents) {
                     batch.delete(doc.reference)
                 }
+            }
+
+            val rosterDocs = db.collection("class_rosters")
+                .whereEqualTo("teacherId", uid)
+                .whereEqualTo("classId", enrollment.classId)
+                .whereEqualTo("studentUid", studentId)
+                .get()
+                .await()
+            for (doc in rosterDocs.documents) {
+                batch.delete(doc.reference)
             }
             batch.commit().await()
         } catch (e: CancellationException) {
@@ -1242,6 +1297,94 @@ class SvtRepository(private val db: FirebaseFirestore) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.UPDATE, "student_notifications")
+        }
+    }
+
+    // ---------------------------------------------------------
+    // 9. Class Rosters (Excel Import & Provisional Passwords)
+    // ---------------------------------------------------------
+    fun observeTeacherRoster(teacherId: String): Flow<List<RosterStudent>> = flow {
+        db.collection("class_rosters")
+            .whereEqualTo("teacherId", teacherId)
+            .snapshots()
+            .map { snapshot ->
+                snapshot.toObjects(RosterStudent::class.java, ServerTimestampBehavior.ESTIMATE)
+                    .sortedBy { it.fullName.lowercase(Locale.getDefault()) }
+            }
+            .logFirestoreErrors(OperationType.LIST, "class_rosters", teacherId)
+            .collect { emit(it) }
+    }
+
+    fun observeStudentRoster(studentUid: String): Flow<RosterStudent?> = flow {
+        db.collection("class_rosters")
+            .whereEqualTo("studentUid", studentUid)
+            .snapshots()
+            .map { snapshot ->
+                snapshot.toObjects(RosterStudent::class.java, ServerTimestampBehavior.ESTIMATE)
+                    .firstOrNull()
+            }
+            .logFirestoreErrors(OperationType.LIST, "class_rosters", studentUid)
+            .collect { emit(it) }
+    }
+
+    suspend fun saveRosterStudent(roster: RosterStudent): RosterStudent {
+        val uid = requireUserId()
+        val safeDocId = roster.id.ifBlank { "${roster.classId}_${roster.massarNumber}" }
+            .replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            .take(120)
+        val docRef = db.collection("class_rosters").document(safeDocId)
+        try {
+            val existing = runCatching { docRef.get().await() }.getOrNull()
+            if (existing != null && existing.exists()) {
+                val updates = mapOf(
+                    "className" to roster.className.trim(),
+                    "teacherName" to roster.teacherName.trim(),
+                    "qrToken" to roster.qrToken.trim(),
+                    "fullName" to roster.fullName.trim(),
+                    "massarNumber" to roster.massarNumber.trim(),
+                    "provisionalPassword" to roster.provisionalPassword,
+                    "studentUid" to roster.studentUid,
+                    "qrPayload" to roster.qrPayload,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+                docRef.update(updates).await()
+            } else {
+                val payload = mapOf(
+                    "classId" to roster.classId,
+                    "className" to roster.className.trim(),
+                    "teacherId" to uid,
+                    "teacherName" to roster.teacherName.trim(),
+                    "qrToken" to roster.qrToken.trim(),
+                    "fullName" to roster.fullName.trim(),
+                    "massarNumber" to roster.massarNumber.trim(),
+                    "provisionalPassword" to roster.provisionalPassword,
+                    "studentUid" to roster.studentUid,
+                    "qrPayload" to roster.qrPayload,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+                docRef.set(payload).await()
+            }
+            return roster.copy(id = safeDocId, teacherId = uid)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun deleteRosterStudent(rosterId: String) {
+        requireUserId()
+        if (rosterId.isBlank()) return
+        val docRef = db.collection("class_rosters").document(rosterId)
+        try {
+            docRef.delete().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docRef.path)
+            throw e
         }
     }
 

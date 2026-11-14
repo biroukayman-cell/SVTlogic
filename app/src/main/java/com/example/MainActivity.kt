@@ -38,6 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.core.AppLanguage
+import com.example.core.AuthSessionDraft
 import com.example.core.LanguagePreferences
 import com.example.core.NetworkConnectivityObserver
 import com.example.core.NotificationHelper
@@ -66,6 +67,8 @@ import com.google.firebase.firestore.persistentCacheSettings
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 internal fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
     val listener = FirebaseAuth.AuthStateListener { auth ->
@@ -225,12 +228,50 @@ private fun AuthenticatedSvtFlow(
     )
 
     val profileState by viewModel.profileState.collectAsStateWithLifecycle()
+    val studentRoster by viewModel.studentRoster.collectAsStateWithLifecycle()
     val studentEnrollment by viewModel.studentEnrollment.collectAsStateWithLifecycle()
     val actionError by viewModel.actionError.collectAsStateWithLifecycle()
     val invalidCodeMessage = LocalContext.current.getString(R.string.qr_invalid_code)
+    val authDraft = remember(currentUser.uid) { AuthSessionDraft.load(activityContext) }
+    var onboardingLocalError by remember(currentUser.uid) { mutableStateOf<String?>(null) }
 
     val onSignOut: () -> Unit = {
         signOutUser(activityContext, scope)
+    }
+
+    val handleAccountSetupSubmit: (
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String?
+    ) -> Unit = { fullName, phone, role, massar, birthDate, email, newPassword ->
+        viewModel.clearError()
+        onboardingLocalError = null
+        scope.launch {
+            var mustChange = role == "student"
+            if (!newPassword.isNullOrBlank()) {
+                try {
+                    currentUser.updatePassword(newPassword).await()
+                    mustChange = false
+                } catch (e: Exception) {
+                    onboardingLocalError = e.localizedMessage
+                    return@launch
+                }
+            }
+            viewModel.setupProfile(
+                fullName = fullName,
+                phone = phone,
+                role = role,
+                massarNumber = massar,
+                birthDate = birthDate,
+                email = email,
+                mustChangePassword = mustChange
+            )
+            AuthSessionDraft.clear(activityContext)
+        }
     }
 
     when (val state = profileState) {
@@ -242,29 +283,35 @@ private fun AuthenticatedSvtFlow(
 
         ProfileGateState.NeedsSetup -> {
             AccountSetupScreen(
-                defaultName = currentUser.displayName.orEmpty(),
+                defaultName = authDraft.fullName.ifBlank { currentUser.displayName.orEmpty() },
+                defaultRole = authDraft.role,
+                defaultMassar = authDraft.massarNumber,
+                defaultEmail = authDraft.email.ifBlank {
+                    currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
+                },
+                studentRoster = studentRoster,
                 currentLanguage = currentLanguage,
                 onLanguageSelected = onLanguageSelected,
-                onSubmit = { fullName, phone, role ->
-                    viewModel.clearError()
-                    viewModel.setupProfile(fullName, phone, role)
-                },
+                onSubmit = handleAccountSetupSubmit,
                 onSignOut = onSignOut,
-                serverError = actionError
+                serverError = onboardingLocalError ?: actionError
             )
         }
 
         is ProfileGateState.Error -> {
             AccountSetupScreen(
-                defaultName = currentUser.displayName.orEmpty(),
+                defaultName = authDraft.fullName.ifBlank { currentUser.displayName.orEmpty() },
+                defaultRole = authDraft.role,
+                defaultMassar = authDraft.massarNumber,
+                defaultEmail = authDraft.email.ifBlank {
+                    currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
+                },
+                studentRoster = studentRoster,
                 currentLanguage = currentLanguage,
                 onLanguageSelected = onLanguageSelected,
-                onSubmit = { fullName, phone, role ->
-                    viewModel.clearError()
-                    viewModel.setupProfile(fullName, phone, role)
-                },
+                onSubmit = handleAccountSetupSubmit,
                 onSignOut = onSignOut,
-                serverError = actionError ?: state.message
+                serverError = onboardingLocalError ?: actionError ?: state.message
             )
         }
 
@@ -277,6 +324,7 @@ private fun AuthenticatedSvtFlow(
                         QrJoinClassScreen(
                             currentLanguage = currentLanguage,
                             onLanguageSelected = onLanguageSelected,
+                            studentRoster = studentRoster,
                             errorMessage = actionError,
                             onJoinCode = { token ->
                                 viewModel.clearError()
@@ -285,6 +333,7 @@ private fun AuthenticatedSvtFlow(
                                     studentName = profile.fullName,
                                     studentPhone = profile.phoneNumber,
                                     invalidCodeMessage = invalidCodeMessage,
+                                    massarNumber = profile.massarNumber,
                                     onResult = {}
                                 )
                             },

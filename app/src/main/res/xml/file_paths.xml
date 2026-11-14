@@ -3,4 +3,10 @@
     <files-path
         name="offline_svt"
         path="offline_svt/" />
+    <files-path
+        name="exports"
+        path="exports/" />
+    <cache-path
+        name="cache_exports"
+        path="exports/" />
 </paths>

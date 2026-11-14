@@ -60,6 +60,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -74,6 +75,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.core.AppLanguage
+import com.example.core.StudentCredentialsPdfExporter
 import com.example.data.model.UserProfile
 import com.example.ui.components.BadgeCelebrationDialog
 import com.example.ui.components.LanguageSwitcherRow
@@ -81,6 +83,7 @@ import com.example.ui.components.NotificationsSheet
 import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtWarning
 import com.example.ui.viewmodel.SvtMainViewModel
+import kotlinx.coroutines.launch
 
 enum class SvtTab(
     @StringRes val labelRes: Int,
@@ -111,6 +114,7 @@ fun MainDashboardScreen(
     var showNotificationsSheet by remember { mutableStateOf(false) }
     var showClassMenu by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val downloadedResources by viewModel.downloadedResources.collectAsStateWithLifecycle()
@@ -123,6 +127,8 @@ fun MainDashboardScreen(
     val teacherClasses by viewModel.teacherClasses.collectAsStateWithLifecycle()
     val selectedClassId by viewModel.selectedClassId.collectAsStateWithLifecycle()
     val teacherEnrollments by viewModel.teacherEnrollments.collectAsStateWithLifecycle()
+    val teacherRoster by viewModel.teacherRoster.collectAsStateWithLifecycle()
+    val isImportingRoster by viewModel.isImportingRoster.collectAsStateWithLifecycle()
     val teacherQuizzes by viewModel.teacherQuizzes.collectAsStateWithLifecycle()
     val teacherAttempts by viewModel.teacherAttempts.collectAsStateWithLifecycle()
     val teacherResources by viewModel.teacherResources.collectAsStateWithLifecycle()
@@ -437,8 +443,13 @@ fun MainDashboardScreen(
                                 studentVideoTrackings = studentVideoTracking,
                                 teacherClasses = teacherClasses,
                                 teacherEnrollments = teacherEnrollments,
-                                onUpdateProfile = { name, phone, avatar ->
-                                    viewModel.updateProfile(name, phone, avatar)
+                                teacherRoster = teacherRoster,
+                                isImportingRoster = isImportingRoster,
+                                onUpdateProfile = { name, phone, avatar, birthDate ->
+                                    viewModel.updateProfile(name, phone, avatar, birthDate)
+                                },
+                                onChangePassword = { currentPass, newPass, onDone ->
+                                    viewModel.changeUserPassword(context, currentPass, newPass, onDone)
                                 },
                                 onCreateClass = { name, level, year ->
                                     viewModel.createClass(profile.fullName, name, level, year)
@@ -449,8 +460,40 @@ fun MainDashboardScreen(
                                     val notifBody = enrollment.className
                                     viewModel.approveEnrollment(enrollment, notifTitle, notifBody)
                                 },
+                                onApproveAllPending = { pending ->
+                                    val notifTitle = context.getString(R.string.app_name)
+                                    val notifBody = pending.firstOrNull()?.className.orEmpty()
+                                    viewModel.approveAllPending(pending, notifTitle, notifBody)
+                                },
                                 onRejectStudent = { viewModel.rejectEnrollment(it) },
                                 onDeleteStudent = { viewModel.deleteStudent(it) },
+                                onImportRoster = { svtClass, rows ->
+                                    viewModel.importRosterStudentsToClass(context, svtClass, rows)
+                                },
+                                onAddManualStudent = { svtClass, name, massar ->
+                                    viewModel.addManualRosterStudent(context, svtClass, name, massar)
+                                },
+                                onDeleteRosterStudent = { roster ->
+                                    viewModel.deleteRosterStudent(roster)
+                                },
+                                onExportRosterPdf = { svtClass, students ->
+                                    StudentCredentialsPdfExporter.exportAndSharePdf(context, svtClass, students)
+                                        .onFailure { err ->
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar(
+                                                    context.getString(
+                                                        R.string.pdf_export_error,
+                                                        err.localizedMessage ?: "Error"
+                                                    )
+                                                )
+                                            }
+                                        }
+                                },
+                                onShowError = { msg ->
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar(msg)
+                                    }
+                                },
                                 onSignOut = onSignOut
                             )
                         }

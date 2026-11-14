@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import com.example.base.FirestoreEmulatorTestBase
 import com.example.data.model.QuizQuestion
+import com.example.data.model.RosterStudent
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -36,12 +37,18 @@ class SvtRepositoryRuleTest : FirestoreEmulatorTestBase() {
         // 2. Student A signs in, looks up QR code, requests enrollment
         val studentAUid = signInTestUser(studentAEmail)
         withTimeout(TIMEOUT_MS) {
-            repo.createUserProfile("Youssef", "+212600000002", "student")
+            repo.createUserProfile(
+                fullName = "Youssef",
+                phoneNumber = "+212600000002",
+                role = "student",
+                massarNumber = "D135792468",
+                birthDate = "15/09/2008"
+            )
         }
         val classCode = withTimeout(TIMEOUT_MS) { repo.lookupClassByQrToken(svtClass.qrToken) }
         assertNotNull(classCode)
         withTimeout(TIMEOUT_MS) {
-            repo.requestEnrollment(classCode!!, "Youssef", "+212600000002")
+            repo.requestEnrollment(classCode!!, "Youssef", "+212600000002", "D135792468")
         }
 
         // 3. Teacher signs back in, sees enrollment, approves Student A, and publishes QCM
@@ -170,6 +177,92 @@ class SvtRepositoryRuleTest : FirestoreEmulatorTestBase() {
             val fsEx = e.unwrapFirestoreException()
             assertNotNull("Expected FirebaseFirestoreException, got $e", fsEx)
             assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsEx!!.code)
+        }
+    }
+
+    @Test
+    fun classRoster_teacherProvisioningAndStudentIsolation_enforcesRules() = runBlocking {
+        val teacherEmail = "roster_teacher_${UUID.randomUUID().toString().take(6)}@test.com"
+        val studentAEmail = "roster_a_${UUID.randomUUID().toString().take(6)}@test.com"
+        val studentBEmail = "roster_b_${UUID.randomUUID().toString().take(6)}@test.com"
+
+        val studentAUid = signInTestUser(studentAEmail)
+        val studentBUid = signInTestUser(studentBEmail)
+        val teacherUid = signInTestUser(teacherEmail)
+        val repo = SvtRepository(firestore)
+
+        withTimeout(TIMEOUT_MS) {
+            repo.createUserProfile(
+                fullName = "Prof. Salma",
+                phoneNumber = "",
+                role = "teacher",
+                email = teacherEmail
+            )
+        }
+        val svtClass = withTimeout(TIMEOUT_MS) {
+            repo.createClass("Prof. Salma", "1Bac SE", "1Bac", "2026-2027")
+        }
+
+        val savedRoster = withTimeout(TIMEOUT_MS) {
+            repo.saveRosterStudent(
+                RosterStudent(
+                    id = "${svtClass.id}_K112233445",
+                    classId = svtClass.id,
+                    className = svtClass.name,
+                    teacherId = teacherUid,
+                    teacherName = "Prof. Salma",
+                    qrToken = svtClass.qrToken,
+                    fullName = "Amine El Idrissi",
+                    massarNumber = "K112233445",
+                    provisionalPassword = "Svt7x9k2",
+                    studentUid = studentAUid,
+                    qrPayload = "BIOTERRE:${svtClass.qrToken}|K112233445"
+                )
+            )
+        }
+
+        val teacherRosterList = withTimeout(FLOW_TIMEOUT_MS) {
+            repo.observeTeacherRoster(teacherUid).first { it.any { r -> r.id == savedRoster.id } }
+        }
+        assertEquals(1, teacherRosterList.count { it.id == savedRoster.id })
+
+        // Student A can read own assigned roster entry
+        signInTestUser(studentAEmail)
+        val ownRoster = withTimeout(FLOW_TIMEOUT_MS) {
+            repo.observeStudentRoster(studentAUid).first { it != null }
+        }
+        assertEquals("K112233445", ownRoster?.massarNumber)
+
+        // Student B cannot read Student A's roster entry
+        signInTestUser(studentBEmail)
+        try {
+            withTimeout(FLOW_TIMEOUT_MS) {
+                repo.observeStudentRoster(studentAUid).first()
+            }
+            fail("Expected PERMISSION_DENIED when student B reads student A roster")
+        } catch (e: Exception) {
+            val fsEx = e.unwrapFirestoreException()
+            assertNotNull("Expected FirebaseFirestoreException, got $e", fsEx)
+            assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsEx!!.code)
+        }
+
+        // Student A cannot delete roster entry
+        signInTestUser(studentAEmail)
+        try {
+            withTimeout(TIMEOUT_MS) {
+                repo.deleteRosterStudent(savedRoster.id)
+            }
+            fail("Expected PERMISSION_DENIED when student tries to delete roster entry")
+        } catch (e: Exception) {
+            val fsEx = e.unwrapFirestoreException()
+            assertNotNull("Expected FirebaseFirestoreException, got $e", fsEx)
+            assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsEx!!.code)
+        }
+
+        // Teacher can delete roster entry
+        signInTestUser(teacherEmail)
+        withTimeout(TIMEOUT_MS) {
+            repo.deleteRosterStudent(savedRoster.id)
         }
     }
 

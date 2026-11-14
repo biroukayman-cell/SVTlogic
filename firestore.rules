@@ -48,6 +48,10 @@ service cloud.firestore {
              data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
              data.phoneNumber is string && data.phoneNumber.size() <= 30 &&
              data.role is string && data.role in ['teacher', 'student'] &&
+             (!('massarNumber' in data) || (data.massarNumber is string && data.massarNumber.size() <= 40)) &&
+             (!('birthDate' in data) || (data.birthDate is string && data.birthDate.size() <= 30)) &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+             (!('mustChangePassword' in data) || data.mustChangePassword is bool) &&
              (!('avatarUrl' in data) || data.avatarUrl == null || (data.avatarUrl is string && data.avatarUrl.size() <= 500)) &&
              data.xp is int && data.xp >= 0 && data.xp <= 1000000 &&
              data.loginStreak is int && data.loginStreak >= 0 && data.loginStreak <= 10000 &&
@@ -87,9 +91,25 @@ service cloud.firestore {
              data.teacherName is string && data.teacherName.size() >= 1 && data.teacherName.size() <= 100 &&
              data.studentName is string && data.studentName.size() >= 2 && data.studentName.size() <= 100 &&
              data.studentPhone is string && data.studentPhone.size() <= 30 &&
+             (!('massarNumber' in data) || (data.massarNumber is string && data.massarNumber.size() <= 40)) &&
              data.status is string && data.status in ['pending', 'approved', 'rejected'] &&
              isValidTimestamp(data.requestedAt) &&
              (!('validatedAt' in data) || data.validatedAt == null || isValidTimestamp(data.validatedAt)) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidClassRoster(data) {
+      return data.classId is string && data.classId.size() >= 1 && data.classId.size() <= 128 &&
+             data.className is string && data.className.size() >= 2 && data.className.size() <= 100 &&
+             data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 128 &&
+             data.teacherName is string && data.teacherName.size() >= 1 && data.teacherName.size() <= 100 &&
+             data.qrToken is string && data.qrToken.size() >= 6 && data.qrToken.size() <= 64 &&
+             data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
+             data.massarNumber is string && data.massarNumber.size() >= 2 && data.massarNumber.size() <= 40 &&
+             data.provisionalPassword is string && data.provisionalPassword.size() >= 6 && data.provisionalPassword.size() <= 64 &&
+             data.studentUid is string && data.studentUid.size() <= 128 &&
+             data.qrPayload is string && data.qrPayload.size() >= 6 && data.qrPayload.size() <= 160 &&
+             isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);
     }
 
@@ -202,7 +222,7 @@ service cloud.firestore {
                        request.auth.uid == userId &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll(['userId', 'fullName', 'phoneNumber', 'role', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'createdAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['userId', 'fullName', 'phoneNumber', 'role', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'fullName', 'phoneNumber', 'role', 'massarNumber', 'birthDate', 'email', 'mustChangePassword', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'createdAt', 'updatedAt']) &&
                        isValidUserProfile(incoming());
 
       allow update: if isSignedIn() &&
@@ -212,7 +232,7 @@ service cloud.firestore {
                        incoming().userId == existing().userId &&
                        incoming().role == existing().role &&
                        incoming().createdAt == existing().createdAt &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'massarNumber', 'birthDate', 'email', 'mustChangePassword', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'updatedAt']);
 
       allow delete: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
     }
@@ -283,7 +303,7 @@ service cloud.firestore {
                        isValidId(studentId) &&
                        studentId == request.auth.uid &&
                        incoming().keys().hasAll(['studentId', 'classId', 'className', 'teacherId', 'teacherName', 'studentName', 'studentPhone', 'status', 'requestedAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['studentId', 'classId', 'className', 'teacherId', 'teacherName', 'studentName', 'studentPhone', 'status', 'requestedAt', 'validatedAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['studentId', 'classId', 'className', 'teacherId', 'teacherName', 'studentName', 'studentPhone', 'massarNumber', 'status', 'requestedAt', 'validatedAt', 'updatedAt']) &&
                        isValidEnrollment(incoming()) &&
                        incoming().studentId == request.auth.uid &&
                        incoming().status == 'pending' &&
@@ -578,6 +598,38 @@ service cloud.firestore {
 
       allow delete: if isSignedIn() && isValidId(notificationId) && (
         resource.data.studentId == request.auth.uid ||
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // 12. Teacher-Imported Class Roster (Massar + Provisional Credentials)
+    match /class_rosters/{rosterId} {
+      allow get, list: if isSignedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        resource.data.studentUid == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(rosterId) &&
+                       incoming().keys().hasAll(['classId', 'className', 'teacherId', 'teacherName', 'qrToken', 'fullName', 'massarNumber', 'provisionalPassword', 'studentUid', 'qrPayload', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['classId', 'className', 'teacherId', 'teacherName', 'qrToken', 'fullName', 'massarNumber', 'provisionalPassword', 'studentUid', 'qrPayload', 'createdAt', 'updatedAt']) &&
+                       isValidClassRoster(incoming()) &&
+                       incoming().teacherId == request.auth.uid &&
+                       exists(/databases/$(database)/documents/classes/$(incoming().classId)) &&
+                       get(/databases/$(database)/documents/classes/$(incoming().classId)).data.teacherId == request.auth.uid;
+
+      allow update: if isSignedIn() &&
+                       isValidId(rosterId) &&
+                       isValidClassRoster(incoming()) &&
+                       (resource.data.teacherId == request.auth.uid || isAdmin()) &&
+                       incoming().teacherId == existing().teacherId &&
+                       incoming().classId == existing().classId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['className', 'teacherName', 'qrToken', 'fullName', 'massarNumber', 'provisionalPassword', 'studentUid', 'qrPayload', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(rosterId) && (
         resource.data.teacherId == request.auth.uid ||
         isAdmin()
       );

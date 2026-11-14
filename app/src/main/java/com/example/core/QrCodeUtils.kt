@@ -35,10 +35,25 @@ object QrCodeUtils {
 
     fun extractTokenFromScan(rawValue: String): String {
         val trimmed = rawValue.trim()
-        return if (trimmed.startsWith("BIOTERRE:")) {
+        val withoutPrefix = if (trimmed.startsWith("BIOTERRE:")) {
             trimmed.removePrefix("BIOTERRE:").trim()
         } else {
             trimmed
+        }
+        return withoutPrefix.substringBefore("|").trim()
+    }
+
+    fun extractMassarFromScan(rawValue: String): String? {
+        val trimmed = rawValue.trim()
+        val withoutPrefix = if (trimmed.startsWith("BIOTERRE:")) {
+            trimmed.removePrefix("BIOTERRE:").trim()
+        } else {
+            trimmed
+        }
+        return if ("|" in withoutPrefix) {
+            withoutPrefix.substringAfter("|").trim().takeIf { it.isNotBlank() }
+        } else {
+            null
         }
     }
 }

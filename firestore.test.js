@@ -378,3 +378,63 @@ test("Quizzes, attempts, resources, video tracking, and notifications enforce is
   await assertFails(studentBDb.collection("video_tracking").doc("res_1_student_a_1").get());
   await assertFails(studentBDb.collection("student_notifications").doc("notif_1").get());
 });
+
+test("Class rosters: teacher creates/reads roster, student only sees own entry, cross-student denied", async () => {
+  const teacherDb = testEnv.authenticatedContext(TEACHER_UID).firestore();
+  const studentADb = testEnv.authenticatedContext(STUDENT_A_UID).firestore();
+  const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
+  const now = serverNow();
+
+  await assertSucceeds(
+    teacherDb.collection("classes").doc("class_1").set({
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      name: "2Bac SVT",
+      academicYear: "2026-2027",
+      level: "2Bac",
+      qrToken: "SVT_ROSTER1",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  await assertSucceeds(
+    teacherDb.collection("class_rosters").doc("class_1_G134567890").set({
+      classId: "class_1",
+      className: "2Bac SVT",
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      qrToken: "SVT_ROSTER1",
+      fullName: "Amina El Amrani",
+      massarNumber: "G134567890",
+      provisionalPassword: "Svt8492K",
+      studentUid: STUDENT_A_UID,
+      qrPayload: "BIOTERRE:SVT_ROSTER1|G134567890",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Student A can read their own roster entry
+  await assertSucceeds(studentADb.collection("class_rosters").doc("class_1_G134567890").get());
+
+  // Student B cannot read or modify Student A's roster entry
+  await assertFails(studentBDb.collection("class_rosters").doc("class_1_G134567890").get());
+  await assertFails(
+    studentBDb.collection("class_rosters").doc("class_1_G999999999").set({
+      classId: "class_1",
+      className: "2Bac SVT",
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      qrToken: "SVT_ROSTER1",
+      fullName: "Intruder",
+      massarNumber: "G999999999",
+      provisionalPassword: "Svt1111A",
+      studentUid: STUDENT_B_UID,
+      qrPayload: "BIOTERRE:SVT_ROSTER1|G999999999",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+});
+

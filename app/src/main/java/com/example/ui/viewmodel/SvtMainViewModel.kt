@@ -6,7 +6,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.R
 import com.example.core.AppLanguage
+import com.example.core.AuthSessionDraft
 import com.example.core.ConnectivityObserver
+import com.example.core.ImportedStudentRow
 import com.example.core.NotificationHelper
 import com.example.data.ai.GeneratedQuizDraft
 import com.example.data.ai.SvtAiRepository
@@ -19,6 +21,7 @@ import com.example.data.model.QuestionAnswerRecord
 import com.example.data.model.Quiz
 import com.example.data.model.QuizAttempt
 import com.example.data.model.QuizQuestion
+import com.example.data.model.RosterStudent
 import com.example.data.model.StudentNotification
 import com.example.data.model.SvtClass
 import com.example.data.model.UserProfile
@@ -28,6 +31,12 @@ import com.example.data.offline.OfflineStorageManager
 import com.example.data.offline.PendingQuizAttempt
 import com.example.data.offline.PendingVideoTracking
 import com.example.data.repository.SvtRepository
+import com.google.firebase.Firebase
+import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -44,6 +53,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.tasks.await
 
 sealed interface ProfileGateState {
     data object Loading : ProfileGateState
@@ -155,7 +165,17 @@ class SvtMainViewModel(
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
+    val teacherRoster: StateFlow<List<RosterStudent>> = roleFlow.flatMapLatest { role ->
+        if (role == "teacher") repository.observeTeacherRoster(currentUserId)
+            .catch { emit(emptyList()) }
+        else flowOf(emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
     // Student streams
+    val studentRoster: StateFlow<RosterStudent?> = repository.observeStudentRoster(currentUserId)
+        .catch { emit(null) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+
     val studentEnrollment: StateFlow<Enrollment?> = roleFlow.flatMapLatest { role ->
         if (role == "student") repository.observeStudentEnrollment(currentUserId)
             .catch { emit(null) }
@@ -273,6 +293,9 @@ class SvtMainViewModel(
     private val _aiQuizState = MutableStateFlow<AiQuizState>(AiQuizState.Idle)
     val aiQuizState: StateFlow<AiQuizState> = _aiQuizState.asStateFlow()
 
+    private val _isImportingRoster = MutableStateFlow(false)
+    val isImportingRoster: StateFlow<Boolean> = _isImportingRoster.asStateFlow()
+
     private var streakCheckedThisSession = false
 
     init {
@@ -310,10 +333,27 @@ class SvtMainViewModel(
         _aiQuizState.value = AiQuizState.Idle
     }
 
-    fun setupProfile(fullName: String, phone: String, role: String) {
+    fun setupProfile(
+        fullName: String,
+        phone: String,
+        role: String,
+        massarNumber: String = "",
+        birthDate: String = "",
+        email: String = "",
+        mustChangePassword: Boolean = false
+    ) {
         viewModelScope.launch {
             try {
-                repository.createUserProfile(fullName, phone, role)
+                repository.createUserProfile(
+                    fullName = fullName,
+                    phoneNumber = phone,
+                    role = role,
+                    avatarUrl = null,
+                    massarNumber = massarNumber,
+                    birthDate = birthDate,
+                    email = email,
+                    mustChangePassword = mustChangePassword
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -322,14 +362,61 @@ class SvtMainViewModel(
         }
     }
 
-    fun updateProfile(fullName: String, phone: String, avatarUrl: String?) {
+    fun updateProfile(
+        fullName: String,
+        phone: String,
+        avatarUrl: String?,
+        birthDate: String? = null
+    ) {
         viewModelScope.launch {
             try {
-                repository.updateProfileInfo(fullName, phone, avatarUrl)
+                repository.updateProfileInfo(
+                    fullName = fullName,
+                    phoneNumber = phone,
+                    avatarUrl = avatarUrl,
+                    birthDate = birthDate
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _actionError.value = e.localizedMessage ?: "Failed to update profile"
+            }
+        }
+    }
+
+    fun changeUserPassword(
+        uiContext: Context,
+        currentPassword: String?,
+        newPassword: String,
+        onResult: (Boolean, String?) -> Unit = { _, _ -> }
+    ) {
+        val user = Firebase.auth.currentUser
+        if (user == null) {
+            onResult(false, uiContext.getString(R.string.auth_error_generic))
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val userEmail = user.email
+                if (!currentPassword.isNullOrBlank() && !userEmail.isNullOrBlank()) {
+                    val cred = EmailAuthProvider.getCredential(userEmail, currentPassword)
+                    user.reauthenticate(cred).await()
+                }
+                user.updatePassword(newPassword).await()
+                repository.markPasswordChanged()
+                val okMsg = uiContext.getString(R.string.password_changed_success)
+                _statusMessage.value = okMsg
+                onResult(true, null)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: FirebaseAuthRecentLoginRequiredException) {
+                val msg = uiContext.getString(R.string.password_reauth_required)
+                _actionError.value = msg
+                onResult(false, msg)
+            } catch (e: Exception) {
+                val msg = e.localizedMessage ?: uiContext.getString(R.string.password_change_error)
+                _actionError.value = msg
+                onResult(false, msg)
             }
         }
     }
@@ -380,6 +467,7 @@ class SvtMainViewModel(
         studentName: String,
         studentPhone: String,
         invalidCodeMessage: String,
+        massarNumber: String = "",
         onResult: (Boolean) -> Unit
     ) {
         viewModelScope.launch {
@@ -389,7 +477,7 @@ class SvtMainViewModel(
                     _actionError.value = invalidCodeMessage
                     onResult(false)
                 } else {
-                    repository.requestEnrollment(code, studentName, studentPhone)
+                    repository.requestEnrollment(code, studentName, studentPhone, massarNumber)
                     onResult(true)
                 }
             } catch (e: CancellationException) {
@@ -450,6 +538,23 @@ class SvtMainViewModel(
         }
     }
 
+    fun approveAllPending(enrollments: List<Enrollment>, notifTitle: String, notifBody: String) {
+        if (enrollments.isEmpty()) return
+        viewModelScope.launch {
+            var count = 0
+            try {
+                for (enrollment in enrollments) {
+                    repository.approveStudentEnrollment(enrollment, notifTitle, notifBody)
+                    count++
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
     fun rejectEnrollment(enrollment: Enrollment) {
         viewModelScope.launch {
             try {
@@ -466,6 +571,119 @@ class SvtMainViewModel(
         viewModelScope.launch {
             try {
                 repository.deleteStudentFromClass(enrollment)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun importRosterStudentsToClass(
+        uiContext: Context,
+        svtClass: SvtClass,
+        rows: List<ImportedStudentRow>
+    ) {
+        if (rows.isEmpty()) return
+        viewModelScope.launch {
+            _isImportingRoster.value = true
+            val provisionerAuth = try {
+                AuthSessionDraft.getProvisionerAuth(uiContext)
+            } catch (e: Exception) {
+                _isImportingRoster.value = false
+                _actionError.value = e.localizedMessage
+                return@launch
+            }
+            var savedCount = 0
+            try {
+                val existingByMassar = teacherRoster.value
+                    .filter { it.classId == svtClass.id }
+                    .associateBy { AuthSessionDraft.normalizeMassar(it.massarNumber) }
+
+                for (row in rows) {
+                    val cleanMassar = AuthSessionDraft.normalizeMassar(row.massarNumber)
+                    if (cleanMassar.length < 2 || row.fullName.trim().length < 2) continue
+
+                    val existing = existingByMassar[cleanMassar]
+                    val password = existing?.provisionalPassword?.takeIf { it.length >= 6 }
+                        ?: AuthSessionDraft.generateProvisionalPassword()
+                    val authEmail = AuthSessionDraft.massarToAuthEmail(cleanMassar)
+
+                    var studentUid = existing?.studentUid.orEmpty()
+                    if (studentUid.isBlank()) {
+                        try {
+                            val res = provisionerAuth.createUserWithEmailAndPassword(authEmail, password).await()
+                            studentUid = res.user?.uid.orEmpty()
+                        } catch (_: FirebaseAuthUserCollisionException) {
+                            val signInRes = runCatching {
+                                provisionerAuth.signInWithEmailAndPassword(authEmail, password).await()
+                            }.getOrNull()
+                            studentUid = signInRes?.user?.uid ?: studentUid
+                        } catch (authEx: FirebaseAuthException) {
+                            if (authEx.errorCode == "ERROR_OPERATION_NOT_ALLOWED" ||
+                                authEx.message?.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) == true ||
+                                authEx.message?.contains("PASSWORD_LOGIN_DISABLED", ignoreCase = true) == true
+                            ) {
+                                _actionError.value = uiContext.getString(R.string.auth_error_email_disabled)
+                                return@launch
+                            }
+                            throw authEx
+                        }
+                    }
+
+                    val rosterItem = RosterStudent(
+                        id = "${svtClass.id}_$cleanMassar",
+                        classId = svtClass.id,
+                        className = svtClass.name,
+                        teacherId = currentUserId,
+                        teacherName = svtClass.teacherName,
+                        qrToken = svtClass.qrToken,
+                        fullName = row.fullName.trim(),
+                        massarNumber = cleanMassar,
+                        provisionalPassword = password,
+                        studentUid = studentUid,
+                        qrPayload = "BIOTERRE:${svtClass.qrToken}|$cleanMassar"
+                    )
+                    repository.saveRosterStudent(rosterItem)
+                    savedCount++
+                }
+                if (savedCount > 0) {
+                    _statusMessage.value = uiContext.getString(R.string.roster_import_success, savedCount)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage ?: uiContext.getString(R.string.excel_read_error)
+            } finally {
+                runCatching { provisionerAuth.signOut() }
+                _isImportingRoster.value = false
+            }
+        }
+    }
+
+    fun addManualRosterStudent(
+        uiContext: Context,
+        svtClass: SvtClass,
+        fullName: String,
+        massarNumber: String
+    ) {
+        val cleanMassar = AuthSessionDraft.normalizeMassar(massarNumber)
+        val cleanName = fullName.trim()
+        if (cleanMassar.length < 4 || cleanName.length < 2) {
+            _actionError.value = uiContext.getString(R.string.error_massar_required)
+            return
+        }
+        importRosterStudentsToClass(
+            uiContext = uiContext,
+            svtClass = svtClass,
+            rows = listOf(ImportedStudentRow(fullName = cleanName, massarNumber = cleanMassar))
+        )
+    }
+
+    fun deleteRosterStudent(roster: RosterStudent) {
+        viewModelScope.launch {
+            try {
+                repository.deleteRosterStudent(roster.id)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
