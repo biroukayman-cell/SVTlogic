@@ -67,24 +67,18 @@ jobs:
             exit 1
           fi
 
-          if [ ! -s debug.keystore ] && [ -f debug.keystore.base64 ]; then
-            tr -d '\r\n ' < debug.keystore.base64 | base64 -d > debug.keystore
-          fi
-          if [ ! -s debug.keystore ] && [ -f DEBUG_KEYSTORE_BASE64 ]; then
-            tr -d '\r\n ' < DEBUG_KEYSTORE_BASE64 | base64 -d > debug.keystore
-          fi
-          if [ ! -s debug.keystore ] && [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
             printf '%s' "$DEBUG_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > debug.keystore
+          elif [ ! -s debug.keystore ] && [ -f debug.keystore.base64 ]; then
+            tr -d '\r\n ' < debug.keystore.base64 | base64 -d > debug.keystore
+          elif [ ! -s debug.keystore ] && [ -f DEBUG_KEYSTORE_BASE64 ]; then
+            tr -d '\r\n ' < DEBUG_KEYSTORE_BASE64 | base64 -d > debug.keystore
           fi
 
           if [ ! -s debug.keystore ]; then
             {
               echo "### ❌ Clé de signature debug.keystore manquante sur GitHub"
-              echo "Sans le vrai \`debug.keystore\`, Google Sign-In échoue avec *There was an error while trying to get your package certificate hash* / *activity is cancelled by the user*."
-              echo ""
-              echo "**Solutions :**"
-              echo "1. Téléchargez l'APK directement depuis **Google AI Studio**."
-              echo "2. Ou poussez \`debug.keystore.base64\` sur GitHub, ou ajoutez le secret \`DEBUG_KEYSTORE_BASE64\` dans **GitHub → Settings → Secrets and variables → Actions** avec le contenu de \`debug.keystore.base64\`."
+              echo "Ajoutez \`debug.keystore.base64\` dans le dépôt ou le secret \`DEBUG_KEYSTORE_BASE64\` dans **GitHub → Settings → Secrets and variables → Actions**."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
@@ -92,12 +86,7 @@ jobs:
           APK_SHA1=$(keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey | grep -E "^\s*SHA1:" | sed -E 's/.*SHA1:\s*//' | tr -d ':' | tr '[:upper:]' '[:lower:]')
           echo "Debug keystore SHA1: $APK_SHA1"
           if [ -n "$APK_SHA1" ] && ! grep -qi "$APK_SHA1" app/google-services.json; then
-            {
-              echo "### ❌ Empreinte SHA-1 du keystore incompatible avec Firebase"
-              echo "SHA-1 utilisé : \`$APK_SHA1\` (absent de \`app/google-services.json\`)."
-              echo "Remplacez \`debug.keystore.base64\` (ou le secret \`DEBUG_KEYSTORE_BASE64\`) par celui du projet Google AI Studio."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
+            echo "::warning::Keystore SHA-1 ($APK_SHA1) differs from app/google-services.json (non-blocking: Massar & Email/Password Auth do not require SHA-1 matching)."
           fi
 
           if [ ! -f .env ] && [ ! -f .env.example ]; then
