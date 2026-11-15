@@ -3,6 +3,7 @@ package com.example.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,8 +22,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.NavigateNext
+import androidx.compose.material.icons.filled.Biotech
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.AlertDialog
@@ -31,6 +35,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -39,11 +44,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -55,6 +68,9 @@ import com.example.R
 import com.example.core.AppLanguage
 import com.example.data.badges.SvtBadgeDefinition
 import com.example.data.model.StudentNotification
+import com.example.data.svt.SvtKnowledgeCatalog
+import kotlin.math.PI
+import kotlin.math.sin
 
 @Composable
 fun LanguageSwitcherRow(
@@ -342,12 +358,14 @@ fun NotificationsSheet(
 fun SvtHeroBannerCard(
     title: String,
     subtitle: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onActionClick: (() -> Unit)? = null
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(148.dp)
+            .height(152.dp)
             .clip(MaterialTheme.shapes.large)
     ) {
         Image(
@@ -363,27 +381,200 @@ fun SvtHeroBannerCard(
                     Brush.verticalGradient(
                         colors = listOf(
                             Color(0x330B2E20),
-                            Color(0xCC0B2E20)
+                            Color(0xD40B2E20)
                         )
                     )
                 )
         )
-        Column(
+        // Subtle DNA double-helix vector motif on the trailing edge
+        Canvas(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 14.dp)
+                .size(width = 76.dp, height = 112.dp)
+        ) {
+            val w = size.width
+            val h = size.height
+            val strand1 = Path()
+            val strand2 = Path()
+            val steps = 28
+            for (i in 0..steps) {
+                val t = i.toFloat() / steps.toFloat()
+                val y = t * h
+                val angle = t * 2.4f * PI.toFloat()
+                val x1 = w * 0.5f + sin(angle) * (w * 0.34f)
+                val x2 = w * 0.5f - sin(angle) * (w * 0.34f)
+                if (i == 0) {
+                    strand1.moveTo(x1, y)
+                    strand2.moveTo(x2, y)
+                } else {
+                    strand1.lineTo(x1, y)
+                    strand2.lineTo(x2, y)
+                }
+                if (i % 4 == 2) {
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.28f),
+                        start = Offset(x1, y),
+                        end = Offset(x2, y),
+                        strokeWidth = 2.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
+            drawPath(
+                path = strand1,
+                color = Color.White.copy(alpha = 0.42f),
+                style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
+            )
+            drawPath(
+                path = strand2,
+                color = Color(0xFF9DF0C8).copy(alpha = 0.48f),
+                style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
+            )
+        }
+
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomStart)
+                .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.9f)
+                )
+            }
+            if (!actionLabel.isNullOrBlank() && onActionClick != null) {
+                Spacer(Modifier.width(10.dp))
+                FilledTonalButton(
+                    onClick = onActionClick,
+                    modifier = Modifier.testTag("hero_svt_lab_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Biotech,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(actionLabel)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SvtFactOfTheDayBanner(
+    currentLanguage: AppLanguage,
+    onOpenLab: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val facts = SvtKnowledgeCatalog.factsOfTheDay
+    if (facts.isEmpty()) return
+    var factIndex by rememberSaveable { mutableIntStateOf(0) }
+    val fact = facts[factIndex % facts.size]
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
+        ),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Lightbulb,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = stringResource(id = R.string.svt_fact_of_day_label),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        text = stringResource(id = fact.domain.labelRes),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
             Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall,
-                color = Color.White
+                text = fact.title.get(currentLanguage),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = subtitle,
+                text = fact.body.get(currentLanguage),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.9f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = onOpenLab,
+                    modifier = Modifier.testTag("svt_fact_open_lab_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Biotech,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(id = R.string.svt_lab_open_button))
+                }
+                TextButton(
+                    onClick = { factIndex = (factIndex + 1) % facts.size },
+                    modifier = Modifier.testTag("svt_fact_next_button")
+                ) {
+                    Text(stringResource(id = R.string.svt_fact_next))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.NavigateNext,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }

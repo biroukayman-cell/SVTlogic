@@ -393,4 +393,77 @@
     <string name="terms_acceptance_checkbox">لقد قرأت وأوافق على شروط الاستخدام وسياسة الخصوصية</string>
     <string name="terms_acceptance_continue">الموافقة والمتابعة</string>
     <string name="terms_acceptance_privacy_link">الاطلاع على سياسة الخصوصية</string>
+
+    <!-- مختبر SVT، المعجم، البطاقات التعليمية، ADN، المجهر والجيولوجيا -->
+    <string name="svt_domain_all">الكل</string>
+    <string name="svt_domain_genetics">الوراثة والخلية</string>
+    <string name="svt_domain_geology">الجيولوجيا</string>
+    <string name="svt_domain_physiology">الفيزيولوجيا والمناعة</string>
+    <string name="svt_domain_ecology">البيئة</string>
+
+    <string name="svt_lab_title">مختبر SVT</string>
+    <string name="svt_lab_subtitle">أدوات تفاعلية للمراجعة والتحليل في علوم الحياة والأرض</string>
+    <string name="svt_lab_open_button">مختبر SVT</string>
+    <string name="svt_lab_tab_glossary">المعجم</string>
+    <string name="svt_lab_tab_flashcards">بطاقات الحفظ</string>
+    <string name="svt_lab_tab_dna">ADN ← بروتين</string>
+    <string name="svt_lab_tab_microscope">المجهر والجيولوجيا</string>
+
+    <string name="svt_glossary_search_hint">ابحث عن مفهوم (الانقسام، موهو، سينابس...)</string>
+    <string name="svt_glossary_empty">لم يتم العثور على أي مفهوم لهذا البحث.</string>
+
+    <string name="svt_flashcards_progress">البطاقة %1$d / %2$d</string>
+    <string name="svt_flashcards_mastered_count">تم إتقان %1$d / %2$d</string>
+    <string name="svt_flashcards_tap_flip">انقر على البطاقة لقلبها</string>
+    <string name="svt_flashcards_question_badge">سؤال SVT</string>
+    <string name="svt_flashcards_answer_badge">الإجابة والتفسير</string>
+    <string name="svt_flashcards_previous">السابقة</string>
+    <string name="svt_flashcards_next">التالية</string>
+    <string name="svt_flashcards_mastered">متقنة ✓</string>
+    <string name="svt_flashcards_review">للمراجعة</string>
+    <string name="svt_flashcards_reset">إعادة تعيين</string>
+    <string name="svt_flashcards_completed_banner">أحسنت! أتقنت جميع البطاقات في هذا المحور.</string>
+
+    <string name="svt_dna_title">محاكي ADN ← ARNm ← بروتين</string>
+    <string name="svt_dna_subtitle">أدخل خيط ADN المنسوخ (3\' ← 5\') لمعاينة النسخ والترجمة إلى أحماض أمينية.</string>
+    <string name="svt_dna_presets_label">أمثلة من المقرر</string>
+    <string name="svt_dna_input_label">خيط ADN المنسوخ (A, T, C, G)</string>
+    <string name="svt_dna_template_label">خيط ADN المنسوخ (3\' ← 5\')</string>
+    <string name="svt_dna_complementary_label">خيط ADN غير المنسوخ (5\' ← 3\')</string>
+    <string name="svt_dna_mrna_label">ARNm المركب (5\' ← 3\')</string>
+    <string name="svt_dna_codons_label">الوحدات الرمزية (الكودونات)</string>
+    <string name="svt_dna_protein_label">السلسلة الببتيدية (الأحماض الأمينية)</string>
+    <string name="svt_dna_trailing_notice">قواعد متبقية غير مكتملة الثلاثية: %1$s</string>
+    <string name="svt_dna_stop_notice">توقفت الترجمة عند وحدة توقف STOP (UAA أو UAG أو UGA).</string>
+    <string name="svt_dna_empty_hint">أدخل 3 قواعد على الأقل (A, T, C, G) لبدء الترجمة.</string>
+    <string name="svt_dna_copy_result">نسخ التركيب</string>
+    <string name="svt_dna_copied">تم نسخ التركيب الوراثي إلى الحافظة</string>
+    <string name="svt_dna_clear">مسح</string>
+
+    <string name="svt_microscope_title">حاسبة المجهر الضوئي</string>
+    <string name="svt_microscope_subtitle">احسب التكبير الكلي والحجم الحقيقي للعينة الملاحظة.</string>
+    <string name="svt_microscope_eyepiece">العدسة العينية</string>
+    <string name="svt_microscope_objective">العدسة الشيئية</string>
+    <string name="svt_microscope_total_mag">التكبير الكلي: ×%1$d</string>
+    <string name="svt_microscope_observed_mm">الحجم الملاحظ على الصورة (مم)</string>
+    <string name="svt_microscope_real_size">الحجم الحقيقي المقدر</string>
+    <string name="svt_microscope_formula">العلاقة: الحجم الحقيقي = الحجم الملاحظ ÷ (العينية × الشيئية)</string>
+    <string name="svt_scale_virus">مقياس الفيروسات والجزيئات (&lt; 0.5 µm)</string>
+    <string name="svt_scale_bacteria">مقياس البكتيريا والعضيات (0.5 – 5 µm)</string>
+    <string name="svt_scale_blood_cell">مقياس الخلية الحيوانية / الكرية الحمراء (5 – 25 µm)</string>
+    <string name="svt_scale_plant_cell">مقياس الخلية النباتية / النسيج الرقيق (25 – 150 µm)</string>
+    <string name="svt_scale_tissue">مقياس مجهري ضعيف / مقطع عضو (&gt; 150 µm)</string>
+    <string name="svt_geology_eras_title">سلم الأزمنة الجيولوجية</string>
+    <string name="svt_rocks_families_title">عائلات الصخور</string>
+
+    <string name="svt_fact_of_day_label">هل تعلم؟ (SVT)</string>
+    <string name="svt_fact_next">التالي</string>
+    <string name="svt_search_quizzes_hint">ابحث عن تمرين أو محور...</string>
+    <string name="svt_search_resources_hint">ابحث عن درس أو فيديو...</string>
+    <string name="svt_stats_quizzes_done">تمارين منجزة</string>
+    <string name="svt_stats_avg_score">المعدل</string>
+    <string name="svt_stats_best_score">أفضل نقطة</string>
+    <string name="svt_stats_published">تمارين منشورة</string>
+    <string name="svt_stats_submissions">إجابات مستلمة</string>
+    <string name="svt_ai_chapter_presets_label">محاور SVT سريعة</string>
 </resources>

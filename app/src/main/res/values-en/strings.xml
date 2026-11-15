@@ -393,4 +393,77 @@
     <string name="terms_acceptance_checkbox">I have read and accept the Terms of Use and Privacy Policy</string>
     <string name="terms_acceptance_continue">Accept and continue</string>
     <string name="terms_acceptance_privacy_link">View Privacy Policy</string>
+
+    <!-- SVT Lab, Glossary, Flashcards, DNA, Microscope & Geology -->
+    <string name="svt_domain_all">All</string>
+    <string name="svt_domain_genetics">Genetics &amp; Cell</string>
+    <string name="svt_domain_geology">Geology</string>
+    <string name="svt_domain_physiology">Physiology &amp; Immunity</string>
+    <string name="svt_domain_ecology">Ecology</string>
+
+    <string name="svt_lab_title">SVT Lab</string>
+    <string name="svt_lab_subtitle">Interactive revision and analysis tools for Biology &amp; Geology</string>
+    <string name="svt_lab_open_button">SVT Lab</string>
+    <string name="svt_lab_tab_glossary">Glossary</string>
+    <string name="svt_lab_tab_flashcards">Flashcards</string>
+    <string name="svt_lab_tab_dna">DNA → Protein</string>
+    <string name="svt_lab_tab_microscope">Microscope &amp; Geol</string>
+
+    <string name="svt_glossary_search_hint">Search a concept (mitosis, Moho, synapse...)</string>
+    <string name="svt_glossary_empty">No glossary entries match this filter.</string>
+
+    <string name="svt_flashcards_progress">Card %1$d / %2$d</string>
+    <string name="svt_flashcards_mastered_count">%1$d / %2$d mastered</string>
+    <string name="svt_flashcards_tap_flip">Tap card to flip</string>
+    <string name="svt_flashcards_question_badge">SVT Question</string>
+    <string name="svt_flashcards_answer_badge">Answer &amp; Explanation</string>
+    <string name="svt_flashcards_previous">Previous</string>
+    <string name="svt_flashcards_next">Next</string>
+    <string name="svt_flashcards_mastered">Mastered ✓</string>
+    <string name="svt_flashcards_review">Review</string>
+    <string name="svt_flashcards_reset">Reset</string>
+    <string name="svt_flashcards_completed_banner">Great job! You mastered all cards in this category.</string>
+
+    <string name="svt_dna_title">DNA → mRNA → Protein Simulator</string>
+    <string name="svt_dna_subtitle">Enter the transcribed DNA strand (3\' → 5\') to inspect transcription and amino acid translation.</string>
+    <string name="svt_dna_presets_label">Curriculum presets</string>
+    <string name="svt_dna_input_label">Transcribed DNA strand (A, T, C, G)</string>
+    <string name="svt_dna_template_label">Template DNA (3\' → 5\')</string>
+    <string name="svt_dna_complementary_label">Coding DNA strand (5\' → 3\')</string>
+    <string name="svt_dna_mrna_label">Synthesized mRNA (5\' → 3\')</string>
+    <string name="svt_dna_codons_label">Codons (mRNA triplets)</string>
+    <string name="svt_dna_protein_label">Polypeptide Chain (Amino acids)</string>
+    <string name="svt_dna_trailing_notice">Remaining unpaired base(s): %1$s</string>
+    <string name="svt_dna_stop_notice">Translation terminated at a STOP codon (UAA, UAG, or UGA).</string>
+    <string name="svt_dna_empty_hint">Enter at least 3 bases (A, T, C, G) to start translation.</string>
+    <string name="svt_dna_copy_result">Copy synthesis</string>
+    <string name="svt_dna_copied">Genetic synthesis copied to clipboard</string>
+    <string name="svt_dna_clear">Clear</string>
+
+    <string name="svt_microscope_title">Microscope Calculator</string>
+    <string name="svt_microscope_subtitle">Compute total magnification and actual biological specimen size.</string>
+    <string name="svt_microscope_eyepiece">Eyepiece</string>
+    <string name="svt_microscope_objective">Objective</string>
+    <string name="svt_microscope_total_mag">Total magnification: ×%1$d</string>
+    <string name="svt_microscope_observed_mm">Observed image size (mm)</string>
+    <string name="svt_microscope_real_size">Estimated real size</string>
+    <string name="svt_microscope_formula">Formula: Real size = Observed size ÷ (Eyepiece × Objective)</string>
+    <string name="svt_scale_virus">Viral / macromolecular scale (&lt; 0.5 µm)</string>
+    <string name="svt_scale_bacteria">Bacterial / organelle scale (0.5 – 5 µm)</string>
+    <string name="svt_scale_blood_cell">Animal / red blood cell scale (5 – 25 µm)</string>
+    <string name="svt_scale_plant_cell">Plant cell / thin tissue scale (25 – 150 µm)</string>
+    <string name="svt_scale_tissue">Macroscopic / organ section scale (&gt; 150 µm)</string>
+    <string name="svt_geology_eras_title">Geological Time Scale</string>
+    <string name="svt_rocks_families_title">Rock Families</string>
+
+    <string name="svt_fact_of_day_label">Did you know? (SVT)</string>
+    <string name="svt_fact_next">Next</string>
+    <string name="svt_search_quizzes_hint">Search quiz or chapter...</string>
+    <string name="svt_search_resources_hint">Search lesson or video...</string>
+    <string name="svt_stats_quizzes_done">Quizzes done</string>
+    <string name="svt_stats_avg_score">Average</string>
+    <string name="svt_stats_best_score">Best</string>
+    <string name="svt_stats_published">Published</string>
+    <string name="svt_stats_submissions">Submissions</string>
+    <string name="svt_ai_chapter_presets_label">Quick SVT topics</string>
 </resources>

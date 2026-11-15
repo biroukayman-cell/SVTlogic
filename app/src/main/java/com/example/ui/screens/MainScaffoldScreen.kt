@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.filled.Biotech
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Quiz
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Person
@@ -55,6 +57,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -87,7 +90,6 @@ import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtWarning
 import com.example.ui.viewmodel.SvtMainViewModel
 import kotlinx.coroutines.launch
-import androidx.compose.material.icons.filled.SystemUpdate
 
 enum class SvtTab(
     @StringRes val labelRes: Int,
@@ -118,6 +120,7 @@ fun MainDashboardScreen(
     val isTeacher = profile.role == "teacher"
     var currentTab by rememberSaveable { mutableStateOf(SvtTab.EXERCISES) }
     var showNotificationsSheet by remember { mutableStateOf(false) }
+    var showSvtLab by rememberSaveable { mutableStateOf(false) }
     var showClassMenu by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -257,6 +260,18 @@ fun MainDashboardScreen(
                         }
                     },
                     actions = {
+                        IconButton(
+                            onClick = { showSvtLab = true },
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("open_svt_lab_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Biotech,
+                                contentDescription = stringResource(id = R.string.svt_lab_title),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                         LanguageSwitcherRow(
                             currentLanguage = currentLanguage,
                             onLanguageSelected = onLanguageSelected,
@@ -396,7 +411,9 @@ fun MainDashboardScreen(
                                 },
                                 onSubmitAttempt = { quiz, selectedAnswers, perQSecs, totalSecs, onDone ->
                                     viewModel.submitQuizAttempt(context, quiz, selectedAnswers, perQSecs, totalSecs, onDone)
-                                }
+                                },
+                                currentLanguage = currentLanguage,
+                                onOpenSvtLab = { showSvtLab = true }
                             )
 
                             SvtTab.RESOURCES -> ResourcesTab(
@@ -568,6 +585,13 @@ fun MainDashboardScreen(
         BadgeCelebrationDialog(
             badges = unlockedBadges,
             onDismiss = { viewModel.dismissUnlockedBadges() }
+        )
+    }
+
+    if (showSvtLab) {
+        SvtLabDialog(
+            currentLanguage = currentLanguage,
+            onDismiss = { showSvtLab = false }
         )
     }
 }

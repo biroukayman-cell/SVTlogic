@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
@@ -59,6 +60,7 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.ZoomIn
@@ -142,6 +144,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 import kotlin.math.roundToInt
 
 private const val FILTER_OFFLINE_ONLY = "__offline__"
@@ -182,6 +185,7 @@ fun ResourcesTab(
     val context = LocalContext.current
 
     var typeFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var showDownloadsManagerDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -199,11 +203,18 @@ fun ResourcesTab(
         if (isTeacher && selectedClassId != null) resources.filter { it.classId == selectedClassId }
         else resources
     }
-    val visibleResources = remember(classFiltered, typeFilter, downloadedResources) {
-        when (typeFilter) {
+    val visibleResources = remember(classFiltered, typeFilter, downloadedResources, searchQuery) {
+        val typeFiltered = when (typeFilter) {
             null -> classFiltered
             FILTER_OFFLINE_ONLY -> classFiltered.filter { downloadedResources.containsKey(it.id) }
             else -> classFiltered.filter { it.type == typeFilter }
+        }
+        val q = searchQuery.trim().lowercase(Locale.getDefault())
+        if (q.isEmpty()) typeFiltered
+        else typeFiltered.filter {
+            it.title.lowercase(Locale.getDefault()).contains(q) ||
+                it.description.lowercase(Locale.getDefault()).contains(q) ||
+                it.type.lowercase(Locale.getDefault()).contains(q)
         }
     }
 
@@ -290,6 +301,28 @@ fun ResourcesTab(
                 Icon(Icons.Filled.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(id = R.string.downloads_manager_button, downloadedResources.size))
+            }
+        }
+
+        if (classFiltered.isNotEmpty()) {
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text(stringResource(id = R.string.svt_search_resources_hint)) },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Filled.Clear, contentDescription = null)
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("resource_search_input")
+                )
             }
         }
 
