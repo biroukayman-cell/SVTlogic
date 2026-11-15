@@ -376,8 +376,12 @@
     <string name="qr_token_required_error">Please scan the QR Code or enter the secret class code.</string>
     <string name="qr_joining_progress">Validating and entering your class...</string>
 
-    <!-- Legal Notice -->
+    <!-- Legal Notice & Privacy -->
     <string name="legal_notice_title">Legal Notice</string>
     <string name="legal_notice_footer">© 2026 BioTerre SVT • Created by Ayman BIROUK</string>
     <string name="legal_notice_body">BioTerre SVT educational application.\nYear created: 2026\nCreator: Ayman BIROUK\nAll rights reserved.</string>
+    <string name="privacy_policy_title">Privacy Policy &amp; Data Protection</string>
+    <string name="privacy_policy_button">Privacy Policy</string>
+    <string name="privacy_policy_summary">Your academic data (profile, quizzes, course progress, and private messages) is protected, used solely for SVT learning, and never sold or shared for commercial purposes.</string>
+    <string name="privacy_policy_body">Last updated: 2026\n\n1. Application Controller\nBioTerre SVT is an educational application created in 2026 by Ayman BIROUK (contact: biroukayman@gmail.com).\n\n2. Data Collected &amp; Educational Purpose\nThe app only processes data required for classroom management and learning progress:\n• Account &amp; identity: full name, role (student or teacher), Massar ID (student), professional email (teacher), optional phone number and birth date.\n• Academic activity: class enrollment, quiz scores and timing, video watch percentage, file opening status, private student-teacher messages, and earned badges.\n• Offline storage: downloaded resources are stored locally on your device.\n\n3. Device Permissions\n• Camera: used exclusively to scan class QR Codes. No personal photos or videos are recorded or uploaded.\n• Notifications: used to alert you about new courses, quizzes, announcements, messages, and badges.\n• Files &amp; gallery: access is strictly limited to files manually chosen through the secure system picker.\n\n4. Security &amp; Confidentiality\n• Strict per-class and per-user access rules: students only access resources for their enrolled class.\n• Private messaging is strictly confidential between each student and their teacher.\n• No ads, no advertising trackers, and no sale or commercial sharing of personal data.\n\n5. Retention &amp; Your Rights\nYou can view and update your profile details in the Profile tab. Removing a student or class deletes associated records. For any data protection request, contact: biroukayman@gmail.com.</string>
 </resources>

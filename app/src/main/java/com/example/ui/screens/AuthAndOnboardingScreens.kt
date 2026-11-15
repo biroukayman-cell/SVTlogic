@@ -214,6 +214,7 @@ fun AuthScreen(
     var qrPassword by rememberSaveable { mutableStateOf("") }
     var showInlineQrScanner by rememberSaveable { mutableStateOf(false) }
     var showLegalDialog by rememberSaveable { mutableStateOf(false) }
+    var showPrivacyDialog by rememberSaveable { mutableStateOf(false) }
 
     var teacherFullName by rememberSaveable { mutableStateOf("") }
     var teacherEmail by rememberSaveable { mutableStateOf("") }
@@ -921,16 +922,32 @@ fun AuthScreen(
                 }
             }
 
-            TextButton(
-                onClick = { showLegalDialog = true },
-                modifier = Modifier.testTag("auth_legal_notice_button")
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(
-                    text = stringResource(id = R.string.legal_notice_footer),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
+                TextButton(
+                    onClick = { showLegalDialog = true },
+                    modifier = Modifier.testTag("auth_legal_notice_button")
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.legal_notice_footer),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                TextButton(
+                    onClick = { showPrivacyDialog = true },
+                    modifier = Modifier.testTag("auth_privacy_policy_button")
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.privacy_policy_button),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
@@ -961,6 +978,10 @@ fun AuthScreen(
                 }
             }
         )
+    }
+
+    if (showPrivacyDialog) {
+        PrivacyPolicyDialog(onDismiss = { showPrivacyDialog = false })
     }
 }
 
