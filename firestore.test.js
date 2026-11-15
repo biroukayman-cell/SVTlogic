@@ -556,6 +556,161 @@ test("Resource chunks & app updates: teacher writes, only approved students in s
   await assertFails(
     studentBDb.collection("app_updates").where("classId", "==", "class_1").get()
   );
+
+  // Teacher can query their own resource_chunks using teacherId filter
+  await assertSucceeds(
+    teacherDb.collection("resource_chunks")
+      .where("resourceId", "==", "res_1")
+      .where("classId", "==", "class_1")
+      .where("teacherId", "==", TEACHER_UID)
+      .get()
+  );
 });
+
+test("Auto-approved QR enrollment and first-time video_tracking + PDF open tracking", async () => {
+  const teacherDb = testEnv.authenticatedContext(TEACHER_UID).firestore();
+  const studentADb = testEnv.authenticatedContext(STUDENT_A_UID).firestore();
+  const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
+  const now = serverNow();
+
+  await teacherDb.collection("classes").doc("class_qr").set({
+    teacherId: TEACHER_UID,
+    teacherName: "Prof. BIROUK",
+    name: "2Bac SVT QR",
+    academicYear: "2026-2027",
+    level: "2Bac",
+    qrToken: "SVT-AUTO-99",
+    createdAt: now,
+    updatedAt: now,
+  });
+  await teacherDb.collection("class_codes").doc("SVT-AUTO-99").set({
+    classId: "class_qr",
+    className: "2Bac SVT QR",
+    academicYear: "2026-2027",
+    teacherId: TEACHER_UID,
+    teacherName: "Prof. BIROUK",
+    createdAt: now,
+  });
+  await teacherDb.collection("resources").doc("res_vid_qr").set({
+    classId: "class_qr",
+    teacherId: TEACHER_UID,
+    title: "Vidéo QR",
+    description: "Test",
+    type: "video",
+    fileUrl: "firestore://resource_chunks/res_vid_qr?ext=mp4",
+    durationSeconds: 30,
+    approvedStudentIds: [],
+    isDownloadable: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await teacherDb.collection("resources").doc("res_pdf_qr").set({
+    classId: "class_qr",
+    teacherId: TEACHER_UID,
+    title: "Cours PDF",
+    description: "Test",
+    type: "pdf",
+    fileUrl: "firestore://resource_chunks/res_pdf_qr?ext=pdf",
+    durationSeconds: 0,
+    approvedStudentIds: [],
+    isDownloadable: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  // Auto-approved enrollment with valid matching qrToken succeeds immediately
+  await assertSucceeds(
+    studentADb.collection("enrollments").doc(STUDENT_A_UID).set({
+      studentId: STUDENT_A_UID,
+      classId: "class_qr",
+      className: "2Bac SVT QR",
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. BIROUK",
+      studentName: "Salma",
+      studentPhone: "0600000000",
+      qrToken: "SVT-AUTO-99",
+      status: "approved",
+      requestedAt: now,
+      validatedAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Enrollment with fake qrToken & approved status fails
+  await assertFails(
+    studentBDb.collection("enrollments").doc(STUDENT_B_UID).set({
+      studentId: STUDENT_B_UID,
+      classId: "class_qr",
+      className: "2Bac SVT QR",
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. BIROUK",
+      studentName: "Intruder",
+      studentPhone: "0611111111",
+      qrToken: "FAKE-TOKEN",
+      status: "approved",
+      requestedAt: now,
+      validatedAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Auto-approved student can list class resources via whereEqualTo("classId", ...)
+  await assertSucceeds(
+    studentADb.collection("resources").where("classId", "==", "class_qr").get()
+  );
+
+  // First-time get() on non-existent video_tracking doc succeeds, then set() and update() succeed!
+  const vidTrackRef = studentADb.collection("video_tracking").doc(`res_vid_qr_${STUDENT_A_UID}`);
+  await assertSucceeds(vidTrackRef.get());
+  await assertSucceeds(
+    vidTrackRef.set({
+      resourceId: "res_vid_qr",
+      classId: "class_qr",
+      teacherId: TEACHER_UID,
+      studentId: STUDENT_A_UID,
+      studentName: "Salma",
+      maxPositionSeconds: 15,
+      durationSeconds: 30,
+      watchedPercentage: 50,
+      status: "partial",
+      lastWatchedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(
+    vidTrackRef.update({
+      maxPositionSeconds: 30,
+      watchedPercentage: 100,
+      status: "completed",
+      lastWatchedAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // PDF open tracking succeeds
+  await assertSucceeds(
+    studentADb.collection("video_tracking").doc(`res_pdf_qr_${STUDENT_A_UID}`).set({
+      resourceId: "res_pdf_qr",
+      classId: "class_qr",
+      teacherId: TEACHER_UID,
+      studentId: STUDENT_A_UID,
+      studentName: "Salma",
+      maxPositionSeconds: 1,
+      durationSeconds: 1,
+      watchedPercentage: 100,
+      status: "completed",
+      lastWatchedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Other student B cannot read Student A's existing video tracking
+  await assertFails(
+    studentBDb.collection("video_tracking").doc(`res_vid_qr_${STUDENT_A_UID}`).get()
+  );
+});
+
 
 

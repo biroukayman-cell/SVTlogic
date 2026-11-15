@@ -1,28 +1,35 @@
 package com.example.ui.screens
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,21 +37,32 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DownloadForOffline
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -52,6 +70,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -66,22 +85,36 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -90,11 +123,13 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.example.R
+import com.example.core.DocxTextExtractor
 import com.example.data.model.CourseResource
 import com.example.data.model.Enrollment
 import com.example.data.model.VideoTracking
 import com.example.data.offline.DownloadedResource
 import com.example.data.offline.OfflineStorageManager
+import com.example.data.offline.PickedFileTooLargeException
 import com.example.data.repository.SvtRepository
 import com.example.ui.components.SvtEmptyStateCard
 import com.example.ui.theme.SvtCoralError
@@ -102,7 +137,10 @@ import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtOceanSecondary
 import com.example.ui.theme.SvtSuccess
 import com.example.ui.theme.SvtWarning
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -138,16 +176,24 @@ fun ResourcesTab(
         positionSec: Long,
         durationSec: Long,
         watchedPercentOverride: Double?
-    ) -> Unit
+    ) -> Unit,
+    onRecordFileOpened: (CourseResource) -> Unit = {}
 ) {
     val context = LocalContext.current
-    var typeFilter by remember { mutableStateOf<String?>(null) }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var videoToPlay by remember { mutableStateOf<Pair<CourseResource, String>?>(null) }
-    var pdfToView by remember { mutableStateOf<Pair<CourseResource, String>?>(null) }
-    var imageToView by remember { mutableStateOf<Pair<CourseResource, String>?>(null) }
-    var trackingVideoResource by remember { mutableStateOf<CourseResource?>(null) }
-    var resourceToDelete by remember { mutableStateOf<CourseResource?>(null) }
+
+    var typeFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var showAddDialog by rememberSaveable { mutableStateOf(false) }
+    var showDownloadsManagerDialog by rememberSaveable { mutableStateOf(false) }
+
+    var pendingChoiceResourceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeViewerResourceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeViewerUri by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeViewerKind by rememberSaveable { mutableStateOf<String?>(null) }
+    var savedVideoPositionMs by rememberSaveable { mutableLongStateOf(0L) }
+    var savedVideoPlayWhenReady by rememberSaveable { mutableStateOf(true) }
+
+    var trackingResourceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var resourceToDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val classFiltered = remember(resources, selectedClassId, isTeacher) {
         if (isTeacher && selectedClassId != null) resources.filter { it.classId == selectedClassId }
@@ -159,6 +205,27 @@ fun ResourcesTab(
             FILTER_OFFLINE_ONLY -> classFiltered.filter { downloadedResources.containsKey(it.id) }
             else -> classFiltered.filter { it.type == typeFilter }
         }
+    }
+
+    val pendingChoiceResource = remember(pendingChoiceResourceId, resources) {
+        pendingChoiceResourceId?.let { id -> resources.firstOrNull { it.id == id } }
+    }
+    val activeViewerResource = remember(activeViewerResourceId, resources) {
+        activeViewerResourceId?.let { id -> resources.firstOrNull { it.id == id } }
+    }
+    val trackingResource = remember(trackingResourceId, resources) {
+        trackingResourceId?.let { id -> resources.firstOrNull { it.id == id } }
+    }
+    val resourceToDelete = remember(resourceToDeleteId, resources) {
+        resourceToDeleteId?.let { id -> resources.firstOrNull { it.id == id } }
+    }
+
+    fun dismissActiveViewer() {
+        activeViewerResourceId = null
+        activeViewerUri = null
+        activeViewerKind = null
+        savedVideoPositionMs = 0L
+        savedVideoPlayWhenReady = true
     }
 
     LazyColumn(
@@ -214,6 +281,19 @@ fun ResourcesTab(
         }
 
         item {
+            OutlinedButton(
+                onClick = { showDownloadsManagerDialog = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("downloads_manager_button")
+            ) {
+                Icon(Icons.Filled.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(id = R.string.downloads_manager_button, downloadedResources.size))
+            }
+        }
+
+        item {
             val baseFilters = listOf(
                 null to stringResource(id = R.string.resource_type_all),
                 "video" to stringResource(id = R.string.resource_type_video),
@@ -221,12 +301,10 @@ fun ResourcesTab(
                 "word" to stringResource(id = R.string.resource_type_word),
                 "image" to stringResource(id = R.string.resource_type_image)
             )
-            val filters = if (!isTeacher) {
-                baseFilters + (FILTER_OFFLINE_ONLY to stringResource(
-                    id = R.string.offline_filter_downloaded,
-                    downloadedResources.size
-                ))
-            } else baseFilters
+            val filters = baseFilters + (FILTER_OFFLINE_ONLY to stringResource(
+                id = R.string.offline_filter_downloaded,
+                downloadedResources.size
+            ))
 
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(filters) { (key, labelText) ->
@@ -246,7 +324,7 @@ fun ResourcesTab(
             }
         } else {
             items(visibleResources, key = { it.id }) { resource ->
-                val studentTracking = if (!isTeacher && resource.type == "video") {
+                val itemTracking = if (!isTeacher) {
                     videoTrackings.firstOrNull { it.resourceId == resource.id }
                 } else null
                 val downloaded = downloadedResources[resource.id]
@@ -312,7 +390,7 @@ fun ResourcesTab(
                             }
                             if (isTeacher) {
                                 IconButton(
-                                    onClick = { resourceToDelete = resource },
+                                    onClick = { resourceToDeleteId = resource.id },
                                     modifier = Modifier.testTag("delete_resource_${resource.id}")
                                 ) {
                                     Icon(
@@ -324,7 +402,7 @@ fun ResourcesTab(
                             }
                         }
 
-                        if (!isTeacher && downloaded != null) {
+                        if (downloaded != null) {
                             Surface(
                                 color = SvtSuccess.copy(alpha = 0.14f),
                                 shape = RoundedCornerShape(12.dp)
@@ -359,8 +437,9 @@ fun ResourcesTab(
                             )
                         }
 
+                        // Student progress / file open status
                         if (!isTeacher && resource.type == "video") {
-                            val pct = (studentTracking?.watchedPercentage ?: 0.0).roundToInt().coerceIn(0, 100)
+                            val pct = (itemTracking?.watchedPercentage ?: 0.0).roundToInt().coerceIn(0, 100)
                             val statusText = when {
                                 pct >= 90 -> stringResource(id = R.string.video_status_completed, pct)
                                 pct > 0 -> stringResource(id = R.string.video_status_partial, pct)
@@ -385,6 +464,34 @@ fun ResourcesTab(
                                         .clip(RoundedCornerShape(4.dp)),
                                     color = statusColor
                                 )
+                            }
+                        } else if (!isTeacher) {
+                            val hasOpened = (itemTracking?.watchedPercentage ?: 0.0) >= 90.0
+                            Surface(
+                                color = if (hasOpened) SvtSuccess.copy(alpha = 0.12f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (hasOpened) Icons.Filled.CheckCircle else Icons.Filled.Visibility,
+                                        contentDescription = null,
+                                        tint = if (hasOpened) SvtSuccess else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = stringResource(
+                                            id = if (hasOpened) R.string.resource_file_opened_status
+                                            else R.string.resource_file_not_opened_status
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (hasOpened) SvtSuccess else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         } else if (isTeacher && resource.type == "video") {
                             val approvedInClass = classEnrollments.filter {
@@ -429,6 +536,24 @@ fun ResourcesTab(
                                     color = summaryColor
                                 )
                             }
+                        } else if (isTeacher) {
+                            val approvedInClass = classEnrollments.filter {
+                                it.classId == resource.classId && it.status == "approved"
+                            }
+                            val resTrackings = videoTrackings.filter { it.resourceId == resource.id }
+                            val trackedByStudent = resTrackings.associateBy { it.studentId }
+                            val totalStudents = maxOf(approvedInClass.size, trackedByStudent.size)
+                            val openedCount = resTrackings.count { it.watchedPercentage >= 90.0 }
+                            val summaryColor = if (openedCount > 0) SvtSuccess else MaterialTheme.colorScheme.onSurfaceVariant
+                            Text(
+                                text = stringResource(
+                                    id = R.string.resource_file_summary,
+                                    openedCount,
+                                    totalStudents
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = summaryColor
+                            )
                         }
 
                         if (!isTeacher && !canOpenNow) {
@@ -468,18 +593,11 @@ fun ResourcesTab(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Button(
-                                onClick = {
-                                    onPrepareResourceForOpen(resource, effectiveUri) { readyUri ->
-                                        when (resource.type) {
-                                            "video" -> videoToPlay = resource to readyUri
-                                            "pdf" -> pdfToView = resource to readyUri
-                                            "image" -> imageToView = resource to readyUri
-                                            else -> openExternalUrl(context, readyUri, resource.type)
-                                        }
-                                    }
-                                },
+                                onClick = { pendingChoiceResourceId = resource.id },
                                 enabled = canOpenNow && downloadFraction == null,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("open_resource_${resource.id}")
                             ) {
                                 if (downloadFraction != null) {
                                     CircularProgressIndicator(
@@ -493,48 +611,62 @@ fun ResourcesTab(
                                     stringResource(
                                         id = if (resource.type == "video") R.string.resource_watch
                                         else R.string.resource_open
-                                    )
+                                    ),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
 
-                            if (!isTeacher) {
-                                if (downloaded != null) {
-                                    IconButton(
-                                        onClick = { onRemoveOfflineResource(resource.id) },
-                                        modifier = Modifier.testTag("remove_offline_resource_${resource.id}")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.DeleteOutline,
-                                            contentDescription = stringResource(id = R.string.offline_remove_download),
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                } else if (resource.isDownloadable && downloadFraction == null) {
-                                    OutlinedButton(
-                                        onClick = { onDownloadResourceOffline(resource) },
-                                        enabled = isOnline,
-                                        modifier = Modifier.testTag("download_resource_${resource.id}")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.DownloadForOffline,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(Modifier.width(4.dp))
-                                        Text(stringResource(id = R.string.offline_download_button))
-                                    }
-                                }
-                            } else if (resource.type == "video") {
-                                OutlinedButton(
-                                    onClick = { trackingVideoResource = resource },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("video_tracking_${resource.id}")
+                            if (downloaded != null) {
+                                IconButton(
+                                    onClick = { onRemoveOfflineResource(resource.id) },
+                                    modifier = Modifier.testTag("remove_offline_resource_${resource.id}")
                                 ) {
-                                    Icon(Icons.Filled.Analytics, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(stringResource(id = R.string.resource_video_tracking))
+                                    Icon(
+                                        imageVector = Icons.Filled.DeleteOutline,
+                                        contentDescription = stringResource(id = R.string.offline_remove_download),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
                                 }
+                            } else if ((isTeacher || resource.isDownloadable) && downloadFraction == null) {
+                                OutlinedButton(
+                                    onClick = { onDownloadResourceOffline(resource) },
+                                    enabled = isOnline || isLocalUri,
+                                    modifier = Modifier.testTag("download_resource_${resource.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.DownloadForOffline,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        stringResource(id = R.string.offline_download_button),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+
+                        if (isTeacher) {
+                            OutlinedButton(
+                                onClick = { trackingResourceId = resource.id },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag(
+                                        if (resource.type == "video") "video_tracking_${resource.id}"
+                                        else "file_tracking_${resource.id}"
+                                    )
+                            ) {
+                                Icon(Icons.Filled.Analytics, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    stringResource(
+                                        id = if (resource.type == "video") R.string.resource_video_tracking
+                                        else R.string.resource_file_tracking_button
+                                    )
+                                )
                             }
                         }
                     }
@@ -553,36 +685,121 @@ fun ResourcesTab(
         )
     }
 
-    videoToPlay?.let { (res, playbackUri) ->
-        VideoPlayerTrackingDialog(
-            resource = res,
-            playbackUri = playbackUri,
-            onProgressUpdate = { posSec, durSec, pctOverride ->
-                onRecordVideoProgress(res, posSec, durSec, pctOverride)
+    if (showDownloadsManagerDialog) {
+        DownloadedFilesManagerDialog(
+            downloadedResources = downloadedResources.values.sortedByDescending { it.downloadedAtMillis },
+            onOpenFile = { item ->
+                val targetUri = item.publicDownloadUri.ifBlank { item.localFileUri() }
+                openExternalUrl(context, targetUri, item.type)
             },
-            onDismiss = { videoToPlay = null }
+            onShareFile = { item ->
+                val mime = OfflineStorageManager.mimeTypeForResource(item.type, item.localFilePath)
+                shareLocalFile(context, File(item.localFilePath), mime, item.title)
+            },
+            onDeleteFile = { item ->
+                onRemoveOfflineResource(item.resourceId)
+            },
+            onDismiss = { showDownloadsManagerDialog = false }
         )
     }
 
-    pdfToView?.let { (res, fileUri) ->
-        PdfViewerDialog(
+    pendingChoiceResource?.let { res ->
+        val downloaded = downloadedResources[res.id]
+        val effectiveUri = downloaded?.localFileUri() ?: res.fileUrl
+        ResourceOpenChoiceDialog(
             resource = res,
-            fileUri = fileUri,
-            onOpenExternal = { openExternalUrl(context, fileUri, res.type) },
-            onDismiss = { pdfToView = null }
+            onOpenInApp = {
+                pendingChoiceResourceId = null
+                onPrepareResourceForOpen(res, effectiveUri) { readyUri ->
+                    if (res.type == "video") {
+                        savedVideoPositionMs = 0L
+                        savedVideoPlayWhenReady = true
+                        activeViewerKind = "video"
+                    } else {
+                        onRecordFileOpened(res)
+                        activeViewerKind = res.type
+                    }
+                    activeViewerResourceId = res.id
+                    activeViewerUri = readyUri
+                }
+            },
+            onOpenExternal = {
+                pendingChoiceResourceId = null
+                onPrepareResourceForOpen(res, effectiveUri) { readyUri ->
+                    if (res.type == "video") {
+                        val fallbackDur = res.durationSeconds.coerceAtLeast(1L)
+                        onRecordVideoProgress(res, fallbackDur, fallbackDur, 100.0)
+                    } else {
+                        onRecordFileOpened(res)
+                    }
+                    openExternalUrl(context, readyUri, res.type)
+                }
+            },
+            onDismiss = { pendingChoiceResourceId = null }
         )
+    }
+
+    val viewerRes = activeViewerResource
+    val viewerUri = activeViewerUri
+    val viewerKind = activeViewerKind
+    if (viewerRes != null && !viewerUri.isNullOrBlank() && !viewerKind.isNullOrBlank()) {
+        when (viewerKind) {
+            "video" -> VideoPlayerTrackingDialog(
+                resource = viewerRes,
+                playbackUri = viewerUri,
+                initialPositionMs = savedVideoPositionMs,
+                initialPlayWhenReady = savedVideoPlayWhenReady,
+                onSavePlaybackState = { posMs, playReady ->
+                    savedVideoPositionMs = posMs
+                    savedVideoPlayWhenReady = playReady
+                },
+                onProgressUpdate = { posSec, durSec, pctOverride ->
+                    onRecordVideoProgress(viewerRes, posSec, durSec, pctOverride)
+                },
+                onOpenExternal = {
+                    val externalTarget = if (viewerUri.startsWith("http", ignoreCase = true)) {
+                        viewerUri
+                    } else {
+                        viewerRes.fileUrl.takeUnless { it.startsWith("firestore://") } ?: viewerUri
+                    }
+                    openExternalUrl(context, externalTarget, "video")
+                },
+                onDismiss = { dismissActiveViewer() }
+            )
+
+            "pdf" -> PdfViewerDialog(
+                resource = viewerRes,
+                fileUri = viewerUri,
+                onOpenExternal = { openExternalUrl(context, viewerUri, viewerRes.type) },
+                onDismiss = { dismissActiveViewer() }
+            )
+
+            "image" -> ImageViewerDialog(
+                resource = viewerRes,
+                imgUri = viewerUri,
+                onOpenExternal = { openExternalUrl(context, viewerUri, viewerRes.type) },
+                onDismiss = { dismissActiveViewer() }
+            )
+
+            else -> WordViewerDialog(
+                resource = viewerRes,
+                fileUri = viewerUri,
+                onOpenExternal = { openExternalUrl(context, viewerUri, viewerRes.type) },
+                onDismiss = { dismissActiveViewer() }
+            )
+        }
     }
 
     resourceToDelete?.let { res ->
         AlertDialog(
-            onDismissRequest = { resourceToDelete = null },
+            onDismissRequest = { resourceToDeleteId = null },
             title = { Text(stringResource(id = R.string.confirm_delete_title)) },
             text = { Text(stringResource(id = R.string.confirm_delete_resource_msg, res.title)) },
             confirmButton = {
                 Button(
                     onClick = {
                         onDeleteResource(res)
-                        resourceToDelete = null
+                        resourceToDeleteId = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
@@ -590,43 +807,242 @@ fun ResourcesTab(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { resourceToDelete = null }) {
+                TextButton(onClick = { resourceToDeleteId = null }) {
                     Text(stringResource(id = R.string.cancel))
                 }
             }
         )
     }
 
-    imageToView?.let { (res, imgUri) ->
-        AlertDialog(
-            onDismissRequest = { imageToView = null },
-            title = { Text(res.title) },
-            text = {
-                AsyncImage(
-                    model = imgUri,
-                    contentDescription = res.title,
+    trackingResource?.let { res ->
+        val studentsInClass = classEnrollments.filter { it.classId == res.classId && it.status == "approved" }
+        val trackingsForRes = videoTrackings.filter { it.resourceId == res.id }
+        if (res.type == "video") {
+            TeacherVideoTrackingDialog(
+                resource = res,
+                students = studentsInClass,
+                trackings = trackingsForRes,
+                onDismiss = { trackingResourceId = null }
+            )
+        } else {
+            TeacherFileTrackingDialog(
+                resource = res,
+                students = studentsInClass,
+                trackings = trackingsForRes,
+                onDismiss = { trackingResourceId = null }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ResourceOpenChoiceDialog(
+    resource: CourseResource,
+    onOpenInApp: () -> Unit,
+    onOpenExternal: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(id = R.string.resource_open_choice_title, resource.title),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = onOpenInApp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
-                        .clip(MaterialTheme.shapes.medium),
-                    contentScale = ContentScale.Fit
-                )
-            },
-            confirmButton = {
-                Button(onClick = { imageToView = null }) { Text(stringResource(id = R.string.close)) }
+                        .testTag("open_in_app_button")
+                ) {
+                    Icon(Icons.Filled.PhoneAndroid, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(id = R.string.resource_open_in_app))
+                }
+                OutlinedButton(
+                    onClick = onOpenExternal,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("open_external_app_button")
+                ) {
+                    Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(id = R.string.resource_open_external_app))
+                }
             }
-        )
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(id = R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun DownloadedFilesManagerDialog(
+    downloadedResources: List<DownloadedResource>,
+    onOpenFile: (DownloadedResource) -> Unit,
+    onShareFile: (DownloadedResource) -> Unit,
+    onDeleteFile: (DownloadedResource) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val totalBytes = remember(downloadedResources) {
+        downloadedResources.sumOf { it.fileSizeBytes.coerceAtLeast(0L) }
     }
 
-    trackingVideoResource?.let { res ->
-        val studentsInClass = classEnrollments.filter { it.classId == res.classId && it.status == "approved" }
-        val trackingsForVideo = videoTrackings.filter { it.resourceId == res.id }
-        TeacherVideoTrackingDialog(
-            resource = res,
-            students = studentsInClass,
-            trackings = trackingsForVideo,
-            onDismiss = { trackingVideoResource = null }
-        )
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .padding(12.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.downloads_manager_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(id = R.string.close))
+                    }
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = stringResource(
+                            id = R.string.downloads_manager_summary,
+                            downloadedResources.size,
+                            OfflineStorageManager.formatBytesReadable(totalBytes)
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp)
+                    )
+                }
+
+                if (downloadedResources.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.downloads_manager_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(downloadedResources, key = { it.resourceId }) { item ->
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = item.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    val sizeLabel = OfflineStorageManager.formatBytesReadable(item.fileSizeBytes)
+                                    val subtitle = buildString {
+                                        append(item.type.uppercase())
+                                        append(" • ")
+                                        append(sizeLabel)
+                                        if (item.publicDisplayPath.isNotBlank()) {
+                                            append("\n")
+                                            append(item.publicDisplayPath)
+                                        }
+                                    }
+                                    Text(
+                                        text = subtitle,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { onOpenFile(item) },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(stringResource(id = R.string.downloads_open_file), maxLines = 1)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { onShareFile(item) },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(stringResource(id = R.string.downloads_share_file), maxLines = 1)
+                                        }
+                                        IconButton(onClick = { onDeleteFile(item) }) {
+                                            Icon(
+                                                imageVector = Icons.Filled.DeleteOutline,
+                                                contentDescription = stringResource(id = R.string.delete),
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(id = R.string.close))
+                }
+            }
+        }
     }
 }
 
@@ -634,7 +1050,11 @@ fun ResourcesTab(
 private fun VideoPlayerTrackingDialog(
     resource: CourseResource,
     playbackUri: String,
+    initialPositionMs: Long,
+    initialPlayWhenReady: Boolean,
+    onSavePlaybackState: (positionMs: Long, playWhenReady: Boolean) -> Unit,
     onProgressUpdate: (positionSec: Long, durationSec: Long, pctOverride: Double?) -> Unit,
+    onOpenExternal: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -643,7 +1063,10 @@ private fun VideoPlayerTrackingDialog(
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(Uri.parse(playbackUri)))
             prepare()
-            playWhenReady = true
+            if (initialPositionMs > 0L) {
+                seekTo(initialPositionMs)
+            }
+            playWhenReady = initialPlayWhenReady
         }
     }
 
@@ -679,6 +1102,10 @@ private fun VideoPlayerTrackingDialog(
         }
         player.addListener(listener)
         onDispose {
+            onSavePlaybackState(
+                player.currentPosition.coerceAtLeast(0L),
+                player.playWhenReady
+            )
             player.removeListener(listener)
             dispatchPlayerProgress(forceEnded = player.playbackState == Player.STATE_ENDED)
             player.release()
@@ -694,61 +1121,141 @@ private fun VideoPlayerTrackingDialog(
         }
     }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(resource.title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            this.player = player
-                            useController = true
-                        }
-                    },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding(),
+            color = Color.Black
+        ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val isLandscape = maxWidth > maxHeight
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                        .clip(MaterialTheme.shapes.medium)
-                )
-                if (playbackError) {
-                    Text(
-                        text = stringResource(id = R.string.video_playback_error_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                val externalTarget = if (playbackUri.startsWith("http", ignoreCase = true)) {
-                    playbackUri
-                } else {
-                    resource.fileUrl.takeUnless { it.startsWith("firestore://") } ?: playbackUri
-                }
-                OutlinedButton(
-                    onClick = {
-                        val fallbackDur = (player.duration / 1000L).takeIf { it > 0L }
-                            ?: resource.durationSeconds.coerceAtLeast(1L)
-                        if (playbackError) {
-                            onProgressUpdate(fallbackDur, fallbackDur, 100.0)
-                        } else {
-                            val curPos = (player.currentPosition / 1000L).coerceIn(1L, fallbackDur)
-                            val curPct = maxOf((curPos.toDouble() / fallbackDur.toDouble()) * 100.0, 10.0)
-                                .coerceIn(0.0, 100.0)
-                            onProgressUpdate(curPos, fallbackDur, curPct)
-                        }
-                        openExternalUrl(context, externalTarget, "video")
-                    },
-                    modifier = Modifier.fillMaxWidth()
+                        .fillMaxSize()
+                        .padding(horizontal = if (isLandscape) 12.dp else 12.dp, vertical = if (isLandscape) 4.dp else 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (isLandscape) 4.dp else 10.dp)
                 ) {
-                    Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(id = R.string.pdf_open_external))
+                    // Compact top bar in both orientations, ultra-compact in landscape
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = resource.title,
+                            style = if (isLandscape) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    val fallbackDur = (player.duration / 1000L).takeIf { it > 0L }
+                                        ?: resource.durationSeconds.coerceAtLeast(1L)
+                                    if (playbackError) {
+                                        onProgressUpdate(fallbackDur, fallbackDur, 100.0)
+                                    } else {
+                                        val curPos = (player.currentPosition / 1000L).coerceIn(1L, fallbackDur)
+                                        val curPct = maxOf((curPos.toDouble() / fallbackDur.toDouble()) * 100.0, 10.0)
+                                            .coerceIn(0.0, 100.0)
+                                        onProgressUpdate(curPos, fallbackDur, curPct)
+                                    }
+                                    onOpenExternal()
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.OpenInNew,
+                                    contentDescription = stringResource(id = R.string.pdf_open_external),
+                                    tint = Color.White
+                                )
+                            }
+                            IconButton(onClick = onDismiss) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = stringResource(id = R.string.close),
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val playerModifier = if (isLandscape) {
+                            Modifier.fillMaxSize()
+                        } else {
+                            Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(16f / 9f)
+                        }
+                        AndroidView(
+                            factory = { ctx ->
+                                PlayerView(ctx).apply {
+                                    this.player = player
+                                    useController = true
+                                }
+                            },
+                            update = { view ->
+                                if (view.player !== player) {
+                                    view.player = player
+                                }
+                            },
+                            modifier = playerModifier.clip(RoundedCornerShape(8.dp))
+                        )
+                    }
+
+                    if (playbackError) {
+                        Text(
+                            text = stringResource(id = R.string.video_playback_error_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    if (!isLandscape) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val fallbackDur = (player.duration / 1000L).takeIf { it > 0L }
+                                        ?: resource.durationSeconds.coerceAtLeast(1L)
+                                    if (playbackError) {
+                                        onProgressUpdate(fallbackDur, fallbackDur, 100.0)
+                                    } else {
+                                        val curPos = (player.currentPosition / 1000L).coerceIn(1L, fallbackDur)
+                                        val curPct = maxOf((curPos.toDouble() / fallbackDur.toDouble()) * 100.0, 10.0)
+                                            .coerceIn(0.0, 100.0)
+                                        onProgressUpdate(curPos, fallbackDur, curPct)
+                                    }
+                                    onOpenExternal()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(id = R.string.pdf_open_external), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            Button(onClick = onDismiss) {
+                                Text(stringResource(id = R.string.close))
+                            }
+                        }
+                    }
                 }
             }
-        },
-        confirmButton = {
-            Button(onClick = onDismiss) { Text(stringResource(id = R.string.close)) }
         }
-    )
+    }
 }
 
 @Composable
@@ -759,90 +1266,532 @@ private fun PdfViewerDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    var currentPage by remember { mutableIntStateOf(0) }
+    var currentPage by rememberSaveable(fileUri) { mutableIntStateOf(0) }
     var pageCount by remember { mutableIntStateOf(0) }
     var pageBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var renderFailed by remember { mutableStateOf(false) }
 
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    var containerSize by remember { mutableStateOf(IntSize.Zero) }
+
     LaunchedEffect(fileUri, currentPage) {
-        try {
-            val uri = Uri.parse(fileUri)
-            if (uri.scheme == "content" || uri.scheme == "file") {
-                val pfd: ParcelFileDescriptor? = context.contentResolver.openFileDescriptor(uri, "r")
+        scale = 1f
+        offset = Offset.Zero
+        renderFailed = false
+        val rendered = withContext(Dispatchers.IO) {
+            runCatching {
+                val uri = Uri.parse(fileUri)
+                val pfd: ParcelFileDescriptor? = when (uri.scheme) {
+                    "file" -> uri.path?.let { ParcelFileDescriptor.open(File(it), ParcelFileDescriptor.MODE_READ_ONLY) }
+                    "content" -> context.contentResolver.openFileDescriptor(uri, "r")
+                    else -> null
+                }
                 pfd?.use { descriptor ->
                     PdfRenderer(descriptor).use { renderer ->
-                        pageCount = renderer.pageCount
-                        if (pageCount > 0) {
-                            val safeIndex = currentPage.coerceIn(0, pageCount - 1)
-                            renderer.openPage(safeIndex).use { page ->
-                                val bmp = Bitmap.createBitmap(page.width * 2, page.height * 2, Bitmap.Config.ARGB_8888)
-                                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                pageBitmap = bmp
-                            }
+                        val count = renderer.pageCount
+                        if (count <= 0) return@runCatching null to 0
+                        val safeIndex = currentPage.coerceIn(0, count - 1)
+                        renderer.openPage(safeIndex).use { page ->
+                            val targetW = (page.width * 2).coerceIn(400, 2200)
+                            val aspect = page.height.toFloat() / page.width.coerceAtLeast(1).toFloat()
+                            val targetH = (targetW * aspect).roundToInt().coerceIn(400, 3200)
+                            val bmp = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                            bmp.eraseColor(AndroidColor.WHITE)
+                            page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            bmp to count
                         }
                     }
                 }
-            } else {
-                renderFailed = true
-            }
-        } catch (_: Exception) {
+            }.getOrNull()
+        }
+        if (rendered?.first != null) {
+            pageBitmap = rendered.first
+            pageCount = rendered.second
+        } else {
             renderFailed = true
         }
     }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(resource.title) },
-        text = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (pageBitmap != null && !renderFailed) {
-                    Image(
-                        bitmap = pageBitmap!!.asImageBitmap(),
-                        contentDescription = resource.title,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                ViewerTopBar(
+                    title = resource.title,
+                    scale = scale,
+                    onZoomOut = {
+                        val next = (scale - 0.5f).coerceIn(1f, 5f)
+                        scale = next
+                        if (next <= 1.01f) offset = Offset.Zero
+                    },
+                    onResetZoom = {
+                        scale = 1f
+                        offset = Offset.Zero
+                    },
+                    onZoomIn = {
+                        scale = (scale + 0.5f).coerceIn(1f, 5f)
+                    },
+                    onOpenExternal = onOpenExternal,
+                    onDismiss = onDismiss
+                )
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        .clipToBounds()
+                        .onSizeChanged { containerSize = it }
+                        .pointerInput(currentPage, pageBitmap) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    if (scale > 1.2f) {
+                                        scale = 1f
+                                        offset = Offset.Zero
+                                    } else {
+                                        scale = 2.5f
+                                    }
+                                }
+                            )
+                        }
+                        .pointerInput(currentPage, pageBitmap) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                val newScale = (scale * zoom).coerceIn(1f, 5f)
+                                scale = newScale
+                                if (newScale <= 1.01f) {
+                                    offset = Offset.Zero
+                                } else {
+                                    val maxX = (containerSize.width * (newScale - 1f)) / 2f
+                                    val maxY = (containerSize.height * (newScale - 1f)) / 2f
+                                    offset = Offset(
+                                        x = (offset.x + pan.x).coerceIn(-maxX, maxX),
+                                        y = (offset.y + pan.y).coerceIn(-maxY, maxY)
+                                    )
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    val bmp = pageBitmap
+                    if (bmp != null && !renderFailed) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = resource.title,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(8.dp)
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                    translationX = offset.x
+                                    translationY = offset.y
+                                }
+                        )
+                    } else if (renderFailed) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            Text(
+                                text = stringResource(id = R.string.resource_no_viewer_error),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Button(onClick = onOpenExternal) {
+                                Icon(Icons.Filled.OpenInNew, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(id = R.string.pdf_open_external))
+                            }
+                        }
+                    } else {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                Surface(tonalElevation = 2.dp) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(300.dp)
-                            .background(Color.White)
-                    )
-                    if (pageCount > 1) {
-                        Row(
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            TextButton(
-                                onClick = { if (currentPage > 0) currentPage-- },
-                                enabled = currentPage > 0
-                            ) { Text("<") }
-                            Text(stringResource(id = R.string.pdf_page_label, currentPage + 1, pageCount))
-                            TextButton(
-                                onClick = { if (currentPage < pageCount - 1) currentPage++ },
-                                enabled = currentPage < pageCount - 1
-                            ) { Text(">") }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (pageCount > 1) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { if (currentPage > 0) currentPage-- },
+                                    enabled = currentPage > 0
+                                ) {
+                                    Icon(Icons.Filled.ChevronLeft, contentDescription = null)
+                                }
+                                Text(
+                                    text = stringResource(id = R.string.pdf_page_label, currentPage + 1, pageCount),
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                                IconButton(
+                                    onClick = { if (currentPage < pageCount - 1) currentPage++ },
+                                    enabled = currentPage < pageCount - 1
+                                ) {
+                                    Icon(Icons.Filled.ChevronRight, contentDescription = null)
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = stringResource(id = R.string.zoom_double_tap_hint),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
-                    }
-                } else {
-                    Text(
-                        text = fileUri,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedButton(onClick = onOpenExternal) {
-                        Icon(Icons.Filled.OpenInNew, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(id = R.string.pdf_open_external))
+                        TextButton(onClick = onDismiss) {
+                            Text(stringResource(id = R.string.close))
+                        }
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(onClick = onDismiss) { Text(stringResource(id = R.string.close)) }
         }
-    )
+    }
+}
+
+@Composable
+private fun ImageViewerDialog(
+    resource: CourseResource,
+    imgUri: String,
+    onOpenExternal: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    var containerSize by remember { mutableStateOf(IntSize.Zero) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding(),
+            color = Color.Black
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                ViewerTopBar(
+                    title = resource.title,
+                    scale = scale,
+                    darkSurface = true,
+                    onZoomOut = {
+                        val next = (scale - 0.5f).coerceIn(1f, 5f)
+                        scale = next
+                        if (next <= 1.01f) offset = Offset.Zero
+                    },
+                    onResetZoom = {
+                        scale = 1f
+                        offset = Offset.Zero
+                    },
+                    onZoomIn = {
+                        scale = (scale + 0.5f).coerceIn(1f, 5f)
+                    },
+                    onOpenExternal = onOpenExternal,
+                    onDismiss = onDismiss
+                )
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clipToBounds()
+                        .onSizeChanged { containerSize = it }
+                        .pointerInput(imgUri) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    if (scale > 1.2f) {
+                                        scale = 1f
+                                        offset = Offset.Zero
+                                    } else {
+                                        scale = 2.5f
+                                    }
+                                }
+                            )
+                        }
+                        .pointerInput(imgUri) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                val newScale = (scale * zoom).coerceIn(1f, 5f)
+                                scale = newScale
+                                if (newScale <= 1.01f) {
+                                    offset = Offset.Zero
+                                } else {
+                                    val maxX = (containerSize.width * (newScale - 1f)) / 2f
+                                    val maxY = (containerSize.height * (newScale - 1f)) / 2f
+                                    offset = Offset(
+                                        x = (offset.x + pan.x).coerceIn(-maxX, maxX),
+                                        y = (offset.y + pan.y).coerceIn(-maxY, maxY)
+                                    )
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = imgUri,
+                        contentDescription = resource.title,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                                translationX = offset.x
+                                translationY = offset.y
+                            }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.zoom_double_tap_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.75f),
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(id = R.string.close), color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WordViewerDialog(
+    resource: CourseResource,
+    fileUri: String,
+    onOpenExternal: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var paragraphs by remember { mutableStateOf<List<String>?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var textScale by rememberSaveable(fileUri) { mutableFloatStateOf(1f) }
+
+    LaunchedEffect(fileUri) {
+        isLoading = true
+        val extracted = withContext(Dispatchers.IO) {
+            val uri = Uri.parse(fileUri)
+            when (uri.scheme) {
+                "file" -> uri.path?.let { DocxTextExtractor.extractFromFile(File(it)) }
+                "content" -> runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        DocxTextExtractor.extractFromStream(stream)
+                    }
+                }.getOrNull()
+                else -> null
+            }
+        }
+        paragraphs = extracted?.paragraphs
+        isLoading = false
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                ViewerTopBar(
+                    title = resource.title,
+                    scale = textScale,
+                    onZoomOut = { textScale = (textScale - 0.2f).coerceIn(0.8f, 2.5f) },
+                    onResetZoom = { textScale = 1f },
+                    onZoomIn = { textScale = (textScale + 0.2f).coerceIn(0.8f, 2.5f) },
+                    onOpenExternal = onOpenExternal,
+                    onDismiss = onDismiss
+                )
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .pointerInput(fileUri) {
+                            detectTransformGestures { _, _, zoom, _ ->
+                                if (zoom != 1f) {
+                                    textScale = (textScale * zoom).coerceIn(0.8f, 2.5f)
+                                }
+                            }
+                        }
+                ) {
+                    val lines = paragraphs
+                    when {
+                        isLoading -> {
+                            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                        }
+                        lines.isNullOrEmpty() -> {
+                            Column(
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(id = R.string.word_empty_or_unsupported),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Button(onClick = onOpenExternal) {
+                                    Icon(Icons.Filled.OpenInNew, contentDescription = null)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(stringResource(id = R.string.resource_open_external_app))
+                                }
+                            }
+                        }
+                        else -> {
+                            SelectionContainer {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    val scaledFont = (15f * textScale).sp
+                                    val scaledLineHeight = (22f * textScale).sp
+                                    lines.forEach { para ->
+                                        Text(
+                                            text = para,
+                                            fontSize = scaledFont,
+                                            lineHeight = scaledLineHeight,
+                                            color = MaterialTheme.colorScheme.onBackground
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Surface(tonalElevation = 2.dp) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(onClick = onOpenExternal) {
+                            Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(id = R.string.pdf_open_external), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        TextButton(onClick = onDismiss) {
+                            Text(stringResource(id = R.string.close))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ViewerTopBar(
+    title: String,
+    scale: Float,
+    darkSurface: Boolean = false,
+    onZoomOut: () -> Unit,
+    onResetZoom: () -> Unit,
+    onZoomIn: () -> Unit,
+    onOpenExternal: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val contentColor = if (darkSurface) Color.White else MaterialTheme.colorScheme.onSurface
+    Surface(
+        color = if (darkSurface) Color.Black.copy(alpha = 0.85f) else MaterialTheme.colorScheme.surface,
+        tonalElevation = if (darkSurface) 0.dp else 3.dp
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 6.dp)
+                )
+                IconButton(onClick = onZoomOut) {
+                    Icon(
+                        imageVector = Icons.Filled.ZoomOut,
+                        contentDescription = stringResource(id = R.string.zoom_out),
+                        tint = contentColor
+                    )
+                }
+                TextButton(onClick = onResetZoom) {
+                    Text(
+                        text = "${(scale * 100).roundToInt()}%",
+                        color = contentColor,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+                IconButton(onClick = onZoomIn) {
+                    Icon(
+                        imageVector = Icons.Filled.ZoomIn,
+                        contentDescription = stringResource(id = R.string.zoom_in),
+                        tint = contentColor
+                    )
+                }
+                IconButton(onClick = onOpenExternal) {
+                    Icon(
+                        imageVector = Icons.Filled.OpenInNew,
+                        contentDescription = stringResource(id = R.string.pdf_open_external),
+                        tint = contentColor
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = stringResource(id = R.string.close),
+                        tint = contentColor
+                    )
+                }
+            }
+            if (!darkSurface) {
+                HorizontalDivider()
+            }
+        }
+    }
 }
 
 @Composable
@@ -907,9 +1856,73 @@ private fun TeacherVideoTrackingDialog(
                             }
                             LinearProgressIndicator(
                                 progress = { (pct / 100f).coerceIn(0f, 1f) },
-                                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(4.dp)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
                                 color = color
                             )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) { Text(stringResource(id = R.string.close)) }
+        }
+    )
+}
+
+@Composable
+private fun TeacherFileTrackingDialog(
+    resource: CourseResource,
+    students: List<Enrollment>,
+    trackings: List<VideoTracking>,
+    onDismiss: () -> Unit
+) {
+    val trackingByStudentId = trackings.associateBy { it.studentId }
+    val enrolledIds = students.map { it.studentId }.toSet()
+    val extraRows = trackings
+        .filterNot { enrolledIds.contains(it.studentId) }
+        .map { tr -> tr.studentId to tr.studentName.ifBlank { "Élève" } }
+    val displayRows = students.map { it.studentId to it.studentName } + extraRows
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${stringResource(id = R.string.resource_file_tracking_button)} — ${resource.title}") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                displayRows.forEach { (studentId, studentName) ->
+                    val track = trackingByStudentId[studentId]
+                    val opened = (track?.watchedPercentage ?: 0.0) >= 90.0
+                    val statusLabel = stringResource(
+                        id = if (opened) R.string.resource_file_opened_status
+                        else R.string.resource_file_not_opened_status
+                    )
+                    val color = if (opened) SvtSuccess else SvtCoralError
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = studentName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(statusLabel, style = MaterialTheme.typography.labelSmall, color = color)
                         }
                     }
                 }
@@ -934,6 +1947,7 @@ private fun AddResourceDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var title by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf("pdf") }
@@ -942,23 +1956,36 @@ private fun AddResourceDialog(
     var fileSizeError by remember { mutableStateOf<String?>(null) }
     var durationText by remember { mutableStateOf("120") }
     var isDownloadable by remember { mutableStateOf(true) }
+    var isStagingFile by remember { mutableStateOf(false) }
 
     val handlePickedUri: (Uri) -> Unit = { uri ->
-        val (name, sizeBytes) = resolvePickedFileMeta(context, uri)
-        if (sizeBytes != null && sizeBytes > SvtRepository.MAX_CHUNKED_UPLOAD_BYTES) {
-            val maxMb = (SvtRepository.MAX_CHUNKED_UPLOAD_BYTES / (1024L * 1024L)).toInt()
-            fileSizeError = context.getString(R.string.resource_too_large_error, maxMb)
-            pickedFileLabel = null
-            fileUrl = ""
-        } else {
+        scope.launch {
+            isStagingFile = true
             fileSizeError = null
-            fileUrl = uri.toString()
-            val sizeText = sizeBytes?.let { formatBytesReadable(it) } ?: ""
-            pickedFileLabel = listOfNotNull(name.takeIf { it.isNotBlank() }, sizeText.takeIf { it.isNotBlank() })
-                .joinToString(" • ")
-                .ifBlank { null }
-            if (title.isBlank() && name.isNotBlank()) {
-                title = name.substringBeforeLast('.').take(80)
+            try {
+                val staged = OfflineStorageManager.stagePickedUriToCache(
+                    context = context,
+                    uri = uri,
+                    typeHint = selectedType,
+                    maxBytes = SvtRepository.MAX_CHUNKED_UPLOAD_BYTES
+                )
+                fileUrl = staged.localFileUri
+                val sizeText = OfflineStorageManager.formatBytesReadable(staged.sizeBytes)
+                pickedFileLabel = "${staged.displayName} • $sizeText"
+                if (title.isBlank() && staged.displayName.isNotBlank()) {
+                    title = staged.displayName.substringBeforeLast('.').take(80)
+                }
+            } catch (_: PickedFileTooLargeException) {
+                val maxMb = (SvtRepository.MAX_CHUNKED_UPLOAD_BYTES / (1024L * 1024L)).toInt()
+                fileSizeError = context.getString(R.string.resource_too_large_error, maxMb)
+                pickedFileLabel = null
+                fileUrl = ""
+            } catch (_: Exception) {
+                fileSizeError = context.getString(R.string.resource_read_error)
+                pickedFileLabel = null
+                fileUrl = ""
+            } finally {
+                isStagingFile = false
             }
         }
     }
@@ -1045,9 +2072,13 @@ private fun AddResourceDialog(
                             )
                         }
                     },
+                    enabled = !isStagingFile,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(stringResource(id = R.string.resource_pick_file))
+                }
+                if (isStagingFile) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
                 if (!pickedFileLabel.isNullOrBlank()) {
                     Text(
@@ -1092,7 +2123,7 @@ private fun AddResourceDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (title.trim().length >= 2 && fileUrl.isNotBlank() && fileSizeError == null) {
+                    if (!isStagingFile && title.trim().length >= 2 && fileUrl.isNotBlank() && fileSizeError == null) {
                         onSave(
                             title.trim(),
                             desc.trim(),
@@ -1103,7 +2134,7 @@ private fun AddResourceDialog(
                         )
                     }
                 },
-                enabled = title.trim().length >= 2 && fileUrl.isNotBlank() && fileSizeError == null
+                enabled = !isStagingFile && title.trim().length >= 2 && fileUrl.isNotBlank() && fileSizeError == null
             ) {
                 Text(stringResource(id = R.string.profile_save))
             }
@@ -1112,38 +2143,6 @@ private fun AddResourceDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(id = R.string.cancel)) }
         }
     )
-}
-
-private fun resolvePickedFileMeta(context: Context, uri: Uri): Pair<String, Long?> {
-    var name = ""
-    var size: Long? = null
-    runCatching {
-        context.contentResolver.query(
-            uri,
-            arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-            null,
-            null,
-            null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (nameIdx >= 0) name = cursor.getString(nameIdx).orEmpty()
-                val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
-                if (sizeIdx >= 0 && !cursor.isNull(sizeIdx)) {
-                    size = cursor.getLong(sizeIdx)
-                }
-            }
-        }
-    }
-    return name to size
-}
-
-private fun formatBytesReadable(bytes: Long): String {
-    return when {
-        bytes >= 1024L * 1024L -> "%.1f Mo".format(bytes / (1024.0 * 1024.0))
-        bytes >= 1024L -> "${bytes / 1024L} Ko"
-        else -> "$bytes o"
-    }
 }
 
 private fun openExternalUrl(context: Context, url: String, resourceType: String) {
@@ -1161,17 +2160,61 @@ private fun openExternalUrl(context: Context, url: String, resourceType: String)
             parsed
         }
         val intent = if (isLocalFile || parsed.scheme == "content") {
+            val mime = OfflineStorageManager.mimeTypeForResource(resourceType, normalized)
             Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(
-                    finalUri,
-                    OfflineStorageManager.mimeTypeForResource(resourceType, normalized)
-                )
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                setDataAndType(finalUri, mime)
+                clipData = ClipData.newRawUri("", finalUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         } else {
-            Intent(Intent.ACTION_VIEW, finalUri)
+            Intent(Intent.ACTION_VIEW, finalUri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
         }
-        context.startActivity(intent)
+        val chooser = Intent.createChooser(
+            intent,
+            context.getString(R.string.resource_open_external_app)
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(
+            context,
+            context.getString(R.string.resource_no_viewer_error),
+            Toast.LENGTH_SHORT
+        ).show()
+    } catch (_: Exception) {
+        Toast.makeText(
+            context,
+            context.getString(R.string.resource_no_viewer_error),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+}
+
+private fun shareLocalFile(context: Context, file: File, mimeType: String, title: String) {
+    try {
+        if (!file.exists()) {
+            Toast.makeText(context, context.getString(R.string.resource_read_error), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = mimeType
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, title)
+            clipData = ClipData.newRawUri(title, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(sendIntent, title).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
     } catch (_: Exception) {
         Toast.makeText(
             context,

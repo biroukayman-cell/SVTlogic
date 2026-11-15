@@ -41,11 +41,13 @@ import androidx.compose.material.icons.filled.Biotech
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Lock
@@ -58,6 +60,7 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.UploadFile
@@ -893,6 +896,51 @@ fun ProfileAndBadgesTab(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // 4. Legal Notice Card
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("legal_notice_card")
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Gavel,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = stringResource(id = R.string.legal_notice_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = stringResource(id = R.string.legal_notice_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = stringResource(id = R.string.legal_notice_footer),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }
@@ -1922,6 +1970,7 @@ private fun ClassQrDialog(
     svtClass: SvtClass,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val qrBitmap = remember(svtClass.qrToken) {
         QrCodeUtils.generateQrBitmap("BIOTERRE:${svtClass.qrToken}", 512)
     }
@@ -1954,6 +2003,47 @@ private fun ClassQrDialog(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            QrCodeUtils.copyTextToClipboard(context, svtClass.name, svtClass.qrToken)
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.qr_code_copied, svtClass.qrToken),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("copy_class_qr_code_button")
+                    ) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(id = R.string.qr_copy_code))
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val shareText = "${svtClass.name} — ${svtClass.qrToken}\nBIOTERRE:${svtClass.qrToken}"
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, shareText)
+                            }
+                            runCatching {
+                                context.startActivity(Intent.createChooser(intent, svtClass.name))
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("share_class_qr_code_button")
+                    ) {
+                        Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(id = R.string.qr_share_code))
+                    }
+                }
             }
         },
         confirmButton = {

@@ -339,4 +339,45 @@
     <string name="theme_palette_ocean">أزرق محيطي</string>
     <string name="theme_palette_earth">جيولوجي دافئ</string>
     <string name="theme_palette_botanical">بنفسجي نباتي</string>
+
+    <!-- التحميلات، التكبير، العارض وتتبع الملفات -->
+    <string name="offline_download_saved_device">تم تحميل «%1$s» (%2$s) في التنزيلات/BioTerre SVT</string>
+    <string name="downloads_manager_button">التنزيلات (%1$d)</string>
+    <string name="downloads_manager_title">الملفات المحملة</string>
+    <string name="downloads_manager_summary">%1$d ملف(ات) • %2$s\nالمجلد: التنزيلات/BioTerre SVT</string>
+    <string name="downloads_manager_empty">لا توجد ملفات محملة حالياً.</string>
+    <string name="downloads_open_file">فتح</string>
+    <string name="downloads_share_file">مشاركة</string>
+    <string name="resource_open_choice_title">كيف تريد فتح «%1$s»؟</string>
+    <string name="resource_open_in_app">فتح داخل التطبيق</string>
+    <string name="resource_open_external_app">فتح في تطبيق خارجي</string>
+    <string name="zoom_in">تكبير +</string>
+    <string name="zoom_out">تصغير -</string>
+    <string name="zoom_reset">100%</string>
+    <string name="zoom_double_tap_hint">اسحب بإصبعين أو انقر مرتين للتكبير</string>
+    <string name="word_empty_or_unsupported">المعاينة الداخلية غير متاحة لهذا الملف (.doc قديم أو ملف فارغ). استخدم «فتح في تطبيق خارجي».</string>
+    <string name="resource_file_opened_status">تم الفتح ✓</string>
+    <string name="resource_file_not_opened_status">لم يُفتح</string>
+    <string name="resource_file_tracking_button">تتبع الفتح</string>
+    <string name="resource_file_summary">تم الفتح: %1$d / %2$d تلميذ</string>
+
+    <!-- ماسح QR المحسن والتسجيل الفوري -->
+    <string name="qr_copy_code">نسخ الرمز</string>
+    <string name="qr_share_code">مشاركة</string>
+    <string name="qr_code_copied">تم نسخ الرمز «%1$s» إلى الحافظة</string>
+    <string name="qr_pick_from_gallery">مسح من المعرض</string>
+    <string name="qr_not_found_in_image">لم يتم العثور على رمز QR في هذه الصورة.</string>
+    <string name="qr_torch_toggle">المصباح</string>
+    <string name="auth_qr_quick_title">الانضمام مباشرة عبر رمز QR</string>
+    <string name="auth_qr_quick_sub">تسجيل تلقائي وفوري في قسمك دون انتظار</string>
+    <string name="auth_qr_join_submit">التسجيل والانضمام للقسم</string>
+    <string name="auth_qr_scan_first">مسح رمز QR للأستاذ</string>
+    <string name="field_massar_optional">رقم مسار (اختياري)</string>
+    <string name="qr_token_required_error">يرجى مسح رمز QR أو إدخال رمز القسم السري.</string>
+    <string name="qr_joining_progress">جاري التحقق والدخول إلى القسم...</string>
+
+    <!-- البيانات القانونية -->
+    <string name="legal_notice_title">البيانات القانونية</string>
+    <string name="legal_notice_footer">© 2026 BioTerre SVT • من تطوير Ayman BIROUK</string>
+    <string name="legal_notice_body">تطبيق BioTerre SVT التعليمي.\nسنة الإنشاء: 2026\nالمطور: Ayman BIROUK\nجميع الحقوق محفوظة.</string>
 </resources>

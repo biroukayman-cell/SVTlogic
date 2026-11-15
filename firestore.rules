@@ -40,6 +40,13 @@ service cloud.firestore {
       return ts is timestamp && ts <= request.time;
     }
 
+    function isApprovedStudentInClass(classId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/enrollments/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/enrollments/$(request.auth.uid)).data.classId == classId &&
+             get(/databases/$(database)/documents/enrollments/$(request.auth.uid)).data.status == 'approved';
+    }
+
     // ---------------------------------------------------------
     // Validation Blueprints
     // ---------------------------------------------------------
@@ -92,6 +99,7 @@ service cloud.firestore {
              data.studentName is string && data.studentName.size() >= 2 && data.studentName.size() <= 100 &&
              data.studentPhone is string && data.studentPhone.size() <= 30 &&
              (!('massarNumber' in data) || (data.massarNumber is string && data.massarNumber.size() <= 40)) &&
+             (!('qrToken' in data) || (data.qrToken is string && data.qrToken.size() <= 64)) &&
              data.status is string && data.status in ['pending', 'approved', 'rejected'] &&
              isValidTimestamp(data.requestedAt) &&
              (!('validatedAt' in data) || data.validatedAt == null || isValidTimestamp(data.validatedAt)) &&
@@ -308,12 +316,15 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isValidId(qrToken) && (resource.data.teacherId == request.auth.uid || isAdmin());
     }
 
-    // 4. Enrollments (student request -> teacher validation)
+    // 4. Enrollments (auto-approved with valid QR/secret class code, or pending request)
     match /enrollments/{studentId} {
       allow get: if isSignedIn() && isValidId(studentId) && (
-        resource.data.studentId == request.auth.uid ||
-        resource.data.teacherId == request.auth.uid ||
-        isAdmin()
+        (resource == null && studentId == request.auth.uid) ||
+        (resource != null && (
+          resource.data.studentId == request.auth.uid ||
+          resource.data.teacherId == request.auth.uid ||
+          isAdmin()
+        ))
       );
 
       allow list: if isSignedIn() && (
@@ -326,10 +337,21 @@ service cloud.firestore {
                        isValidId(studentId) &&
                        studentId == request.auth.uid &&
                        incoming().keys().hasAll(['studentId', 'classId', 'className', 'teacherId', 'teacherName', 'studentName', 'studentPhone', 'status', 'requestedAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['studentId', 'classId', 'className', 'teacherId', 'teacherName', 'studentName', 'studentPhone', 'massarNumber', 'status', 'requestedAt', 'validatedAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['studentId', 'classId', 'className', 'teacherId', 'teacherName', 'studentName', 'studentPhone', 'massarNumber', 'qrToken', 'status', 'requestedAt', 'validatedAt', 'updatedAt']) &&
                        isValidEnrollment(incoming()) &&
                        incoming().studentId == request.auth.uid &&
-                       incoming().status == 'pending' &&
+                       (
+                         incoming().status == 'pending' ||
+                         (
+                           incoming().status == 'approved' &&
+                           'qrToken' in incoming() &&
+                           incoming().qrToken is string &&
+                           isValidId(incoming().qrToken) &&
+                           exists(/databases/$(database)/documents/class_codes/$(incoming().qrToken)) &&
+                           get(/databases/$(database)/documents/class_codes/$(incoming().qrToken)).data.classId == incoming().classId &&
+                           get(/databases/$(database)/documents/class_codes/$(incoming().qrToken)).data.teacherId == incoming().teacherId
+                         )
+                       ) &&
                        exists(/databases/$(database)/documents/classes/$(incoming().classId)) &&
                        get(/databases/$(database)/documents/classes/$(incoming().classId)).data.teacherId == incoming().teacherId;
 
@@ -362,12 +384,14 @@ service cloud.firestore {
       allow get: if isSignedIn() && isValidId(quizId) && (
         resource.data.teacherId == request.auth.uid ||
         request.auth.uid in resource.data.approvedStudentIds ||
+        isApprovedStudentInClass(resource.data.classId) ||
         isAdmin()
       );
 
       allow list: if isSignedIn() && (
         resource.data.teacherId == request.auth.uid ||
         request.auth.uid in resource.data.approvedStudentIds ||
+        isApprovedStudentInClass(resource.data.classId) ||
         isAdmin()
       );
 
@@ -395,6 +419,7 @@ service cloud.firestore {
     // 6. Quiz Attempts (immutable after submission, exact timing)
     match /quiz_attempts/{attemptId} {
       allow get: if isSignedIn() && isValidId(attemptId) && (
+        resource == null ||
         resource.data.studentId == request.auth.uid ||
         resource.data.teacherId == request.auth.uid ||
         isAdmin()
@@ -413,7 +438,13 @@ service cloud.firestore {
                        isValidQuizAttempt(incoming()) &&
                        incoming().studentId == request.auth.uid &&
                        exists(/databases/$(database)/documents/quizzes/$(incoming().quizId)) &&
-                       request.auth.uid in get(/databases/$(database)/documents/quizzes/$(incoming().quizId)).data.approvedStudentIds;
+                       (
+                         request.auth.uid in get(/databases/$(database)/documents/quizzes/$(incoming().quizId)).data.approvedStudentIds ||
+                         (
+                           get(/databases/$(database)/documents/quizzes/$(incoming().quizId)).data.classId == incoming().classId &&
+                           isApprovedStudentInClass(incoming().classId)
+                         )
+                       );
 
       allow update: if false;
 
@@ -429,12 +460,14 @@ service cloud.firestore {
       allow get: if isSignedIn() && isValidId(resourceId) && (
         resource.data.teacherId == request.auth.uid ||
         request.auth.uid in resource.data.approvedStudentIds ||
+        isApprovedStudentInClass(resource.data.classId) ||
         isAdmin()
       );
 
       allow list: if isSignedIn() && (
         resource.data.teacherId == request.auth.uid ||
         request.auth.uid in resource.data.approvedStudentIds ||
+        isApprovedStudentInClass(resource.data.classId) ||
         isAdmin()
       );
 
@@ -459,9 +492,10 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isValidId(resourceId) && (resource.data.teacherId == request.auth.uid || isAdmin());
     }
 
-    // 8. Video Tracking (watch % and status)
+    // 8. Video & Resource Open Tracking (watch % and file-opened status)
     match /video_tracking/{trackingId} {
       allow get: if isSignedIn() && isValidId(trackingId) && (
+        resource == null ||
         resource.data.studentId == request.auth.uid ||
         resource.data.teacherId == request.auth.uid ||
         isAdmin()
@@ -480,7 +514,13 @@ service cloud.firestore {
                        isValidVideoTracking(incoming()) &&
                        incoming().studentId == request.auth.uid &&
                        exists(/databases/$(database)/documents/resources/$(incoming().resourceId)) &&
-                       request.auth.uid in get(/databases/$(database)/documents/resources/$(incoming().resourceId)).data.approvedStudentIds;
+                       (
+                         request.auth.uid in get(/databases/$(database)/documents/resources/$(incoming().resourceId)).data.approvedStudentIds ||
+                         (
+                           get(/databases/$(database)/documents/resources/$(incoming().resourceId)).data.classId == incoming().classId &&
+                           isApprovedStudentInClass(incoming().classId)
+                         )
+                       );
 
       allow update: if isSignedIn() &&
                        isValidId(trackingId) &&
@@ -508,12 +548,14 @@ service cloud.firestore {
       allow get: if isSignedIn() && isValidId(announcementId) && (
         resource.data.teacherId == request.auth.uid ||
         request.auth.uid in resource.data.approvedStudentIds ||
+        isApprovedStudentInClass(resource.data.classId) ||
         isAdmin()
       );
 
       allow list: if isSignedIn() && (
         resource.data.teacherId == request.auth.uid ||
         request.auth.uid in resource.data.approvedStudentIds ||
+        isApprovedStudentInClass(resource.data.classId) ||
         isAdmin()
       );
 

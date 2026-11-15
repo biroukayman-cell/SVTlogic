@@ -147,6 +147,7 @@ fun MainDashboardScreen(
     val studentAttempts by viewModel.studentAttempts.collectAsStateWithLifecycle()
     val studentResources by viewModel.studentResources.collectAsStateWithLifecycle()
     val studentVideoTracking by viewModel.studentVideoTracking.collectAsStateWithLifecycle()
+    val studentVideoOnlyTracking by viewModel.studentVideoOnlyTracking.collectAsStateWithLifecycle()
     val studentAnnouncements by viewModel.studentAnnouncements.collectAsStateWithLifecycle()
     val studentMessages by viewModel.studentMessages.collectAsStateWithLifecycle()
     val studentNotifications by viewModel.studentNotifications.collectAsStateWithLifecycle()
@@ -440,6 +441,9 @@ fun MainDashboardScreen(
                                 },
                                 onRecordVideoProgress = { res, posSec, durSec, pctOverride ->
                                     viewModel.recordVideoProgress(context, res, posSec, durSec, pctOverride)
+                                },
+                                onRecordFileOpened = { res ->
+                                    viewModel.recordFileOpened(context, res)
                                 }
                             )
 
@@ -474,7 +478,7 @@ fun MainDashboardScreen(
                                 onThemeChanged = onThemeChanged,
                                 studentEnrollment = studentEnrollment,
                                 studentAttempts = studentAttempts,
-                                studentVideoTrackings = studentVideoTracking,
+                                studentVideoTrackings = studentVideoOnlyTracking,
                                 teacherClasses = teacherClasses,
                                 teacherEnrollments = teacherEnrollments,
                                 teacherRoster = teacherRoster,

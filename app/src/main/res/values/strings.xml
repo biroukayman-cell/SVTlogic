@@ -339,4 +339,45 @@
     <string name="theme_palette_ocean">Océan Minéral</string>
     <string name="theme_palette_earth">Terre &amp; Géologie</string>
     <string name="theme_palette_botanical">Violet Botanique</string>
+
+    <!-- Téléchargements, Zoom, Lecteurs & Suivi fichiers -->
+    <string name="offline_download_saved_device">« %1$s » téléchargé (%2$s) dans Téléchargements/BioTerre SVT</string>
+    <string name="downloads_manager_button">Téléchargements (%1$d)</string>
+    <string name="downloads_manager_title">Fichiers téléchargés</string>
+    <string name="downloads_manager_summary">%1$d fichier(s) • %2$s\nDossier : Téléchargements/BioTerre SVT</string>
+    <string name="downloads_manager_empty">Aucun fichier téléchargé pour le moment.</string>
+    <string name="downloads_open_file">Ouvrir</string>
+    <string name="downloads_share_file">Partager</string>
+    <string name="resource_open_choice_title">Comment ouvrir « %1$s » ?</string>
+    <string name="resource_open_in_app">Ouvrir dans l\'application</string>
+    <string name="resource_open_external_app">Ouvrir dans une application externe</string>
+    <string name="zoom_in">Zoom +</string>
+    <string name="zoom_out">Zoom -</string>
+    <string name="zoom_reset">100%</string>
+    <string name="zoom_double_tap_hint">Pincez ou touchez deux fois pour zoomer</string>
+    <string name="word_empty_or_unsupported">Aperçu intégré indisponible pour ce format (.doc ancien ou fichier vide). Utilisez « Ouvrir dans une application externe ».</string>
+    <string name="resource_file_opened_status">Ouvert ✓</string>
+    <string name="resource_file_not_opened_status">Non ouvert</string>
+    <string name="resource_file_tracking_button">Suivi d\'ouverture</string>
+    <string name="resource_file_summary">Ouvert : %1$d / %2$d élève(s)</string>
+
+    <!-- QR Code amélioré & Inscription directe -->
+    <string name="qr_copy_code">Copier le code</string>
+    <string name="qr_share_code">Partager</string>
+    <string name="qr_code_copied">Code « %1$s » copié dans le presse-papiers</string>
+    <string name="qr_pick_from_gallery">Scanner depuis la galerie</string>
+    <string name="qr_not_found_in_image">Aucun QR Code détecté dans cette image.</string>
+    <string name="qr_torch_toggle">Lampe</string>
+    <string name="auth_qr_quick_title">Rejoindre directement par QR Code</string>
+    <string name="auth_qr_quick_sub">Inscription automatique immédiate dans votre classe sans attente</string>
+    <string name="auth_qr_join_submit">S\'inscrire et rejoindre la classe</string>
+    <string name="auth_qr_scan_first">Scanner le QR du professeur</string>
+    <string name="field_massar_optional">Numéro Massar (optionnel)</string>
+    <string name="qr_token_required_error">Veuillez scanner le QR Code ou saisir le code secret de la classe.</string>
+    <string name="qr_joining_progress">Validation et accès à la classe en cours...</string>
+
+    <!-- Mentions légales -->
+    <string name="legal_notice_title">Mentions légales</string>
+    <string name="legal_notice_footer">© 2026 BioTerre SVT • Créé par Ayman BIROUK</string>
+    <string name="legal_notice_body">Application pédagogique BioTerre SVT.\nAnnée de création : 2026\nCréateur : Ayman BIROUK\nTous droits réservés.</string>
 </resources>

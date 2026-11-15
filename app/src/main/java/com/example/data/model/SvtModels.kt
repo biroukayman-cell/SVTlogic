@@ -61,6 +61,7 @@ data class Enrollment(
     val studentName: String = "",
     val studentPhone: String = "",
     val massarNumber: String = "",
+    val qrToken: String = "",
     val status: String = "pending", // "pending", "approved", "rejected"
     @ServerTimestamp val requestedAt: Timestamp? = null,
     @ServerTimestamp val validatedAt: Timestamp? = null,

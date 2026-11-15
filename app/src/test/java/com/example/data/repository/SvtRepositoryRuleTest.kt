@@ -99,13 +99,13 @@ class SvtRepositoryRuleTest : FirestoreEmulatorTestBase() {
         // 4. Student A reads quiz & resource, submits timed attempt (and idempotent sync), sends private message
         signInTestUser(studentAEmail)
         val studentQuizzes = withTimeout(FLOW_TIMEOUT_MS) {
-            repo.observeStudentQuizzes(studentAUid).first { it.any { q -> q.id == quizId } }
+            repo.observeStudentQuizzes(svtClass.id).first { it.any { q -> q.id == quizId } }
         }
         val quiz = studentQuizzes.first { it.id == quizId }
         assertTrue(quiz.isDownloadable)
 
         val studentResources = withTimeout(FLOW_TIMEOUT_MS) {
-            repo.observeStudentResources(studentAUid).first { it.any { r -> r.id == resourceId } }
+            repo.observeStudentResources(svtClass.id).first { it.any { r -> r.id == resourceId } }
         }
         assertTrue(studentResources.first { it.id == resourceId }.isDownloadable)
 
@@ -170,7 +170,7 @@ class SvtRepositoryRuleTest : FirestoreEmulatorTestBase() {
         val repo = SvtRepository(firestore)
         try {
             withTimeout(FLOW_TIMEOUT_MS) {
-                repo.observeStudentQuizzes("any_uid").first()
+                repo.observeStudentQuizzes("any_class_id").first()
             }
             fail("Expected PERMISSION_DENIED for unauthenticated caller")
         } catch (e: Exception) {

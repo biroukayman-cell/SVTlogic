@@ -57,6 +57,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,13 +112,17 @@ fun ExercisesTab(
         onDone: (QuizAttempt) -> Unit
     ) -> Unit
 ) {
-    var activeQuizToPlay by remember { mutableStateOf<Quiz?>(null) }
-    var attemptToView by remember { mutableStateOf<QuizAttempt?>(null) }
-    var showCreateQuizDialog by remember { mutableStateOf(false) }
-    var preFilledManualChapter by remember { mutableStateOf("") }
-    var showAiGeneratorDialog by remember { mutableStateOf(false) }
-    var statsQuiz by remember { mutableStateOf<Quiz?>(null) }
-    var offlineOnlyFilter by remember { mutableStateOf(false) }
+    var activeQuizId by rememberSaveable { mutableStateOf<String?>(null) }
+    var attemptQuizId by rememberSaveable { mutableStateOf<String?>(null) }
+    var justSubmittedAttempt by remember { mutableStateOf<QuizAttempt?>(null) }
+    var showCreateQuizDialog by rememberSaveable { mutableStateOf(false) }
+    var preFilledManualChapter by rememberSaveable { mutableStateOf("") }
+    var showAiGeneratorDialog by rememberSaveable { mutableStateOf(false) }
+    var statsQuizId by rememberSaveable { mutableStateOf<String?>(null) }
+    var offlineOnlyFilter by rememberSaveable { mutableStateOf(false) }
+    val activeQuizToPlay = activeQuizId?.let { id -> quizzes.firstOrNull { it.id == id } }
+    val attemptToView = justSubmittedAttempt ?: attemptQuizId?.let { id -> attempts.firstOrNull { it.quizId == id } }
+    val statsQuiz = statsQuizId?.let { id -> quizzes.firstOrNull { it.id == id } }
 
     val classQuizzes = remember(quizzes, selectedClassId, isTeacher) {
         if (isTeacher && selectedClassId != null) quizzes.filter { it.classId == selectedClassId }
@@ -377,7 +382,7 @@ fun ExercisesTab(
                                 )
                             }
                             OutlinedButton(
-                                onClick = { statsQuiz = quiz },
+                                onClick = { statsQuizId = quiz.id },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("quiz_stats_${quiz.id}")
@@ -428,7 +433,7 @@ fun ExercisesTab(
                                 if (studentAttempt == null) {
                                     val canPlay = isOnline || isDownloaded
                                     Button(
-                                        onClick = { activeQuizToPlay = quiz },
+                                        onClick = { activeQuizId = quiz.id },
                                         enabled = canPlay,
                                         modifier = Modifier.testTag("start_quiz_${quiz.id}")
                                     ) {
@@ -438,7 +443,7 @@ fun ExercisesTab(
                                     }
                                 } else {
                                     OutlinedButton(
-                                        onClick = { attemptToView = studentAttempt },
+                                        onClick = { attemptQuizId = studentAttempt.quizId },
                                         modifier = Modifier.testTag("view_result_${quiz.id}")
                                     ) {
                                         Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -457,11 +462,12 @@ fun ExercisesTab(
     activeQuizToPlay?.let { quiz ->
         TimedQuizPlayerDialog(
             quiz = quiz,
-            onDismiss = { activeQuizToPlay = null },
+            onDismiss = { activeQuizId = null },
             onComplete = { answers, perQuestionSecs, totalSecs ->
-                activeQuizToPlay = null
+                activeQuizId = null
                 onSubmitAttempt(quiz, answers, perQuestionSecs, totalSecs) { savedAttempt ->
-                    attemptToView = savedAttempt
+                    attemptQuizId = savedAttempt.quizId
+                    justSubmittedAttempt = savedAttempt
                 }
             }
         )
@@ -473,7 +479,10 @@ fun ExercisesTab(
             quiz = quiz,
             attempt = attempt,
             isPendingSync = pendingAttemptQuizIds.contains(attempt.quizId),
-            onDismiss = { attemptToView = null }
+            onDismiss = {
+                attemptQuizId = null
+                justSubmittedAttempt = null
+            }
         )
     }
 
@@ -482,7 +491,7 @@ fun ExercisesTab(
         TeacherQuizStatsDialog(
             quiz = quiz,
             attempts = quizAttempts,
-            onDismiss = { statsQuiz = null }
+            onDismiss = { statsQuizId = null }
         )
     }
 
@@ -526,17 +535,19 @@ private fun TimedQuizPlayerDialog(
     onComplete: (selectedAnswers: List<Int>, perQuestionSeconds: List<Long>, totalSeconds: Long) -> Unit
 ) {
     val questions = quiz.questions
-    var currentIndex by remember { mutableIntStateOf(0) }
-    val selectedAnswers = remember(quiz.id) { mutableStateListOf(*Array(questions.size) { -1 }) }
-    val perQuestionSeconds = remember(quiz.id) { mutableStateListOf(*Array(questions.size) { 0L }) }
-    var totalSeconds by remember(quiz.id) { mutableLongStateOf(0L) }
+    var currentIndex by rememberSaveable(quiz.id) { mutableIntStateOf(0) }
+    var selectedArray by rememberSaveable(quiz.id) { mutableStateOf(IntArray(questions.size) { -1 }) }
+    var perQuestionArray by rememberSaveable(quiz.id) { mutableStateOf(LongArray(questions.size) { 0L }) }
+    var totalSeconds by rememberSaveable(quiz.id) { mutableLongStateOf(0L) }
 
     LaunchedEffect(quiz.id, currentIndex) {
         while (true) {
             delay(1000L)
             totalSeconds += 1L
-            if (currentIndex in perQuestionSeconds.indices) {
-                perQuestionSeconds[currentIndex] = perQuestionSeconds[currentIndex] + 1L
+            if (currentIndex in perQuestionArray.indices) {
+                val copy = perQuestionArray.copyOf()
+                copy[currentIndex] = copy[currentIndex] + 1L
+                perQuestionArray = copy
             }
         }
     }
@@ -577,7 +588,7 @@ private fun TimedQuizPlayerDialog(
                             Text(
                                 text = stringResource(
                                     id = R.string.quiz_timer_question,
-                                    formatDuration(perQuestionSeconds.getOrElse(currentIndex) { 0L })
+                                    formatDuration(perQuestionArray.getOrElse(currentIndex) { 0L })
                                 ),
                                 style = MaterialTheme.typography.labelSmall
                             )
@@ -615,7 +626,7 @@ private fun TimedQuizPlayerDialog(
                     style = MaterialTheme.typography.titleMedium
                 )
                 currentQ.options.forEachIndexed { optIdx, optionText ->
-                    val isSelected = selectedAnswers[currentIndex] == optIdx
+                    val isSelected = selectedArray.getOrElse(currentIndex) { -1 } == optIdx
                     Surface(
                         shape = MaterialTheme.shapes.medium,
                         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
@@ -628,7 +639,11 @@ private fun TimedQuizPlayerDialog(
                                 color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                                 shape = MaterialTheme.shapes.medium
                             )
-                            .clickable { selectedAnswers[currentIndex] = optIdx }
+                            .clickable {
+                                val copy = selectedArray.copyOf()
+                                copy[currentIndex] = optIdx
+                                selectedArray = copy
+                            }
                     ) {
                         Row(
                             modifier = Modifier.padding(12.dp),
@@ -637,7 +652,11 @@ private fun TimedQuizPlayerDialog(
                         ) {
                             RadioButton(
                                 selected = isSelected,
-                                onClick = { selectedAnswers[currentIndex] = optIdx }
+                                onClick = {
+                                    val copy = selectedArray.copyOf()
+                                    copy[currentIndex] = optIdx
+                                    selectedArray = copy
+                                }
                             )
                             Text(
                                 text = optionText,
@@ -649,7 +668,7 @@ private fun TimedQuizPlayerDialog(
             }
         },
         confirmButton = {
-            val hasSelection = selectedAnswers[currentIndex] != -1
+            val hasSelection = selectedArray.getOrElse(currentIndex) { -1 } != -1
             if (currentIndex < questions.lastIndex) {
                 Button(
                     onClick = { currentIndex += 1 },
@@ -661,8 +680,8 @@ private fun TimedQuizPlayerDialog(
                 Button(
                     onClick = {
                         onComplete(
-                            selectedAnswers.toList(),
-                            perQuestionSeconds.toList(),
+                            selectedArray.toList(),
+                            perQuestionArray.toList(),
                             totalSeconds
                         )
                     },

@@ -21,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -250,10 +251,14 @@ private fun AuthenticatedSvtFlow(
     val profileState by viewModel.profileState.collectAsStateWithLifecycle()
     val studentRoster by viewModel.studentRoster.collectAsStateWithLifecycle()
     val studentEnrollment by viewModel.studentEnrollment.collectAsStateWithLifecycle()
+    val isSettingUpProfile by viewModel.isSettingUpProfile.collectAsStateWithLifecycle()
+    val isJoiningClass by viewModel.isJoiningClass.collectAsStateWithLifecycle()
     val actionError by viewModel.actionError.collectAsStateWithLifecycle()
     val invalidCodeMessage = LocalContext.current.getString(R.string.qr_invalid_code)
-    val authDraft = remember(currentUser.uid) { AuthSessionDraft.load(activityContext) }
+    var authDraft by remember(currentUser.uid) { mutableStateOf(AuthSessionDraft.load(activityContext)) }
     var onboardingLocalError by remember(currentUser.uid) { mutableStateOf<String?>(null) }
+    var autoSetupAttempted by remember(currentUser.uid) { mutableStateOf(false) }
+    var autoJoinAttempted by remember(currentUser.uid) { mutableStateOf(false) }
 
     val onSignOut: () -> Unit = {
         signOutUser(activityContext, scope)
@@ -288,9 +293,15 @@ private fun AuthenticatedSvtFlow(
                 massarNumber = massar,
                 birthDate = birthDate,
                 email = email,
-                mustChangePassword = mustChange
+                mustChangePassword = mustChange,
+                pendingQrToken = authDraft.pendingClassQrToken,
+                onComplete = { ok ->
+                    if (ok) {
+                        AuthSessionDraft.clear(activityContext)
+                        authDraft = AuthSessionDraft.load(activityContext)
+                    }
+                }
             )
-            AuthSessionDraft.clear(activityContext)
         }
     }
 
@@ -302,20 +313,68 @@ private fun AuthenticatedSvtFlow(
         }
 
         ProfileGateState.NeedsSetup -> {
-            AccountSetupScreen(
-                defaultName = authDraft.fullName.ifBlank { currentUser.displayName.orEmpty() },
-                defaultRole = authDraft.role,
-                defaultMassar = authDraft.massarNumber,
-                defaultEmail = authDraft.email.ifBlank {
-                    currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
-                },
-                studentRoster = studentRoster,
-                currentLanguage = currentLanguage,
-                onLanguageSelected = onLanguageSelected,
-                onSubmit = handleAccountSetupSubmit,
-                onSignOut = onSignOut,
-                serverError = onboardingLocalError ?: actionError
-            )
+            val canAutoEnrollByQr = authDraft.role == "student" &&
+                authDraft.pendingClassQrToken.isNotBlank() &&
+                authDraft.fullName.trim().length >= 2 &&
+                !autoSetupAttempted
+
+            if (canAutoEnrollByQr || isSettingUpProfile) {
+                LaunchedEffect(currentUser.uid, canAutoEnrollByQr) {
+                    if (canAutoEnrollByQr) {
+                        autoSetupAttempted = true
+                        viewModel.setupProfile(
+                            fullName = authDraft.fullName.trim(),
+                            phone = "",
+                            role = "student",
+                            massarNumber = authDraft.massarNumber,
+                            birthDate = "",
+                            email = "",
+                            mustChangePassword = false,
+                            pendingQrToken = authDraft.pendingClassQrToken,
+                            onComplete = { ok ->
+                                if (ok) {
+                                    AuthSessionDraft.clear(activityContext)
+                                    authDraft = AuthSessionDraft.load(activityContext)
+                                }
+                            }
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        CircularProgressIndicator()
+                        Text(
+                            text = stringResource(id = R.string.qr_joining_progress),
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                AccountSetupScreen(
+                    defaultName = authDraft.fullName.ifBlank { currentUser.displayName.orEmpty() },
+                    defaultRole = authDraft.role,
+                    defaultMassar = authDraft.massarNumber,
+                    defaultEmail = authDraft.email.ifBlank {
+                        currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
+                    },
+                    studentRoster = studentRoster,
+                    currentLanguage = currentLanguage,
+                    onLanguageSelected = onLanguageSelected,
+                    onSubmit = handleAccountSetupSubmit,
+                    onSignOut = onSignOut,
+                    isSubmitting = isSettingUpProfile,
+                    serverError = onboardingLocalError ?: actionError
+                )
+            }
         }
 
         is ProfileGateState.Error -> {
@@ -331,6 +390,7 @@ private fun AuthenticatedSvtFlow(
                 onLanguageSelected = onLanguageSelected,
                 onSubmit = handleAccountSetupSubmit,
                 onSignOut = onSignOut,
+                isSubmitting = isSettingUpProfile,
                 serverError = onboardingLocalError ?: actionError ?: state.message
             )
         }
@@ -341,24 +401,61 @@ private fun AuthenticatedSvtFlow(
                 val enrollment = studentEnrollment
                 when {
                     enrollment == null -> {
-                        QrJoinClassScreen(
-                            currentLanguage = currentLanguage,
-                            onLanguageSelected = onLanguageSelected,
-                            studentRoster = studentRoster,
-                            errorMessage = actionError,
-                            onJoinCode = { token ->
-                                viewModel.clearError()
+                        val pendingToken = authDraft.pendingClassQrToken
+                        if (pendingToken.isNotBlank() && !autoJoinAttempted) {
+                            LaunchedEffect(currentUser.uid, pendingToken) {
+                                autoJoinAttempted = true
                                 viewModel.joinClassByQrToken(
-                                    qrToken = token,
+                                    qrToken = pendingToken,
                                     studentName = profile.fullName,
                                     studentPhone = profile.phoneNumber,
                                     invalidCodeMessage = invalidCodeMessage,
                                     massarNumber = profile.massarNumber,
-                                    onResult = {}
+                                    onResult = {
+                                        AuthSessionDraft.savePendingClassQrToken(activityContext, "")
+                                        authDraft = AuthSessionDraft.load(activityContext)
+                                    }
                                 )
-                            },
-                            onSignOut = onSignOut
-                        )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    CircularProgressIndicator()
+                                    Text(
+                                        text = stringResource(id = R.string.qr_joining_progress),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        } else {
+                            QrJoinClassScreen(
+                                currentLanguage = currentLanguage,
+                                onLanguageSelected = onLanguageSelected,
+                                studentRoster = studentRoster,
+                                errorMessage = actionError,
+                                isJoining = isJoiningClass,
+                                onJoinCode = { token ->
+                                    viewModel.clearError()
+                                    viewModel.joinClassByQrToken(
+                                        qrToken = token,
+                                        studentName = profile.fullName,
+                                        studentPhone = profile.phoneNumber,
+                                        invalidCodeMessage = invalidCodeMessage,
+                                        massarNumber = profile.massarNumber,
+                                        onResult = {}
+                                    )
+                                },
+                                onSignOut = onSignOut
+                            )
+                        }
                     }
 
                     enrollment.status != "approved" -> {

@@ -1,7 +1,12 @@
 package com.example.data.offline
 
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import com.example.data.model.CourseResource
 import com.example.data.model.QuestionAnswerRecord
@@ -20,16 +25,29 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 class LocalUriUnavailableException(
     message: String,
     cause: Throwable? = null
 ) : IllegalStateException(message, cause)
+
+class PickedFileTooLargeException(
+    val sizeBytes: Long,
+    val maxBytes: Long
+) : IllegalStateException("Picked file size $sizeBytes exceeds max $maxBytes")
+
+data class StagedPickedFile(
+    val localFileUri: String,
+    val displayName: String,
+    val sizeBytes: Long
+)
 
 data class DownloadedResource(
     val resourceId: String,
@@ -42,7 +60,9 @@ data class DownloadedResource(
     val localFilePath: String,
     val fileSizeBytes: Long,
     val durationSeconds: Long,
-    val downloadedAtMillis: Long
+    val downloadedAtMillis: Long,
+    val publicDisplayPath: String = "",
+    val publicDownloadUri: String = ""
 ) {
     fun toCourseResource(): CourseResource = CourseResource(
         id = resourceId,
@@ -174,11 +194,14 @@ class OfflineStorageManager(
             val f = File(existing.localFilePath)
             if (f.exists() && f.length() > 0L) return@withContext f
         }
-        val downloaded = downloadResource(resource)
+        val downloaded = downloadResource(resource, exportToPublicDownloads = false)
         File(downloaded.localFilePath)
     }
 
-    suspend fun downloadResource(resource: CourseResource): DownloadedResource = withContext(Dispatchers.IO) {
+    suspend fun downloadResource(
+        resource: CourseResource,
+        exportToPublicDownloads: Boolean = true
+    ): DownloadedResource = withContext(Dispatchers.IO) {
         val safeResId = resource.id.replace(Regex("[^a-zA-Z0-9_-]"), "_").ifBlank { "res_${System.currentTimeMillis()}" }
         val normalizedUrl = normalizeDownloadUrl(resource.fileUrl)
         val ext = inferExtension(normalizedUrl, resource.type)
@@ -187,34 +210,62 @@ class OfflineStorageManager(
 
         _downloadingProgress.value = _downloadingProgress.value + (resource.id to 0.05f)
         try {
-            val uri = Uri.parse(normalizedUrl)
-            when (uri.scheme?.lowercase(Locale.US)) {
-                FIRESTORE_CHUNK_SCHEME -> {
-                    val chunkResourceId = parseChunkResourceId(normalizedUrl)
-                        ?: throw IllegalArgumentException("Invalid Firestore chunk URI: $normalizedUrl")
-                    downloadFirestoreChunks(chunkResourceId, resource.classId, tempFile) { fraction ->
-                        _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
+            val alreadyCached = targetFile.exists() && targetFile.length() > 0L
+            if (!alreadyCached) {
+                val uri = Uri.parse(normalizedUrl)
+                when (uri.scheme?.lowercase(Locale.US)) {
+                    FIRESTORE_CHUNK_SCHEME -> {
+                        val chunkResourceId = parseChunkResourceId(normalizedUrl)
+                            ?: throw IllegalArgumentException("Invalid Firestore chunk URI: $normalizedUrl")
+                        downloadFirestoreChunks(
+                            chunkResourceId = chunkResourceId,
+                            classId = resource.classId,
+                            teacherId = resource.teacherId,
+                            target = tempFile
+                        ) { fraction ->
+                            _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
+                        }
+                    }
+                    "http", "https" -> {
+                        downloadHttpFile(normalizedUrl, tempFile) { fraction ->
+                            _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
+                        }
+                    }
+                    "content", "file" -> {
+                        copyUriFile(uri, tempFile) { fraction ->
+                            _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
+                        }
+                    }
+                    else -> {
+                        throw IllegalArgumentException("Unsupported URI scheme for offline download: ${resource.fileUrl}")
                     }
                 }
-                "http", "https" -> {
-                    downloadHttpFile(normalizedUrl, tempFile) { fraction ->
-                        _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
-                    }
-                }
-                "content", "file" -> {
-                    copyUriFile(uri, tempFile) { fraction ->
-                        _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
-                    }
-                }
-                else -> {
-                    throw IllegalArgumentException("Unsupported URI scheme for offline download: ${resource.fileUrl}")
+
+                if (targetFile.exists()) targetFile.delete()
+                if (!tempFile.renameTo(targetFile)) {
+                    tempFile.copyTo(targetFile, overwrite = true)
+                    tempFile.delete()
                 }
             }
 
-            if (targetFile.exists()) targetFile.delete()
-            if (!tempFile.renameTo(targetFile)) {
-                tempFile.copyTo(targetFile, overwrite = true)
-                tempFile.delete()
+            val existingRecord = _downloadedResources.value[resource.id]
+            var publicDisplayPath = existingRecord?.publicDisplayPath.orEmpty()
+            var publicDownloadUri = existingRecord?.publicDownloadUri.orEmpty()
+            if (exportToPublicDownloads && (publicDisplayPath.isBlank() || !publicTargetExists(publicDownloadUri))) {
+                val mime = mimeTypeForResource(resource.type, normalizedUrl)
+                val exported = runCatching {
+                    saveFileToPublicDownloads(
+                        sourceFile = targetFile,
+                        title = resource.title,
+                        fallbackId = safeResId,
+                        ext = ext,
+                        mimeType = mime
+                    )
+                }.getOrNull()
+                if (exported != null) {
+                    publicDisplayPath = exported.first
+                    publicDownloadUri = exported.second
+                }
             }
 
             val record = DownloadedResource(
@@ -228,7 +279,9 @@ class OfflineStorageManager(
                 localFilePath = targetFile.absolutePath,
                 fileSizeBytes = targetFile.length(),
                 durationSeconds = resource.durationSeconds,
-                downloadedAtMillis = System.currentTimeMillis()
+                downloadedAtMillis = System.currentTimeMillis(),
+                publicDisplayPath = publicDisplayPath,
+                publicDownloadUri = publicDownloadUri
             )
             synchronized(lock) {
                 val updated = _downloadedResources.value + (resource.id to record)
@@ -249,10 +302,80 @@ class OfflineStorageManager(
             val existing = _downloadedResources.value[resourceId]
             if (existing != null) {
                 runCatching { File(existing.localFilePath).delete() }
+                deletePublicDownload(existing.publicDownloadUri)
                 val updated = _downloadedResources.value - resourceId
                 writeDownloadedResources(updated)
                 _downloadedResources.value = updated
             }
+        }
+    }
+
+    private fun publicTargetExists(uriString: String): Boolean {
+        if (uriString.isBlank()) return false
+        return runCatching {
+            val uri = Uri.parse(uriString)
+            when (uri.scheme?.lowercase(Locale.US)) {
+                "file" -> uri.path?.let { File(it).exists() } ?: false
+                "content" -> appContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false
+                else -> false
+            }
+        }.getOrDefault(false)
+    }
+
+    private fun deletePublicDownload(uriString: String) {
+        if (uriString.isBlank()) return
+        runCatching {
+            val uri = Uri.parse(uriString)
+            when (uri.scheme?.lowercase(Locale.US)) {
+                "file" -> uri.path?.let { File(it).delete() }
+                "content" -> appContext.contentResolver.delete(uri, null, null)
+            }
+        }
+    }
+
+    private fun saveFileToPublicDownloads(
+        sourceFile: File,
+        title: String,
+        fallbackId: String,
+        ext: String,
+        mimeType: String
+    ): Pair<String, String> {
+        val fileName = buildSafeDownloadFileName(title, fallbackId, ext)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$PUBLIC_DOWNLOAD_SUBDIR")
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val resolver = appContext.contentResolver
+            val insertedUri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("MediaStore Downloads insert failed")
+            try {
+                resolver.openOutputStream(insertedUri)?.use { output ->
+                    FileInputStream(sourceFile).use { input ->
+                        input.copyTo(output, bufferSize = 16 * 1024)
+                    }
+                    output.flush()
+                } ?: throw IllegalStateException("Cannot open MediaStore output stream")
+
+                val doneValues = ContentValues().apply {
+                    put(MediaStore.Downloads.IS_PENDING, 0)
+                }
+                resolver.update(insertedUri, doneValues, null, null)
+                "Téléchargements/$PUBLIC_DOWNLOAD_SUBDIR/$fileName" to insertedUri.toString()
+            } catch (e: Exception) {
+                runCatching { resolver.delete(insertedUri, null, null) }
+                throw e
+            }
+        } else {
+            val downloadsDir = File(
+                appContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: baseDir,
+                PUBLIC_DOWNLOAD_SUBDIR
+            ).apply { mkdirs() }
+            val destFile = File(downloadsDir, fileName)
+            sourceFile.copyTo(destFile, overwrite = true)
+            "Téléchargements/$PUBLIC_DOWNLOAD_SUBDIR/$fileName" to Uri.fromFile(destFile).toString()
         }
     }
 
@@ -371,13 +494,16 @@ class OfflineStorageManager(
     private suspend fun downloadFirestoreChunks(
         chunkResourceId: String,
         classId: String,
+        teacherId: String,
         target: File,
         onProgress: (Float) -> Unit
     ) {
         val db = firestore ?: throw IllegalStateException("Firestore instance missing for chunk download")
         var query = db.collection("resource_chunks")
             .whereEqualTo("resourceId", chunkResourceId)
-        if (classId.isNotBlank()) {
+        if (teacherId.isNotBlank() && userId == teacherId) {
+            query = query.whereEqualTo("teacherId", userId)
+        } else if (classId.isNotBlank()) {
             query = query.whereEqualTo("classId", classId)
         }
         val snap = query
@@ -429,6 +555,85 @@ class OfflineStorageManager(
     companion object {
         const val FIRESTORE_CHUNK_SCHEME = "firestore"
         const val FIRESTORE_CHUNK_HOST = "resource_chunks"
+        const val PUBLIC_DOWNLOAD_SUBDIR = "BioTerre SVT"
+
+        suspend fun stagePickedUriToCache(
+            context: Context,
+            uri: Uri,
+            typeHint: String,
+            maxBytes: Long
+        ): StagedPickedFile = withContext(Dispatchers.IO) {
+            val appCtx = context.applicationContext
+            val resolver = appCtx.contentResolver
+            var displayName = ""
+            runCatching {
+                resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) displayName = c.getString(0).orEmpty()
+                }
+            }
+            val mime = resolver.getType(uri)
+            val fromMime = mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+            val ext = when {
+                !fromMime.isNullOrBlank() -> fromMime.lowercase(Locale.US)
+                displayName.contains('.') -> displayName.substringAfterLast('.').lowercase(Locale.US).take(5)
+                else -> inferExtension(uri.toString(), typeHint)
+            }
+            val uploadDir = File(appCtx.cacheDir, "picked_uploads").apply { mkdirs() }
+            val target = File(uploadDir, "pick_${UUID.randomUUID().toString().take(8)}.$ext")
+            val input = try {
+                resolver.openInputStream(uri)
+            } catch (sec: SecurityException) {
+                throw LocalUriUnavailableException("Permission denied reading picked URI: $uri", sec)
+            } catch (e: Exception) {
+                throw LocalUriUnavailableException("Cannot open picked URI: $uri", e)
+            } ?: throw LocalUriUnavailableException("Empty input stream for picked URI")
+
+            var totalBytes = 0L
+            try {
+                input.use { stream ->
+                    FileOutputStream(target).use { output ->
+                        val buffer = ByteArray(16 * 1024)
+                        while (true) {
+                            val read = stream.read(buffer)
+                            if (read == -1) break
+                            totalBytes += read
+                            if (totalBytes > maxBytes) {
+                                throw PickedFileTooLargeException(totalBytes, maxBytes)
+                            }
+                            output.write(buffer, 0, read)
+                        }
+                        output.flush()
+                    }
+                }
+            } catch (e: Exception) {
+                runCatching { target.delete() }
+                throw e
+            }
+            StagedPickedFile(
+                localFileUri = Uri.fromFile(target).toString(),
+                displayName = displayName.ifBlank { target.name },
+                sizeBytes = totalBytes
+            )
+        }
+
+        fun buildSafeDownloadFileName(title: String, fallbackId: String, ext: String): String {
+            val cleanBase = title.trim()
+                .replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                .replace(Regex("_+"), "_")
+                .trim('_')
+                .take(48)
+                .ifBlank { fallbackId.take(32).ifBlank { "bioterre_file" } }
+            val cleanExt = ext.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifBlank { "bin" }
+            return if (cleanBase.endsWith(".$cleanExt", ignoreCase = true)) cleanBase else "$cleanBase.$cleanExt"
+        }
+
+        fun formatBytesReadable(bytes: Long): String {
+            return when {
+                bytes >= 1024L * 1024L -> "%.1f Mo".format(Locale.US, bytes / (1024.0 * 1024.0))
+                bytes >= 1024L -> "${bytes / 1024L} Ko"
+                else -> "$bytes o"
+            }
+        }
 
         fun parseChunkResourceId(fileUrl: String): String? {
             val trimmed = fileUrl.trim()
@@ -522,7 +727,9 @@ class OfflineStorageManager(
                         localFilePath = path,
                         fileSizeBytes = obj.optLong("fileSizeBytes", 0L),
                         durationSeconds = obj.optLong("durationSeconds", 0L),
-                        downloadedAtMillis = obj.optLong("downloadedAtMillis", 0L)
+                        downloadedAtMillis = obj.optLong("downloadedAtMillis", 0L),
+                        publicDisplayPath = obj.optString("publicDisplayPath"),
+                        publicDownloadUri = obj.optString("publicDownloadUri")
                     )
                     map[rec.resourceId] = rec
                 }
@@ -549,6 +756,8 @@ class OfflineStorageManager(
                     put("fileSizeBytes", rec.fileSizeBytes)
                     put("durationSeconds", rec.durationSeconds)
                     put("downloadedAtMillis", rec.downloadedAtMillis)
+                    put("publicDisplayPath", rec.publicDisplayPath)
+                    put("publicDownloadUri", rec.publicDownloadUri)
                 }
             )
         }

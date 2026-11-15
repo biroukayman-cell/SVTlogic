@@ -9,4 +9,10 @@
     <cache-path
         name="cache_exports"
         path="exports/" />
+    <cache-path
+        name="picked_uploads"
+        path="picked_uploads/" />
+    <external-files-path
+        name="ext_downloads"
+        path="Download/" />
 </paths>

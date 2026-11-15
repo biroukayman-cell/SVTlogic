@@ -10,7 +10,8 @@ data class PendingAuthDraft(
     val role: String = "student",
     val massarNumber: String = "",
     val email: String = "",
-    val fullName: String = ""
+    val fullName: String = "",
+    val pendingClassQrToken: String = ""
 )
 
 object AuthSessionDraft {
@@ -19,6 +20,7 @@ object AuthSessionDraft {
     private const val KEY_MASSAR = "massar"
     private const val KEY_EMAIL = "email"
     private const val KEY_FULL_NAME = "full_name"
+    private const val KEY_QR_TOKEN = "pending_qr_token"
 
     private const val PASS_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
     private val random = SecureRandom()
@@ -28,7 +30,8 @@ object AuthSessionDraft {
         role: String,
         massarNumber: String = "",
         email: String = "",
-        fullName: String = ""
+        fullName: String = "",
+        pendingClassQrToken: String = ""
     ) {
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
@@ -36,6 +39,14 @@ object AuthSessionDraft {
             .putString(KEY_MASSAR, normalizeMassar(massarNumber))
             .putString(KEY_EMAIL, email.trim())
             .putString(KEY_FULL_NAME, fullName.trim())
+            .putString(KEY_QR_TOKEN, pendingClassQrToken.trim())
+            .apply()
+    }
+
+    fun savePendingClassQrToken(context: Context, qrToken: String) {
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_QR_TOKEN, qrToken.trim())
             .apply()
     }
 
@@ -45,7 +56,8 @@ object AuthSessionDraft {
             role = prefs.getString(KEY_ROLE, "student") ?: "student",
             massarNumber = prefs.getString(KEY_MASSAR, "") ?: "",
             email = prefs.getString(KEY_EMAIL, "") ?: "",
-            fullName = prefs.getString(KEY_FULL_NAME, "") ?: ""
+            fullName = prefs.getString(KEY_FULL_NAME, "") ?: "",
+            pendingClassQrToken = prefs.getString(KEY_QR_TOKEN, "") ?: ""
         )
     }
 

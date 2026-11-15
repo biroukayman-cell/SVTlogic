@@ -1,17 +1,30 @@
 package com.example.ui.screens
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import android.util.Log
 import android.util.Patterns
 import android.util.Size
+import android.view.MotionEvent
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
@@ -44,7 +57,11 @@ import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.FlashlightOff
+import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
@@ -53,6 +70,7 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -77,6 +95,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -96,6 +115,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
@@ -103,6 +124,7 @@ import com.example.core.AppLanguage
 import com.example.core.AuthSessionDraft
 import com.example.core.QrCodeUtils
 import com.example.core.QrImageAnalyzer
+import com.example.core.QrScanResult
 import com.example.data.model.Enrollment
 import com.example.data.model.RosterStudent
 import com.example.ui.components.LanguageSwitcherRow
@@ -114,12 +136,15 @@ import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 import java.util.concurrent.Executors
 
 fun signOutUser(
@@ -177,20 +202,72 @@ fun AuthScreen(
     val localizedContext = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    var selectedAuthRole by remember { mutableStateOf<String?>(null) } // null -> role question, "student", "teacher"
-    var isTeacherRegister by remember { mutableStateOf(false) }
+    var selectedAuthRole by rememberSaveable { mutableStateOf<String?>(null) } // null, "student", "student_qr", "teacher"
+    var isTeacherRegister by rememberSaveable { mutableStateOf(false) }
 
-    var massarInput by remember { mutableStateOf("") }
-    var studentPassword by remember { mutableStateOf("") }
+    var massarInput by rememberSaveable { mutableStateOf("") }
+    var studentPassword by rememberSaveable { mutableStateOf("") }
 
-    var teacherFullName by remember { mutableStateOf("") }
-    var teacherEmail by remember { mutableStateOf("") }
-    var teacherPassword by remember { mutableStateOf("") }
-    var teacherConfirmPassword by remember { mutableStateOf("") }
+    var qrTokenInput by rememberSaveable { mutableStateOf("") }
+    var qrFullName by rememberSaveable { mutableStateOf("") }
+    var qrMassarInput by rememberSaveable { mutableStateOf("") }
+    var qrPassword by rememberSaveable { mutableStateOf("") }
+    var showInlineQrScanner by rememberSaveable { mutableStateOf(false) }
+    var showLegalDialog by rememberSaveable { mutableStateOf(false) }
+
+    var teacherFullName by rememberSaveable { mutableStateOf("") }
+    var teacherEmail by rememberSaveable { mutableStateOf("") }
+    var teacherPassword by rememberSaveable { mutableStateOf("") }
+    var teacherConfirmPassword by rememberSaveable { mutableStateOf("") }
 
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(localizedContext, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val applyQrScanResult: (QrScanResult) -> Unit = { result ->
+        if (result.classToken.isNotBlank()) {
+            qrTokenInput = result.classToken
+            if (!result.massarNumber.isNullOrBlank()) {
+                qrMassarInput = result.massarNumber
+            }
+            QrCodeUtils.copyTextToClipboard(localizedContext, "Code Classe", result.classToken)
+            Toast.makeText(
+                localizedContext,
+                localizedContext.getString(R.string.qr_code_copied, result.classToken),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCameraPermission = granted
+        if (granted) showInlineQrScanner = true
+    }
+
+    val galleryQrLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val decoded = decodeQrFromUri(localizedContext, uri)
+                if (decoded != null && decoded.classToken.isNotBlank()) {
+                    errorMessage = null
+                    applyQrScanResult(decoded)
+                } else {
+                    errorMessage = localizedContext.getString(R.string.qr_not_found_in_image)
+                }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (Firebase.auth.currentUser != null) {
@@ -304,6 +381,18 @@ fun AuthScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground,
                             modifier = Modifier.padding(top = 6.dp)
+                        )
+
+                        RoleGatewayCard(
+                            title = stringResource(id = R.string.auth_qr_quick_title),
+                            subtitle = stringResource(id = R.string.auth_qr_quick_sub),
+                            icon = Icons.Filled.QrCodeScanner,
+                            accentColor = MaterialTheme.colorScheme.tertiary,
+                            onClick = {
+                                errorMessage = null
+                                selectedAuthRole = "student_qr"
+                            },
+                            modifier = Modifier.testTag("choose_role_student_qr_button")
                         )
 
                         RoleGatewayCard(
@@ -443,6 +532,215 @@ fun AuthScreen(
                             } else {
                                 Text(
                                     text = stringResource(id = R.string.auth_sign_in_btn),
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                errorMessage = null
+                                selectedAuthRole = "student_qr"
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(id = R.string.auth_qr_quick_title))
+                        }
+                    }
+                }
+
+                AnimatedVisibility(visible = selectedAuthRole == "student_qr") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.auth_qr_quick_title),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text(
+                                text = stringResource(id = R.string.auth_qr_quick_sub),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    if (hasCameraPermission) {
+                                        showInlineQrScanner = true
+                                    } else {
+                                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("auth_qr_scan_button")
+                            ) {
+                                Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(id = R.string.auth_qr_scan_first))
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    galleryQrLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("auth_qr_gallery_button")
+                            ) {
+                                Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(id = R.string.qr_pick_from_gallery))
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = qrTokenInput,
+                            onValueChange = { qrTokenInput = it },
+                            label = { Text(stringResource(id = R.string.qr_manual_label)) },
+                            placeholder = { Text(stringResource(id = R.string.qr_manual_hint)) },
+                            leadingIcon = { Icon(Icons.Filled.Key, contentDescription = null) },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("auth_qr_token_input")
+                        )
+
+                        OutlinedTextField(
+                            value = qrFullName,
+                            onValueChange = { qrFullName = it },
+                            label = { Text(stringResource(id = R.string.field_full_name)) },
+                            leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("auth_qr_fullname_input")
+                        )
+
+                        OutlinedTextField(
+                            value = qrMassarInput,
+                            onValueChange = { qrMassarInput = it.uppercase(Locale.US) },
+                            label = { Text(stringResource(id = R.string.field_massar_optional)) },
+                            placeholder = { Text(stringResource(id = R.string.field_massar_hint)) },
+                            leadingIcon = { Icon(Icons.Filled.Badge, contentDescription = null) },
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Characters,
+                                autoCorrectEnabled = false
+                            ),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("auth_qr_massar_input")
+                        )
+
+                        OutlinedTextField(
+                            value = qrPassword,
+                            onValueChange = { qrPassword = it },
+                            label = { Text(stringResource(id = R.string.field_password)) },
+                            leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(
+                                        imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                        contentDescription = stringResource(id = R.string.field_password)
+                                    )
+                                }
+                            },
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("auth_qr_password_input")
+                        )
+
+                        AuthErrorCard(errorMessage = errorMessage)
+
+                        Button(
+                            onClick = {
+                                val cleanToken = QrCodeUtils.extractTokenFromScan(qrTokenInput)
+                                val cleanName = qrFullName.trim()
+                                val enteredMassar = AuthSessionDraft.normalizeMassar(qrMassarInput)
+                                val finalMassar = if (enteredMassar.length >= 4) {
+                                    enteredMassar
+                                } else {
+                                    "QR" + UUID.randomUUID().toString().replace("-", "").take(8).uppercase(Locale.US)
+                                }
+                                when {
+                                    cleanToken.length < 3 -> {
+                                        errorMessage = localizedContext.getString(R.string.qr_token_required_error)
+                                    }
+                                    cleanName.length < 2 -> {
+                                        errorMessage = localizedContext.getString(R.string.error_name_required)
+                                    }
+                                    qrPassword.length < 6 -> {
+                                        errorMessage = localizedContext.getString(R.string.auth_error_weak_password)
+                                    }
+                                    else -> {
+                                        errorMessage = null
+                                        isLoading = true
+                                        coroutineScope.launch {
+                                            try {
+                                                val synthEmail = AuthSessionDraft.massarToAuthEmail(finalMassar)
+                                                AuthSessionDraft.save(
+                                                    context = activityContext,
+                                                    role = "student",
+                                                    massarNumber = finalMassar,
+                                                    fullName = cleanName,
+                                                    pendingClassQrToken = cleanToken
+                                                )
+                                                try {
+                                                    Firebase.auth.createUserWithEmailAndPassword(synthEmail, qrPassword).await()
+                                                } catch (collision: FirebaseAuthUserCollisionException) {
+                                                    if (enteredMassar.length >= 4) {
+                                                        Firebase.auth.signInWithEmailAndPassword(synthEmail, qrPassword).await()
+                                                    } else {
+                                                        throw collision
+                                                    }
+                                                }
+                                                isLoading = false
+                                                onAuthSuccess()
+                                            } catch (e: Exception) {
+                                                isLoading = false
+                                                Log.e("Auth", "Direct QR registration failed", e)
+                                                errorMessage = mapFirebaseAuthError(localizedContext, e)
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !isLoading,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(54.dp)
+                                .testTag("auth_qr_submit_button")
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = stringResource(id = R.string.auth_qr_join_submit),
                                     style = MaterialTheme.typography.labelLarge
                                 )
                             }
@@ -623,8 +921,46 @@ fun AuthScreen(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            TextButton(
+                onClick = { showLegalDialog = true },
+                modifier = Modifier.testTag("auth_legal_notice_button")
+            ) {
+                Text(
+                    text = stringResource(id = R.string.legal_notice_footer),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
+    }
+
+    if (showInlineQrScanner && hasCameraPermission) {
+        Dialog(
+            onDismissRequest = { showInlineQrScanner = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            QrCameraScannerView(
+                onResultScanned = { result ->
+                    showInlineQrScanner = false
+                    applyQrScanResult(result)
+                },
+                onClose = { showInlineQrScanner = false }
+            )
+        }
+    }
+
+    if (showLegalDialog) {
+        AlertDialog(
+            onDismissRequest = { showLegalDialog = false },
+            title = { Text(stringResource(id = R.string.legal_notice_title)) },
+            text = { Text(stringResource(id = R.string.legal_notice_body)) },
+            confirmButton = {
+                Button(onClick = { showLegalDialog = false }) {
+                    Text(stringResource(id = R.string.close))
+                }
+            }
+        )
     }
 }
 
@@ -728,6 +1064,7 @@ fun AccountSetupScreen(
         newPassword: String?
     ) -> Unit,
     onSignOut: () -> Unit,
+    isSubmitting: Boolean = false,
     serverError: String? = null
 ) {
     val resolvedRole = if (studentRoster != null) "student" else defaultRole
@@ -947,12 +1284,21 @@ fun AccountSetupScreen(
                             }
                         }
                     },
+                    enabled = !isSubmitting,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
                         .testTag("setup_submit_button")
                 ) {
-                    Text(stringResource(id = R.string.setup_continue))
+                    if (isSubmitting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(stringResource(id = R.string.setup_continue))
+                    }
                 }
             }
         }
@@ -994,14 +1340,17 @@ fun QrJoinClassScreen(
     onLanguageSelected: (AppLanguage) -> Unit,
     studentRoster: RosterStudent?,
     errorMessage: String?,
+    isJoining: Boolean = false,
     onJoinCode: (String) -> Unit,
     onSignOut: () -> Unit
 ) {
     val context = LocalContext.current
-    var showScanner by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    var showScanner by rememberSaveable { mutableStateOf(false) }
     var manualCode by remember(studentRoster?.qrToken) {
         mutableStateOf(studentRoster?.qrToken.orEmpty())
     }
+    var galleryError by remember { mutableStateOf<String?>(null) }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -1016,6 +1365,29 @@ fun QrJoinClassScreen(
         if (granted) showScanner = true
     }
 
+    val galleryQrLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val decoded = decodeQrFromUri(context, uri)
+                if (decoded != null && decoded.classToken.isNotBlank()) {
+                    galleryError = null
+                    manualCode = decoded.classToken
+                    QrCodeUtils.copyTextToClipboard(context, "Code Classe", decoded.classToken)
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.qr_code_copied, decoded.classToken),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    onJoinCode(decoded.classToken)
+                } else {
+                    galleryError = context.getString(R.string.qr_not_found_in_image)
+                }
+            }
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -1023,9 +1395,18 @@ fun QrJoinClassScreen(
         if (showScanner && hasCameraPermission) {
             BackHandler { showScanner = false }
             QrCameraScannerView(
-                onCodeScanned = { scanned ->
+                onResultScanned = { result ->
                     showScanner = false
-                    onJoinCode(scanned)
+                    if (result.classToken.isNotBlank()) {
+                        manualCode = result.classToken
+                        QrCodeUtils.copyTextToClipboard(context, "Code Classe", result.classToken)
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.qr_code_copied, result.classToken),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        onJoinCode(result.classToken)
+                    }
                 },
                 onClose = { showScanner = false }
             )
@@ -1102,6 +1483,7 @@ fun QrJoinClassScreen(
                                 )
                                 Button(
                                     onClick = { onJoinCode(studentRoster.qrToken) },
+                                    enabled = !isJoining,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .testTag("qr_quick_join_button")
@@ -1120,6 +1502,7 @@ fun QrJoinClassScreen(
                                 permissionLauncher.launch(Manifest.permission.CAMERA)
                             }
                         },
+                        enabled = !isJoining,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(54.dp)
@@ -1128,6 +1511,23 @@ fun QrJoinClassScreen(
                         Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
                         Spacer(Modifier.size(10.dp))
                         Text(stringResource(id = R.string.qr_scan_button))
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            galleryQrLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        enabled = !isJoining,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("qr_gallery_button")
+                    ) {
+                        Icon(Icons.Filled.Image, contentDescription = null)
+                        Spacer(Modifier.size(8.dp))
+                        Text(stringResource(id = R.string.qr_pick_from_gallery))
                     }
 
                     if (!hasCameraPermission) {
@@ -1152,9 +1552,10 @@ fun QrJoinClassScreen(
                             .testTag("qr_manual_code_input")
                     )
 
-                    if (!errorMessage.isNullOrBlank()) {
+                    val shownErr = galleryError ?: errorMessage
+                    if (!shownErr.isNullOrBlank()) {
                         Text(
-                            text = errorMessage,
+                            text = shownErr,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -1165,13 +1566,17 @@ fun QrJoinClassScreen(
                             val token = QrCodeUtils.extractTokenFromScan(manualCode)
                             if (token.isNotBlank()) onJoinCode(token)
                         },
-                        enabled = manualCode.isNotBlank(),
+                        enabled = manualCode.isNotBlank() && !isJoining,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
                             .testTag("qr_manual_submit_button")
                     ) {
-                        Text(stringResource(id = R.string.qr_join_submit))
+                        if (isJoining) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text(stringResource(id = R.string.qr_join_submit))
+                        }
                     }
                 }
             }
@@ -1179,23 +1584,65 @@ fun QrJoinClassScreen(
     }
 }
 
-@Composable
-private fun QrCameraScannerView(
-    onCodeScanned: (String) -> Unit,
-    onClose: () -> Unit
-) {
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
-
-    DisposableEffect(Unit) {
-        onDispose { cameraExecutor.shutdown() }
+private suspend fun decodeQrFromUri(context: Context, uri: Uri): QrScanResult? =
+    withContext(Dispatchers.IO) {
+        runCatching {
+            val bmp: Bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val src = ImageDecoder.createSource(context.contentResolver, uri)
+                ImageDecoder.decodeBitmap(src) { decoder, _, _ ->
+                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+            }
+            QrCodeUtils.decodeQrFromBitmap(bmp)
+        }.getOrNull()
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+@SuppressLint("ClickableViewAccessibility")
+@Composable
+private fun QrCameraScannerView(
+    onResultScanned: (QrScanResult) -> Unit,
+    onClose: () -> Unit
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
+    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    var boundCamera by remember { mutableStateOf<Camera?>(null) }
+    var torchEnabled by remember { mutableStateOf(false) }
+    var galleryError by remember { mutableStateOf<String?>(null) }
+
+    val galleryPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val decoded = decodeQrFromUri(context, uri)
+                if (decoded != null && decoded.classToken.isNotBlank()) {
+                    onResultScanned(decoded)
+                } else {
+                    galleryError = context.getString(R.string.qr_not_found_in_image)
+                }
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching { boundCamera?.cameraControl?.enableTorch(false) }
+            cameraExecutor.shutdown()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                val previewView = PreviewView(ctx)
+                val previewView = PreviewView(ctx).apply {
+                    scaleType = PreviewView.ScaleType.FILL_CENTER
+                }
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                 cameraProviderFuture.addListener({
                     try {
@@ -1203,24 +1650,41 @@ private fun QrCameraScannerView(
                         val preview = Preview.Builder().build().also {
                             it.surfaceProvider = previewView.surfaceProvider
                         }
+                        val resolutionSelector = ResolutionSelector.Builder()
+                            .setResolutionStrategy(
+                                ResolutionStrategy(
+                                    Size(1280, 720),
+                                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                                )
+                            )
+                            .build()
                         val analysis = ImageAnalysis.Builder()
-                            .setTargetResolution(Size(1280, 720))
+                            .setResolutionSelector(resolutionSelector)
                             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                             .build()
                             .also {
-                                it.setAnalyzer(cameraExecutor, QrImageAnalyzer { token ->
+                                it.setAnalyzer(cameraExecutor, QrImageAnalyzer { result ->
                                     ContextCompat.getMainExecutor(ctx).execute {
-                                        onCodeScanned(token)
+                                        onResultScanned(result)
                                     }
                                 })
                             }
                         cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
+                        val camera = cameraProvider.bindToLifecycle(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
                             analysis
                         )
+                        boundCamera = camera
+                        previewView.setOnTouchListener { _, event ->
+                            if (event.action == MotionEvent.ACTION_UP) {
+                                val point = previewView.meteringPointFactory.createPoint(event.x, event.y)
+                                val action = FocusMeteringAction.Builder(point).build()
+                                camera.cameraControl.startFocusAndMetering(action)
+                            }
+                            true
+                        }
                     } catch (e: Exception) {
                         Log.e("QrScanner", "Camera binding failed", e)
                     }
@@ -1236,20 +1700,81 @@ private fun QrCameraScannerView(
                 .border(3.dp, Color(0xFF7AD9AD), RoundedCornerShape(24.dp))
         )
 
-        IconButton(
-            onClick = onClose,
+        Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .safeDrawingPadding()
-                .padding(16.dp)
-                .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.6f))
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = stringResource(id = R.string.qr_close_scanner),
-                tint = Color.White
-            )
+            if (boundCamera?.cameraInfo?.hasFlashUnit() == true) {
+                IconButton(
+                    onClick = {
+                        val next = !torchEnabled
+                        torchEnabled = next
+                        boundCamera?.cameraControl?.enableTorch(next)
+                    },
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.6f))
+                ) {
+                    Icon(
+                        imageVector = if (torchEnabled) Icons.Filled.FlashlightOn else Icons.Filled.FlashlightOff,
+                        contentDescription = stringResource(id = R.string.qr_torch_toggle),
+                        tint = Color.White
+                    )
+                }
+            }
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.6f))
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = stringResource(id = R.string.qr_close_scanner),
+                    tint = Color.White
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .safeDrawingPadding()
+                .padding(bottom = 24.dp, start = 24.dp, end = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (!galleryError.isNullOrBlank()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = galleryError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = {
+                    galleryPicker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
+                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.Black.copy(alpha = 0.65f),
+                    contentColor = Color.White
+                )
+            ) {
+                Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(id = R.string.qr_pick_from_gallery))
+            }
         }
     }
 }

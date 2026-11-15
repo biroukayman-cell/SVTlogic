@@ -36,10 +36,12 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.snapshots
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
@@ -91,6 +93,25 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
     }
 
+    private fun <T> Flow<T>.retryTransientFirestoreErrors(): Flow<T> {
+        return this.retryWhen { cause, attempt ->
+            val fsErr = generateSequence(cause) { it.cause }
+                .filterIsInstance<FirebaseFirestoreException>()
+                .firstOrNull()
+            val code = fsErr?.code
+            val isTransient = code == FirebaseFirestoreException.Code.UNAVAILABLE ||
+                code == FirebaseFirestoreException.Code.DEADLINE_EXCEEDED ||
+                code == FirebaseFirestoreException.Code.ABORTED ||
+                (code == FirebaseFirestoreException.Code.PERMISSION_DENIED && attempt < 2L)
+            if (isTransient && attempt < 4L) {
+                delay(650L * (attempt + 1L))
+                true
+            } else {
+                false
+            }
+        }
+    }
+
     // ---------------------------------------------------------
     // 1. User Profile & Streak
     // ---------------------------------------------------------
@@ -105,6 +126,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
                     null
                 }
             }
+            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.GET, path, userId)
             .collect { emit(it) }
     }
@@ -351,18 +373,22 @@ class SvtRepository(private val db: FirebaseFirestore) {
         requireUserId()
         val clean = qrToken.trim()
         if (clean.isEmpty()) return null
-        val docRef = db.collection("class_codes").document(clean)
+        val candidates = listOf(clean, clean.uppercase(Locale.US)).distinct()
+        var lastPath = "class_codes/$clean"
         return try {
-            val snap = docRef.get().await()
-            if (snap.exists()) {
-                snap.toObject(ClassCode::class.java, ServerTimestampBehavior.ESTIMATE)
-            } else {
-                null
+            for (candidate in candidates) {
+                val docRef = db.collection("class_codes").document(candidate)
+                lastPath = docRef.path
+                val snap = docRef.get().await()
+                if (snap.exists()) {
+                    return snap.toObject(ClassCode::class.java, ServerTimestampBehavior.ESTIMATE)
+                }
             }
+            null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.GET, docRef.path)
+            handleFirestoreError(e, OperationType.GET, lastPath)
             null
         }
     }
@@ -424,6 +450,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
                     null
                 }
             }
+            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.GET, path, studentId)
             .collect { emit(it) }
     }
@@ -445,33 +472,52 @@ class SvtRepository(private val db: FirebaseFirestore) {
         classCode: ClassCode,
         studentName: String,
         studentPhone: String,
-        massarNumber: String = ""
-    ) {
+        massarNumber: String = "",
+        qrToken: String = ""
+    ): Enrollment {
         val uid = requireUserId()
         val docRef = db.collection("enrollments").document(uid)
-        val existing = try {
-            docRef.get().await()
-        } catch (_: Exception) {
-            null
-        }
-        val payload = mapOf(
+        val existing = runCatching { docRef.get().await() }.getOrNull()
+        val resolvedToken = qrToken.trim().ifBlank { classCode.id.trim() }
+        val status = if (resolvedToken.isNotBlank()) "approved" else "pending"
+        val cleanName = studentName.trim().ifBlank { "Élève SVT" }
+        val cleanPhone = studentPhone.trim()
+        val cleanMassar = massarNumber.trim()
+        val payload = mutableMapOf<String, Any>(
             "studentId" to uid,
             "classId" to classCode.classId,
             "className" to classCode.className,
             "teacherId" to classCode.teacherId,
             "teacherName" to classCode.teacherName,
-            "studentName" to studentName.trim(),
-            "studentPhone" to studentPhone.trim(),
-            "massarNumber" to massarNumber.trim(),
-            "status" to "pending",
+            "studentName" to cleanName,
+            "studentPhone" to cleanPhone,
+            "massarNumber" to cleanMassar,
+            "status" to status,
             "requestedAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
+        if (resolvedToken.isNotBlank()) {
+            payload["qrToken"] = resolvedToken
+            payload["validatedAt"] = FieldValue.serverTimestamp()
+        }
         try {
             if (existing != null && existing.exists()) {
                 docRef.delete().await()
             }
             docRef.set(payload).await()
+            return Enrollment(
+                id = uid,
+                studentId = uid,
+                classId = classCode.classId,
+                className = classCode.className,
+                teacherId = classCode.teacherId,
+                teacherName = classCode.teacherName,
+                studentName = cleanName,
+                studentPhone = cleanPhone,
+                massarNumber = cleanMassar,
+                qrToken = resolvedToken,
+                status = status
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -645,15 +691,15 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .collect { emit(it) }
     }
 
-    fun observeStudentQuizzes(studentId: String): Flow<List<Quiz>> = flow {
+    fun observeStudentQuizzes(classId: String): Flow<List<Quiz>> = flow {
         db.collection("quizzes")
-            .whereArrayContains("approvedStudentIds", studentId)
+            .whereEqualTo("classId", classId)
             .snapshots()
             .map { snapshot ->
                 snapshot.toObjects(Quiz::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
             }
-            .logFirestoreErrors(OperationType.LIST, "quizzes", studentId)
+            .logFirestoreErrors(OperationType.LIST, "quizzes", classId)
             .collect { emit(it) }
     }
 
@@ -924,15 +970,15 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .collect { emit(it) }
     }
 
-    fun observeStudentResources(studentId: String): Flow<List<CourseResource>> = flow {
+    fun observeStudentResources(classId: String): Flow<List<CourseResource>> = flow {
         db.collection("resources")
-            .whereArrayContains("approvedStudentIds", studentId)
+            .whereEqualTo("classId", classId)
             .snapshots()
             .map { snapshot ->
                 snapshot.toObjects(CourseResource::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
             }
-            .logFirestoreErrors(OperationType.LIST, "resources", studentId)
+            .logFirestoreErrors(OperationType.LIST, "resources", classId)
             .collect { emit(it) }
     }
 
@@ -1221,12 +1267,13 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val safeStudentName = studentName.trim().ifBlank { "Élève" }.take(100)
 
         try {
-            val existingSnap = docRef.get().await()
-            val remotePrevPos = if (existingSnap.exists()) {
-                existingSnap.getLong("maxPositionSeconds") ?: 0L
+            val existingSnap = runCatching { docRef.get().await() }.getOrNull()
+            val docExists = existingSnap?.exists() == true
+            val remotePrevPos = if (docExists) {
+                existingSnap?.getLong("maxPositionSeconds") ?: 0L
             } else 0L
-            val remotePrevPct = if (existingSnap.exists()) {
-                existingSnap.getDouble("watchedPercentage") ?: 0.0
+            val remotePrevPct = if (docExists) {
+                existingSnap?.getDouble("watchedPercentage") ?: 0.0
             } else 0.0
 
             val prevMax = maxOf(existingTracking?.maxPositionSeconds ?: 0L, remotePrevPos)
@@ -1240,7 +1287,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 watchedPercentOverride = watchedPercentOverride
             )
 
-            if (!existingSnap.exists()) {
+            if (!docExists) {
                 val createPayload = mapOf(
                     "resourceId" to resource.id,
                     "classId" to resource.classId,
@@ -1288,6 +1335,20 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
     }
 
+    suspend fun recordFileOpenedTracking(
+        resource: CourseResource,
+        studentName: String
+    ): VideoTracking {
+        return upsertVideoTracking(
+            resource = resource,
+            studentName = studentName,
+            positionSeconds = 1L,
+            totalDurationSeconds = 1L,
+            existingTracking = null,
+            watchedPercentOverride = 100.0
+        )
+    }
+
     // ---------------------------------------------------------
     // 6. Announcements
     // ---------------------------------------------------------
@@ -1303,15 +1364,15 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .collect { emit(it) }
     }
 
-    fun observeStudentAnnouncements(studentId: String): Flow<List<Announcement>> = flow {
+    fun observeStudentAnnouncements(classId: String): Flow<List<Announcement>> = flow {
         db.collection("announcements")
-            .whereArrayContains("approvedStudentIds", studentId)
+            .whereEqualTo("classId", classId)
             .snapshots()
             .map { snapshot ->
                 snapshot.toObjects(Announcement::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
             }
-            .logFirestoreErrors(OperationType.LIST, "announcements", studentId)
+            .logFirestoreErrors(OperationType.LIST, "announcements", classId)
             .collect { emit(it) }
     }
 

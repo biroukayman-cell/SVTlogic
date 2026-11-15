@@ -1,5 +1,8 @@
 package com.example.core
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.camera.core.ImageAnalysis
@@ -8,12 +11,27 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
 import com.google.zxing.EncodeHintType
+import com.google.zxing.LuminanceSource
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.GlobalHistogramBinarizer
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeWriter
 
+data class QrScanResult(
+    val rawText: String,
+    val classToken: String,
+    val massarNumber: String?
+)
+
 object QrCodeUtils {
+    private val decodeHints: Map<DecodeHintType, Any> = mapOf(
+        DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+        DecodeHintType.TRY_HARDER to true,
+        DecodeHintType.CHARACTER_SET to "UTF-8"
+    )
+
     fun generateQrBitmap(content: String, sizePx: Int = 512): Bitmap {
         val hints = mapOf(
             EncodeHintType.MARGIN to 1,
@@ -33,22 +51,32 @@ object QrCodeUtils {
         return bitmap
     }
 
+    fun parseScanPayload(rawValue: String): QrScanResult {
+        val token = extractTokenFromScan(rawValue)
+        val massar = extractMassarFromScan(rawValue)
+        return QrScanResult(
+            rawText = rawValue.trim(),
+            classToken = token,
+            massarNumber = massar
+        )
+    }
+
     fun extractTokenFromScan(rawValue: String): String {
         val trimmed = rawValue.trim()
-        val withoutPrefix = if (trimmed.startsWith("BIOTERRE:")) {
-            trimmed.removePrefix("BIOTERRE:").trim()
-        } else {
-            trimmed
+        val withoutPrefix = when {
+            trimmed.startsWith("BIOTERRE:", ignoreCase = true) ->
+                trimmed.substring("BIOTERRE:".length).trim()
+            else -> trimmed
         }
         return withoutPrefix.substringBefore("|").trim()
     }
 
     fun extractMassarFromScan(rawValue: String): String? {
         val trimmed = rawValue.trim()
-        val withoutPrefix = if (trimmed.startsWith("BIOTERRE:")) {
-            trimmed.removePrefix("BIOTERRE:").trim()
-        } else {
-            trimmed
+        val withoutPrefix = when {
+            trimmed.startsWith("BIOTERRE:", ignoreCase = true) ->
+                trimmed.substring("BIOTERRE:".length).trim()
+            else -> trimmed
         }
         return if ("|" in withoutPrefix) {
             withoutPrefix.substringAfter("|").trim().takeIf { it.isNotBlank() }
@@ -56,22 +84,70 @@ object QrCodeUtils {
             null
         }
     }
+
+    fun copyTextToClipboard(context: Context, label: String, text: String): Boolean {
+        return runCatching {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                ?: return false
+            clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+            true
+        }.getOrDefault(false)
+    }
+
+    fun decodeQrFromBitmap(bitmap: Bitmap): QrScanResult? {
+        val scaled = if (bitmap.width > 1400 || bitmap.height > 1400) {
+            val ratio = minOf(1400f / bitmap.width.toFloat(), 1400f / bitmap.height.toFloat())
+            Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * ratio).toInt().coerceAtLeast(1),
+                (bitmap.height * ratio).toInt().coerceAtLeast(1),
+                true
+            )
+        } else {
+            bitmap
+        }
+        val width = scaled.width
+        val height = scaled.height
+        val pixels = IntArray(width * height)
+        scaled.getPixels(pixels, 0, width, 0, 0, width, height)
+        val source: LuminanceSource = RGBLuminanceSource(width, height, pixels)
+        val decoded = decodeWithFallbacks(source) ?: return null
+        return parseScanPayload(decoded)
+    }
+
+    internal fun decodeWithFallbacks(source: LuminanceSource): String? {
+        val reader = MultiFormatReader().apply { setHints(decodeHints) }
+        val candidates = listOf(
+            { BinaryBitmap(HybridBinarizer(source)) },
+            { BinaryBitmap(GlobalHistogramBinarizer(source)) },
+            { BinaryBitmap(HybridBinarizer(source.invert())) }
+        )
+        for (makeBitmap in candidates) {
+            try {
+                val res = reader.decodeWithState(makeBitmap())
+                if (!res.text.isNullOrBlank()) {
+                    return res.text
+                }
+            } catch (_: Exception) {
+                // Try next binarizer
+            } finally {
+                reader.reset()
+            }
+        }
+        return null
+    }
 }
 
 class QrImageAnalyzer(
-    private val onQrDetected: (String) -> Unit
+    private val onQrDetected: (QrScanResult) -> Unit
 ) : ImageAnalysis.Analyzer {
-
-    private val reader = MultiFormatReader().apply {
-        setHints(
-            mapOf(
-                DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE)
-            )
-        )
-    }
 
     @Volatile
     private var alreadyDetected = false
+
+    fun reset() {
+        alreadyDetected = false
+    }
 
     override fun analyze(image: ImageProxy) {
         if (alreadyDetected) {
@@ -81,11 +157,9 @@ class QrImageAnalyzer(
         try {
             val plane = image.planes.firstOrNull()
             if (plane != null) {
-                val buffer = plane.buffer
-                val bytes = ByteArray(buffer.remaining())
-                buffer.get(bytes)
+                val lumaBytes = extractLumaPlane(plane, image.width, image.height)
                 val source = PlanarYUVLuminanceSource(
-                    bytes,
+                    lumaBytes,
                     image.width,
                     image.height,
                     0,
@@ -94,18 +168,54 @@ class QrImageAnalyzer(
                     image.height,
                     false
                 )
-                val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
-                val result = reader.decodeWithState(binaryBitmap)
-                if (!result.text.isNullOrBlank()) {
+                val decodedText = QrCodeUtils.decodeWithFallbacks(source)
+                if (!decodedText.isNullOrBlank()) {
                     alreadyDetected = true
-                    onQrDetected(QrCodeUtils.extractTokenFromScan(result.text))
+                    onQrDetected(QrCodeUtils.parseScanPayload(decodedText))
                 }
             }
         } catch (_: Exception) {
             // Frame did not contain a readable QR code
         } finally {
-            reader.reset()
             image.close()
         }
+    }
+
+    private fun extractLumaPlane(plane: ImageProxy.PlaneProxy, width: Int, height: Int): ByteArray {
+        val buffer = plane.buffer.duplicate()
+        buffer.rewind()
+        val rowStride = plane.rowStride
+        val pixelStride = plane.pixelStride
+        val remaining = buffer.remaining()
+
+        if (pixelStride == 1 && rowStride == width && remaining >= width * height) {
+            val out = ByteArray(width * height)
+            buffer.get(out, 0, out.size)
+            return out
+        }
+
+        val raw = ByteArray(remaining)
+        buffer.get(raw)
+        val compact = ByteArray(width * height)
+        var dstIdx = 0
+        for (row in 0 until height) {
+            val rowOffset = row * rowStride
+            if (pixelStride == 1) {
+                val copyLen = minOf(width, raw.size - rowOffset)
+                if (copyLen > 0) {
+                    System.arraycopy(raw, rowOffset, compact, dstIdx, copyLen)
+                }
+                dstIdx += width
+            } else {
+                for (col in 0 until width) {
+                    val srcIdx = rowOffset + col * pixelStride
+                    if (srcIdx < raw.size) {
+                        compact[dstIdx] = raw[srcIdx]
+                    }
+                    dstIdx++
+                }
+            }
+        }
+        return compact
     }
 }

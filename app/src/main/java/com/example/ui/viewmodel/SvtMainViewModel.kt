@@ -99,24 +99,50 @@ class SvtMainViewModel(
     private val _isSyncingOffline = MutableStateFlow(false)
     val isSyncingOffline: StateFlow<Boolean> = _isSyncingOffline.asStateFlow()
 
-    val profileState: StateFlow<ProfileGateState> = repository.observeUserProfile(currentUserId)
-        .map { profile ->
-            if (profile == null) ProfileGateState.NeedsSetup
-            else ProfileGateState.Ready(profile)
-        }
-        .catch { error ->
-            val fsErr = generateSequence(error) { it.cause }
-                .filterIsInstance<FirebaseFirestoreException>()
-                .firstOrNull()
-            if (fsErr == null && error is CancellationException) throw error
-            Log.w(TAG, "Profile stream error", fsErr ?: error)
-            emit(ProfileGateState.Error((fsErr ?: error).message ?: "Error loading profile"))
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000L),
-            initialValue = ProfileGateState.Loading
+    private val _optimisticProfile = MutableStateFlow<UserProfile?>(null)
+    private val _optimisticEnrollment = MutableStateFlow<Enrollment?>(null)
+    private val _isSettingUpProfile = MutableStateFlow(false)
+    val isSettingUpProfile: StateFlow<Boolean> = _isSettingUpProfile.asStateFlow()
+
+    private val _isJoiningClass = MutableStateFlow(false)
+    val isJoiningClass: StateFlow<Boolean> = _isJoiningClass.asStateFlow()
+
+    private val _profileRetryTrigger = MutableStateFlow(0)
+
+    val profileState: StateFlow<ProfileGateState> = combine(
+        _profileRetryTrigger.flatMapLatest {
+            repository.observeUserProfile(currentUserId)
+                .map<UserProfile?, Result<UserProfile?>> { Result.success(it) }
+                .catch { error ->
+                    val fsErr = generateSequence(error) { it.cause }
+                        .filterIsInstance<FirebaseFirestoreException>()
+                        .firstOrNull()
+                    if (fsErr == null && error is CancellationException) throw error
+                    Log.w(TAG, "Profile stream error", fsErr ?: error)
+                    emit(Result.failure(fsErr ?: error))
+                }
+        },
+        _optimisticProfile
+    ) { remoteResult, optimistic ->
+        remoteResult.fold(
+            onSuccess = { remote ->
+                val resolved = remote ?: optimistic
+                if (resolved == null) ProfileGateState.NeedsSetup
+                else ProfileGateState.Ready(resolved)
+            },
+            onFailure = { err ->
+                if (optimistic != null) {
+                    ProfileGateState.Ready(optimistic)
+                } else {
+                    ProfileGateState.Error(err.message ?: "Error loading profile")
+                }
+            }
         )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000L),
+        initialValue = ProfileGateState.Loading
+    )
 
     private val roleFlow = profileState.map { state ->
         (state as? ProfileGateState.Ready)?.profile?.role
@@ -182,16 +208,25 @@ class SvtMainViewModel(
         .catch { emit(null) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    val studentEnrollment: StateFlow<Enrollment?> = roleFlow.flatMapLatest { role ->
-        if (role == "student") repository.observeStudentEnrollment(currentUserId)
-            .catch { emit(null) }
-        else flowOf(null)
+    val studentEnrollment: StateFlow<Enrollment?> = combine(
+        roleFlow.flatMapLatest { role ->
+            if (role == "student") repository.observeStudentEnrollment(currentUserId)
+                .catch { emit(null) }
+            else flowOf(null)
+        },
+        _optimisticEnrollment
+    ) { remote, optimistic ->
+        remote ?: optimistic
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    private val isApprovedStudent = studentEnrollment.map { it?.status == "approved" }
+    private val approvedClassId = studentEnrollment.map { enr ->
+        if (enr?.status == "approved" && enr.classId.isNotBlank()) enr.classId else null
+    }
 
-    private val remoteStudentQuizzes: StateFlow<List<Quiz>> = isApprovedStudent.flatMapLatest { approved ->
-        if (approved) repository.observeStudentQuizzes(currentUserId).catch { emit(emptyList()) }
+    private val isApprovedStudent = approvedClassId.map { it != null }
+
+    private val remoteStudentQuizzes: StateFlow<List<Quiz>> = approvedClassId.flatMapLatest { classId ->
+        if (classId != null) repository.observeStudentQuizzes(classId).catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
@@ -225,8 +260,8 @@ class SvtMainViewModel(
         pendingAsAttempts + remote
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    private val remoteStudentResources: StateFlow<List<CourseResource>> = isApprovedStudent.flatMapLatest { approved ->
-        if (approved) repository.observeStudentResources(currentUserId).catch { emit(emptyList()) }
+    private val remoteStudentResources: StateFlow<List<CourseResource>> = approvedClassId.flatMapLatest { classId ->
+        if (classId != null) repository.observeStudentResources(classId).catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
@@ -265,8 +300,15 @@ class SvtMainViewModel(
         byResId.values.toList()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val studentAnnouncements: StateFlow<List<Announcement>> = isApprovedStudent.flatMapLatest { approved ->
-        if (approved) repository.observeStudentAnnouncements(currentUserId).catch { emit(emptyList()) }
+    val studentVideoOnlyTracking: StateFlow<List<VideoTracking>> = combine(
+        studentVideoTracking,
+        studentResources
+    ) { trackings, resources ->
+        filterVideoOnlyTrackings(trackings, resources)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    val studentAnnouncements: StateFlow<List<Announcement>> = approvedClassId.flatMapLatest { classId ->
+        if (classId != null) repository.observeStudentAnnouncements(classId).catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
@@ -363,11 +405,15 @@ class SvtMainViewModel(
         massarNumber: String = "",
         birthDate: String = "",
         email: String = "",
-        mustChangePassword: Boolean = false
+        mustChangePassword: Boolean = false,
+        pendingQrToken: String = "",
+        onComplete: (Boolean) -> Unit = {}
     ) {
+        if (_isSettingUpProfile.value) return
         viewModelScope.launch {
+            _isSettingUpProfile.value = true
             try {
-                repository.createUserProfile(
+                val createdProfile = repository.createUserProfile(
                     fullName = fullName,
                     phoneNumber = phone,
                     role = role,
@@ -377,10 +423,31 @@ class SvtMainViewModel(
                     email = email,
                     mustChangePassword = mustChangePassword
                 )
+                _optimisticProfile.value = createdProfile
+                _profileRetryTrigger.value += 1
+
+                val cleanToken = pendingQrToken.trim()
+                if (role == "student" && cleanToken.isNotBlank()) {
+                    val code = repository.lookupClassByQrToken(cleanToken)
+                    if (code != null) {
+                        val enrollment = repository.requestEnrollment(
+                            classCode = code,
+                            studentName = createdProfile.fullName,
+                            studentPhone = createdProfile.phoneNumber,
+                            massarNumber = createdProfile.massarNumber,
+                            qrToken = cleanToken
+                        )
+                        _optimisticEnrollment.value = enrollment
+                    }
+                }
+                onComplete(true)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _actionError.value = e.localizedMessage ?: "Failed to create profile"
+                onComplete(false)
+            } finally {
+                _isSettingUpProfile.value = false
             }
         }
     }
@@ -449,7 +516,7 @@ class SvtMainViewModel(
         if (profile.role != "student" || streakCheckedThisSession) return
         streakCheckedThisSession = true
         val teacherId = studentEnrollment.value?.teacherId ?: ""
-        evaluateAndNotifyBadges(uiContext, profile, studentAttempts.value, studentVideoTracking.value, teacherId)
+        evaluateAndNotifyBadges(uiContext, profile, studentAttempts.value, studentVideoOnlyTracking.value, teacherId)
     }
 
     private fun evaluateAndNotifyBadges(
@@ -493,14 +560,24 @@ class SvtMainViewModel(
         massarNumber: String = "",
         onResult: (Boolean) -> Unit
     ) {
+        if (_isJoiningClass.value) return
         viewModelScope.launch {
+            _isJoiningClass.value = true
             try {
-                val code = repository.lookupClassByQrToken(qrToken)
+                val cleanToken = qrToken.trim()
+                val code = repository.lookupClassByQrToken(cleanToken)
                 if (code == null) {
                     _actionError.value = invalidCodeMessage
                     onResult(false)
                 } else {
-                    repository.requestEnrollment(code, studentName, studentPhone, massarNumber)
+                    val enrollment = repository.requestEnrollment(
+                        classCode = code,
+                        studentName = studentName,
+                        studentPhone = studentPhone,
+                        massarNumber = massarNumber,
+                        qrToken = cleanToken
+                    )
+                    _optimisticEnrollment.value = enrollment
                     onResult(true)
                 }
             } catch (e: CancellationException) {
@@ -508,6 +585,8 @@ class SvtMainViewModel(
             } catch (e: Exception) {
                 _actionError.value = e.localizedMessage ?: invalidCodeMessage
                 onResult(false)
+            } finally {
+                _isJoiningClass.value = false
             }
         }
     }
@@ -515,6 +594,7 @@ class SvtMainViewModel(
     fun resetRejectedEnrollment() {
         viewModelScope.launch {
             try {
+                _optimisticEnrollment.value = null
                 repository.clearOwnEnrollment()
             } catch (e: CancellationException) {
                 throw e
@@ -872,7 +952,7 @@ class SvtMainViewModel(
                     uiContext = uiContext,
                     profile = profile,
                     attempts = updatedAttempts,
-                    trackings = studentVideoTracking.value,
+                    trackings = studentVideoOnlyTracking.value,
                     teacherId = quiz.teacherId
                 )
             } catch (e: CancellationException) {
@@ -953,7 +1033,7 @@ class SvtMainViewModel(
                                 uiContext = uiContext,
                                 profile = profile,
                                 attempts = studentAttempts.value,
-                                trackings = studentVideoTracking.value,
+                                trackings = studentVideoOnlyTracking.value,
                                 teacherId = lastTeacherId.ifBlank { studentEnrollment.value?.teacherId.orEmpty() }
                             )
                         }
@@ -1095,8 +1175,13 @@ class SvtMainViewModel(
     fun downloadResourceOffline(uiContext: Context, resource: CourseResource) {
         viewModelScope.launch {
             try {
-                offlineStorage.downloadResource(resource)
-                _statusMessage.value = uiContext.getString(R.string.offline_download_success, resource.title)
+                val record = offlineStorage.downloadResource(resource, exportToPublicDownloads = true)
+                val sizeLabel = OfflineStorageManager.formatBytesReadable(record.fileSizeBytes)
+                _statusMessage.value = if (record.publicDisplayPath.isNotBlank()) {
+                    uiContext.getString(R.string.offline_download_saved_device, resource.title, sizeLabel)
+                } else {
+                    uiContext.getString(R.string.offline_download_success, resource.title)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: LocalUriUnavailableException) {
@@ -1113,6 +1198,53 @@ class SvtMainViewModel(
     fun removeOfflineResource(resourceId: String) {
         viewModelScope.launch {
             offlineStorage.removeDownloadedResource(resourceId)
+        }
+    }
+
+    fun recordFileOpened(
+        uiContext: Context,
+        resource: CourseResource
+    ) {
+        val profile = (profileState.value as? ProfileGateState.Ready)?.profile ?: return
+        if (profile.role != "student" || resource.id.isBlank()) return
+
+        val existing = studentVideoTracking.value.firstOrNull { it.resourceId == resource.id }
+        if (existing != null && existing.watchedPercentage >= 100.0) return
+
+        viewModelScope.launch {
+            if (!isOnline.value) {
+                offlineStorage.enqueuePendingVideoTracking(
+                    PendingVideoTracking(
+                        resource = resource,
+                        studentName = profile.fullName,
+                        maxPositionSeconds = 1L,
+                        totalDurationSeconds = 1L,
+                        updatedAtMillis = System.currentTimeMillis(),
+                        watchedPercentageOverride = 100.0
+                    )
+                )
+                return@launch
+            }
+            try {
+                repository.recordFileOpenedTracking(
+                    resource = resource,
+                    studentName = profile.fullName
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "File open tracking offline fallback", e)
+                offlineStorage.enqueuePendingVideoTracking(
+                    PendingVideoTracking(
+                        resource = resource,
+                        studentName = profile.fullName,
+                        maxPositionSeconds = 1L,
+                        totalDurationSeconds = 1L,
+                        updatedAtMillis = System.currentTimeMillis(),
+                        watchedPercentageOverride = 100.0
+                    )
+                )
+            }
         }
     }
 
@@ -1153,8 +1285,10 @@ class SvtMainViewModel(
                     existingTracking = existing,
                     watchedPercentOverride = watchedPercentOverride
                 )
-                val mergedTrackings = studentVideoTracking.value
-                    .filterNot { it.resourceId == resource.id } + updated
+                val mergedTrackings = filterVideoOnlyTrackings(
+                    studentVideoTracking.value.filterNot { it.resourceId == resource.id } + updated,
+                    studentResources.value
+                )
                 evaluateAndNotifyBadges(
                     uiContext = uiContext,
                     profile = profile,
@@ -1323,7 +1457,16 @@ class SvtMainViewModel(
         return raw.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(120)
     }
 
-    private companion object {
-        const val TAG = "SvtMainViewModel"
+    companion object {
+        private const val TAG = "SvtMainViewModel"
+
+        fun filterVideoOnlyTrackings(
+            trackings: List<VideoTracking>,
+            resources: List<CourseResource>
+        ): List<VideoTracking> {
+            if (resources.isEmpty()) return trackings
+            val nonVideoIds = resources.filter { it.type != "video" }.map { it.id }.toSet()
+            return trackings.filterNot { it.resourceId in nonVideoIds }
+        }
     }
 }

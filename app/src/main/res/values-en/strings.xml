@@ -339,4 +339,45 @@
     <string name="theme_palette_ocean">Mineral Ocean</string>
     <string name="theme_palette_earth">Earth &amp; Geology</string>
     <string name="theme_palette_botanical">Botanical Violet</string>
+
+    <!-- Downloads, Zoom, Viewers & File Tracking -->
+    <string name="offline_download_saved_device">\"%1$s\" downloaded (%2$s) to Downloads/BioTerre SVT</string>
+    <string name="downloads_manager_button">Downloads (%1$d)</string>
+    <string name="downloads_manager_title">Downloaded Files</string>
+    <string name="downloads_manager_summary">%1$d file(s) • %2$s\nFolder: Downloads/BioTerre SVT</string>
+    <string name="downloads_manager_empty">No downloaded files yet.</string>
+    <string name="downloads_open_file">Open</string>
+    <string name="downloads_share_file">Share</string>
+    <string name="resource_open_choice_title">How would you like to open \"%1$s\"?</string>
+    <string name="resource_open_in_app">Open in app</string>
+    <string name="resource_open_external_app">Open in external app</string>
+    <string name="zoom_in">Zoom +</string>
+    <string name="zoom_out">Zoom -</string>
+    <string name="zoom_reset">100%</string>
+    <string name="zoom_double_tap_hint">Pinch or double-tap to zoom</string>
+    <string name="word_empty_or_unsupported">In-app preview is unavailable for this format (legacy .doc or empty file). Use \"Open in external app\".</string>
+    <string name="resource_file_opened_status">Opened ✓</string>
+    <string name="resource_file_not_opened_status">Not opened</string>
+    <string name="resource_file_tracking_button">Open tracking</string>
+    <string name="resource_file_summary">Opened: %1$d / %2$d student(s)</string>
+
+    <!-- Enhanced QR & Direct Registration -->
+    <string name="qr_copy_code">Copy code</string>
+    <string name="qr_share_code">Share</string>
+    <string name="qr_code_copied">Code \"%1$s\" copied to clipboard</string>
+    <string name="qr_pick_from_gallery">Scan from gallery</string>
+    <string name="qr_not_found_in_image">No QR Code detected in this image.</string>
+    <string name="qr_torch_toggle">Flashlight</string>
+    <string name="auth_qr_quick_title">Join directly with QR Code</string>
+    <string name="auth_qr_quick_sub">Instant automatic enrollment into your class with no waiting</string>
+    <string name="auth_qr_join_submit">Sign up &amp; join class</string>
+    <string name="auth_qr_scan_first">Scan teacher\'s QR</string>
+    <string name="field_massar_optional">Massar ID (optional)</string>
+    <string name="qr_token_required_error">Please scan the QR Code or enter the secret class code.</string>
+    <string name="qr_joining_progress">Validating and entering your class...</string>
+
+    <!-- Legal Notice -->
+    <string name="legal_notice_title">Legal Notice</string>
+    <string name="legal_notice_footer">© 2026 BioTerre SVT • Created by Ayman BIROUK</string>
+    <string name="legal_notice_body">BioTerre SVT educational application.\nYear created: 2026\nCreator: Ayman BIROUK\nAll rights reserved.</string>
 </resources>

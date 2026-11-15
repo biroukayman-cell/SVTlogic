@@ -66,6 +66,7 @@
         "studentName": { "type": "string" },
         "studentPhone": { "type": "string" },
         "massarNumber": { "type": "string" },
+        "qrToken": { "type": "string" },
         "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
         "requestedAt": { "type": "string", "format": "date-time" },
         "validatedAt": { "type": "string", "format": "date-time" },
