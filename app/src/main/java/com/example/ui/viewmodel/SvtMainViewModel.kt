@@ -107,6 +107,9 @@ class SvtMainViewModel(
     private val _isJoiningClass = MutableStateFlow(false)
     val isJoiningClass: StateFlow<Boolean> = _isJoiningClass.asStateFlow()
 
+    private val _isAcceptingTerms = MutableStateFlow(false)
+    val isAcceptingTerms: StateFlow<Boolean> = _isAcceptingTerms.asStateFlow()
+
     private val _profileRetryTrigger = MutableStateFlow(0)
 
     val profileState: StateFlow<ProfileGateState> = combine(
@@ -126,7 +129,12 @@ class SvtMainViewModel(
     ) { remoteResult, optimistic ->
         remoteResult.fold(
             onSuccess = { remote ->
-                val resolved = remote ?: optimistic
+                val base = remote ?: optimistic
+                val resolved = if (base != null && optimistic?.acceptedTerms == true && !base.acceptedTerms) {
+                    base.copy(acceptedTerms = true)
+                } else {
+                    base
+                }
                 if (resolved == null) ProfileGateState.NeedsSetup
                 else ProfileGateState.Ready(resolved)
             },
@@ -470,6 +478,28 @@ class SvtMainViewModel(
                 throw e
             } catch (e: Exception) {
                 _actionError.value = e.localizedMessage ?: "Failed to update profile"
+            }
+        }
+    }
+
+    fun acceptTermsOfUse(onComplete: (Boolean) -> Unit = {}) {
+        if (_isAcceptingTerms.value) return
+        val currentProfile = (profileState.value as? ProfileGateState.Ready)?.profile
+        viewModelScope.launch {
+            _isAcceptingTerms.value = true
+            try {
+                repository.acceptTermsOfUse()
+                if (currentProfile != null) {
+                    _optimisticProfile.value = currentProfile.copy(acceptedTerms = true)
+                }
+                onComplete(true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage ?: "Failed to accept terms"
+                onComplete(false)
+            } finally {
+                _isAcceptingTerms.value = false
             }
         }
     }

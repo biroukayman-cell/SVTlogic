@@ -17,6 +17,7 @@ data class UserProfile(
     val birthDate: String = "",
     val email: String = "",
     val mustChangePassword: Boolean = false,
+    val acceptedTerms: Boolean = false,
     val avatarUrl: String? = null,
     val xp: Long = 0L,
     val loginStreak: Long = 1L,

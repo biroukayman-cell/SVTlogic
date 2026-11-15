@@ -59,6 +59,7 @@ service cloud.firestore {
              (!('birthDate' in data) || (data.birthDate is string && data.birthDate.size() <= 30)) &&
              (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
              (!('mustChangePassword' in data) || data.mustChangePassword is bool) &&
+             (!('acceptedTerms' in data) || data.acceptedTerms is bool) &&
              (!('avatarUrl' in data) || data.avatarUrl == null || (data.avatarUrl is string && data.avatarUrl.size() <= 500)) &&
              data.xp is int && data.xp >= 0 && data.xp <= 1000000 &&
              data.loginStreak is int && data.loginStreak >= 0 && data.loginStreak <= 10000 &&
@@ -253,7 +254,7 @@ service cloud.firestore {
                        request.auth.uid == userId &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll(['userId', 'fullName', 'phoneNumber', 'role', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'createdAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['userId', 'fullName', 'phoneNumber', 'role', 'massarNumber', 'birthDate', 'email', 'mustChangePassword', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'fullName', 'phoneNumber', 'role', 'massarNumber', 'birthDate', 'email', 'mustChangePassword', 'acceptedTerms', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'createdAt', 'updatedAt']) &&
                        isValidUserProfile(incoming());
 
       allow update: if isSignedIn() &&
@@ -263,7 +264,7 @@ service cloud.firestore {
                        incoming().userId == existing().userId &&
                        incoming().role == existing().role &&
                        incoming().createdAt == existing().createdAt &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'massarNumber', 'birthDate', 'email', 'mustChangePassword', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'massarNumber', 'birthDate', 'email', 'mustChangePassword', 'acceptedTerms', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'updatedAt']);
 
       allow delete: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
     }

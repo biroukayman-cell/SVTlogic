@@ -60,11 +60,28 @@ test("User profile: owner can create/read, cross-user read & role escalation fai
       fullName: "Amina El Amrani",
       phoneNumber: "+212600112233",
       role: "student",
+      acceptedTerms: false,
       xp: 0,
       loginStreak: 1,
       lastLoginDate: "2026-11-12",
       unlockedBadgeIds: [],
       createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Student can accept terms of use on own profile
+  await assertSucceeds(
+    aliceDb.collection("users").doc(STUDENT_A_UID).update({
+      acceptedTerms: true,
+      updatedAt: now,
+    })
+  );
+
+  // Cross-user terms update fails
+  await assertFails(
+    bobDb.collection("users").doc(STUDENT_A_UID).update({
+      acceptedTerms: false,
       updatedAt: now,
     })
   );

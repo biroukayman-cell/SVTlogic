@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -34,9 +35,9 @@ class SvtRepositoryRuleTest : FirestoreEmulatorTestBase() {
         }
         assertTrue(svtClass.qrToken.isNotBlank())
 
-        // 2. Student A signs in, looks up QR code, requests enrollment
+        // 2. Student A signs in, creates profile (acceptedTerms == false), accepts terms, looks up QR code, requests enrollment
         val studentAUid = signInTestUser(studentAEmail)
-        withTimeout(TIMEOUT_MS) {
+        val createdStudentProfile = withTimeout(TIMEOUT_MS) {
             repo.createUserProfile(
                 fullName = "Youssef",
                 phoneNumber = "+212600000002",
@@ -45,6 +46,14 @@ class SvtRepositoryRuleTest : FirestoreEmulatorTestBase() {
                 birthDate = "15/09/2008"
             )
         }
+        assertFalse(createdStudentProfile.acceptedTerms)
+        withTimeout(TIMEOUT_MS) {
+            repo.acceptTermsOfUse()
+        }
+        val acceptedProfile = withTimeout(FLOW_TIMEOUT_MS) {
+            repo.observeUserProfile(studentAUid).first { it?.acceptedTerms == true }
+        }
+        assertTrue(acceptedProfile?.acceptedTerms == true)
         val classCode = withTimeout(TIMEOUT_MS) { repo.lookupClassByQrToken(svtClass.qrToken) }
         assertNotNull(classCode)
         withTimeout(TIMEOUT_MS) {

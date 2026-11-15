@@ -13,6 +13,7 @@
         "birthDate": { "type": "string", "description": "Student birth date (DD/MM/YYYY)" },
         "email": { "type": "string", "description": "Teacher professional email" },
         "mustChangePassword": { "type": "boolean", "description": "Whether provisional password should be updated" },
+        "acceptedTerms": { "type": "boolean", "description": "Whether the user has accepted the Terms of Use" },
         "avatarUrl": { "type": "string", "description": "Profile avatar URL or preset key" },
         "xp": { "type": "integer", "description": "Total SVT badge experience points" },
         "loginStreak": { "type": "integer", "description": "Consecutive active login days" },

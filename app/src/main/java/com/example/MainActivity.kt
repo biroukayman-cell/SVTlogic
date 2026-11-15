@@ -57,6 +57,7 @@ import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.MainDashboardScreen
 import com.example.ui.screens.PendingApprovalScreen
 import com.example.ui.screens.QrJoinClassScreen
+import com.example.ui.screens.TermsAcceptanceScreen
 import com.example.ui.screens.signOutUser
 import com.example.ui.theme.BioTerreTheme
 import com.example.ui.viewmodel.ProfileGateState
@@ -253,6 +254,7 @@ private fun AuthenticatedSvtFlow(
     val studentEnrollment by viewModel.studentEnrollment.collectAsStateWithLifecycle()
     val isSettingUpProfile by viewModel.isSettingUpProfile.collectAsStateWithLifecycle()
     val isJoiningClass by viewModel.isJoiningClass.collectAsStateWithLifecycle()
+    val isAcceptingTerms by viewModel.isAcceptingTerms.collectAsStateWithLifecycle()
     val actionError by viewModel.actionError.collectAsStateWithLifecycle()
     val invalidCodeMessage = LocalContext.current.getString(R.string.qr_invalid_code)
     var authDraft by remember(currentUser.uid) { mutableStateOf(AuthSessionDraft.load(activityContext)) }
@@ -400,6 +402,21 @@ private fun AuthenticatedSvtFlow(
             if (profile.role == "student") {
                 val enrollment = studentEnrollment
                 when {
+                    !profile.acceptedTerms -> {
+                        TermsAcceptanceScreen(
+                            studentName = profile.fullName,
+                            currentLanguage = currentLanguage,
+                            onLanguageSelected = onLanguageSelected,
+                            isSubmitting = isAcceptingTerms,
+                            errorMessage = actionError,
+                            onAccept = {
+                                viewModel.clearError()
+                                viewModel.acceptTermsOfUse()
+                            },
+                            onSignOut = onSignOut
+                        )
+                    }
+
                     enrollment == null -> {
                         val pendingToken = authDraft.pendingClassQrToken
                         if (pendingToken.isNotBlank() && !autoJoinAttempted) {

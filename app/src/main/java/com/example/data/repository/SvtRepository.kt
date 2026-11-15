@@ -147,6 +147,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val cleanMassar = massarNumber.trim()
         val cleanBirthDate = birthDate.trim()
         val cleanEmail = email.trim()
+        val acceptedTerms = role != "student"
         val payload = mutableMapOf<String, Any>(
             "userId" to uid,
             "fullName" to fullName.trim(),
@@ -156,6 +157,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
             "birthDate" to cleanBirthDate,
             "email" to cleanEmail,
             "mustChangePassword" to mustChangePassword,
+            "acceptedTerms" to acceptedTerms,
             "xp" to 0L,
             "loginStreak" to 1L,
             "lastLoginDate" to today,
@@ -178,6 +180,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 birthDate = cleanBirthDate,
                 email = cleanEmail,
                 mustChangePassword = mustChangePassword,
+                acceptedTerms = acceptedTerms,
                 avatarUrl = avatarUrl,
                 xp = 0L,
                 loginStreak = 1L,
@@ -232,6 +235,24 @@ class SvtRepository(private val db: FirebaseFirestore) {
             docRef.update(
                 mapOf(
                     "mustChangePassword" to false,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun acceptTermsOfUse() {
+        val uid = requireUserId()
+        val docRef = db.collection("users").document(uid)
+        try {
+            docRef.update(
+                mapOf(
+                    "acceptedTerms" to true,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
