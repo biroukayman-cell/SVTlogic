@@ -1,5 +1,6 @@
 package com.example.core
 
+import com.example.data.svt.SvtDomain
 import java.util.Locale
 
 data class DnaSynthesisResult(
@@ -157,5 +158,13 @@ object SvtLabLogic {
             realNanometers = realNm,
             scaleHint = hint
         )
+    }
+
+    fun resolveVisibleLabDomains(domainNames: List<String>): Set<SvtDomain> {
+        if (domainNames.isEmpty()) return SvtDomain.entries.toSet()
+        val parsed = domainNames.mapNotNull { key ->
+            SvtDomain.entries.firstOrNull { it.name == key }
+        }.toSet()
+        return parsed.ifEmpty { SvtDomain.entries.toSet() }
     }
 }

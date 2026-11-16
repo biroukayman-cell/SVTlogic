@@ -19,6 +19,8 @@
         "loginStreak": { "type": "integer", "description": "Consecutive active login days" },
         "lastLoginDate": { "type": "string", "description": "ISO local date of last active day (YYYY-MM-DD)" },
         "unlockedBadgeIds": { "type": "array", "description": "List of unlocked badge IDs" },
+        "boundDeviceId": { "type": "string", "description": "Single bound physical device identifier for student accounts" },
+        "boundDeviceModel": { "type": "string", "description": "Human-readable bound phone model name" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
       },
@@ -35,6 +37,7 @@
         "academicYear": { "type": "string" },
         "level": { "type": "string" },
         "qrToken": { "type": "string" },
+        "visibleLabDomains": { "type": "array", "description": "Enabled Labo SVT theme domain keys visible to students of this class" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },

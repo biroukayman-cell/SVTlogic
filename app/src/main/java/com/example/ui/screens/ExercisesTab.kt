@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
@@ -33,7 +32,6 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -78,7 +76,6 @@ import com.example.data.model.QuizAttempt
 import com.example.data.model.QuizQuestion
 import com.example.data.svt.SvtKnowledgeCatalog
 import com.example.ui.components.SvtEmptyStateCard
-import com.example.ui.components.SvtFactOfTheDayBanner
 import com.example.ui.components.SvtHeroBannerCard
 import com.example.ui.theme.SvtCoralError
 import com.example.ui.theme.SvtEmeraldPrimary
@@ -87,7 +84,6 @@ import com.example.ui.theme.SvtSuccess
 import com.example.ui.theme.SvtWarning
 import com.example.ui.viewmodel.AiQuizState
 import kotlinx.coroutines.delay
-import java.util.Locale
 
 @Composable
 fun ExercisesTab(
@@ -119,8 +115,7 @@ fun ExercisesTab(
         totalSeconds: Long,
         onDone: (QuizAttempt) -> Unit
     ) -> Unit,
-    currentLanguage: AppLanguage = AppLanguage.FR,
-    onOpenSvtLab: () -> Unit = {}
+    currentLanguage: AppLanguage = AppLanguage.FR
 ) {
     var activeQuizId by rememberSaveable { mutableStateOf<String?>(null) }
     var attemptQuizId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -130,7 +125,6 @@ fun ExercisesTab(
     var showAiGeneratorDialog by rememberSaveable { mutableStateOf(false) }
     var statsQuizId by rememberSaveable { mutableStateOf<String?>(null) }
     var offlineOnlyFilter by rememberSaveable { mutableStateOf(false) }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
     val activeQuizToPlay = activeQuizId?.let { id -> quizzes.firstOrNull { it.id == id } }
     val attemptToView = justSubmittedAttempt ?: attemptQuizId?.let { id -> attempts.firstOrNull { it.quizId == id } }
     val statsQuiz = statsQuizId?.let { id -> quizzes.firstOrNull { it.id == id } }
@@ -140,18 +134,11 @@ fun ExercisesTab(
         else quizzes
     }
 
-    val visibleQuizzes = remember(classQuizzes, offlineOnlyFilter, downloadedQuizIds, isTeacher, searchQuery) {
-        val base = if (!isTeacher && offlineOnlyFilter) {
+    val visibleQuizzes = remember(classQuizzes, offlineOnlyFilter, downloadedQuizIds, isTeacher) {
+        if (!isTeacher && offlineOnlyFilter) {
             classQuizzes.filter { downloadedQuizIds.contains(it.id) }
         } else {
             classQuizzes
-        }
-        val q = searchQuery.trim().lowercase(Locale.getDefault())
-        if (q.isEmpty()) base
-        else base.filter {
-            it.title.lowercase(Locale.getDefault()).contains(q) ||
-                it.chapterSvt.lowercase(Locale.getDefault()).contains(q) ||
-                it.description.lowercase(Locale.getDefault()).contains(q)
         }
     }
 
@@ -163,99 +150,8 @@ fun ExercisesTab(
         item {
             SvtHeroBannerCard(
                 title = stringResource(id = R.string.tab_exercises),
-                subtitle = stringResource(id = R.string.app_subtitle),
-                actionLabel = stringResource(id = R.string.svt_lab_open_button),
-                onActionClick = onOpenSvtLab
+                subtitle = stringResource(id = R.string.app_subtitle)
             )
-        }
-
-        item {
-            SvtFactOfTheDayBanner(
-                currentLanguage = currentLanguage,
-                onOpenLab = onOpenSvtLab
-            )
-        }
-
-        if (classQuizzes.isNotEmpty()) {
-            item {
-                val classQuizIds = remember(classQuizzes) { classQuizzes.map { it.id }.toSet() }
-                val relevantAttempts = remember(attempts, classQuizIds) {
-                    attempts.filter { classQuizIds.contains(it.quizId) }
-                }
-                val percentages = remember(relevantAttempts) {
-                    relevantAttempts.map { att ->
-                        if (att.maxScore > 0) ((att.score / att.maxScore) * 100.0).toInt().coerceIn(0, 100) else 0
-                    }
-                }
-                val avgPct = if (percentages.isEmpty()) 0 else percentages.average().toInt()
-                val bestPct = percentages.maxOrNull() ?: 0
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (isTeacher) {
-                        QuizOverviewStatTile(
-                            label = stringResource(id = R.string.svt_stats_published),
-                            value = "${classQuizzes.size}",
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        QuizOverviewStatTile(
-                            label = stringResource(id = R.string.svt_stats_submissions),
-                            value = "${relevantAttempts.size}",
-                            color = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        QuizOverviewStatTile(
-                            label = stringResource(id = R.string.svt_stats_avg_score),
-                            value = if (relevantAttempts.isEmpty()) "—" else "$avgPct%",
-                            color = SvtSuccess,
-                            modifier = Modifier.weight(1f)
-                        )
-                    } else {
-                        val doneCount = relevantAttempts.map { it.quizId }.distinct().size
-                        QuizOverviewStatTile(
-                            label = stringResource(id = R.string.svt_stats_quizzes_done),
-                            value = "$doneCount / ${classQuizzes.size}",
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        QuizOverviewStatTile(
-                            label = stringResource(id = R.string.svt_stats_avg_score),
-                            value = if (relevantAttempts.isEmpty()) "—" else "$avgPct%",
-                            color = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        QuizOverviewStatTile(
-                            label = stringResource(id = R.string.svt_stats_best_score),
-                            value = if (relevantAttempts.isEmpty()) "—" else "$bestPct%",
-                            color = SvtSuccess,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text(stringResource(id = R.string.svt_search_quizzes_hint)) },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Filled.Clear, contentDescription = null)
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("quiz_search_input")
-                )
-            }
         }
 
         if (isTeacher) {
@@ -997,40 +893,6 @@ private fun StatMetricChip(label: String, color: Color, modifier: Modifier = Mod
             color = color,
             modifier = Modifier.padding(10.dp)
         )
-    }
-}
-
-@Composable
-private fun QuizOverviewStatTile(
-    label: String,
-    value: String,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        color = color.copy(alpha = 0.12f),
-        shape = MaterialTheme.shapes.medium,
-        modifier = modifier
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = color,
-                maxLines = 1
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
     }
 }
 

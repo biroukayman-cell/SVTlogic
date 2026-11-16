@@ -23,6 +23,8 @@ data class UserProfile(
     val loginStreak: Long = 1L,
     val lastLoginDate: String = "",
     val unlockedBadgeIds: List<String> = emptyList(),
+    val boundDeviceId: String = "",
+    val boundDeviceModel: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
@@ -36,9 +38,19 @@ data class SvtClass(
     val academicYear: String = "",
     val level: String = "",
     val qrToken: String = "",
+    val visibleLabDomains: List<String> = DEFAULT_LAB_DOMAINS,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
-)
+) {
+    companion object {
+        val DEFAULT_LAB_DOMAINS: List<String> = listOf(
+            "CELL_GENETICS",
+            "GEOLOGY",
+            "PHYSIOLOGY_IMMUNITY",
+            "ECOLOGY"
+        )
+    }
+}
 
 @IgnoreExtraProperties
 data class ClassCode(

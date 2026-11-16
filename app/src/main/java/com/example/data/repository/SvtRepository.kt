@@ -139,7 +139,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
         massarNumber: String = "",
         birthDate: String = "",
         email: String = "",
-        mustChangePassword: Boolean = false
+        mustChangePassword: Boolean = false,
+        boundDeviceId: String = "",
+        boundDeviceModel: String = ""
     ): UserProfile {
         val uid = requireUserId()
         val today = todayDateString()
@@ -148,6 +150,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val cleanBirthDate = birthDate.trim()
         val cleanEmail = email.trim()
         val acceptedTerms = role != "student"
+        val cleanDeviceId = if (role == "student") boundDeviceId.trim() else ""
+        val cleanDeviceModel = if (role == "student") boundDeviceModel.trim().take(96) else ""
         val payload = mutableMapOf<String, Any>(
             "userId" to uid,
             "fullName" to fullName.trim(),
@@ -168,6 +172,10 @@ class SvtRepository(private val db: FirebaseFirestore) {
         if (!avatarUrl.isNullOrBlank()) {
             payload["avatarUrl"] = avatarUrl
         }
+        if (cleanDeviceId.isNotBlank()) {
+            payload["boundDeviceId"] = cleanDeviceId
+            payload["boundDeviceModel"] = cleanDeviceModel
+        }
         try {
             docRef.set(payload).await()
             return UserProfile(
@@ -185,12 +193,62 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 xp = 0L,
                 loginStreak = 1L,
                 lastLoginDate = today,
-                unlockedBadgeIds = emptyList()
+                unlockedBadgeIds = emptyList(),
+                boundDeviceId = cleanDeviceId,
+                boundDeviceModel = cleanDeviceModel
             )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.CREATE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun bindStudentDeviceIfUnbound(deviceId: String, deviceModel: String): Boolean {
+        val uid = requireUserId()
+        val cleanId = deviceId.trim()
+        val cleanModel = deviceModel.trim().take(96)
+        require(cleanId.isNotBlank()) { "Device ID cannot be blank" }
+        val docRef = db.collection("users").document(uid)
+        return try {
+            val snap = runCatching { docRef.get().await() }.getOrNull()
+            val existingId = snap?.getString("boundDeviceId").orEmpty().trim()
+            if (existingId.isNotBlank()) {
+                return existingId == cleanId
+            }
+            docRef.update(
+                mapOf(
+                    "boundDeviceId" to cleanId,
+                    "boundDeviceModel" to cleanModel,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun resetStudentBoundDevice(studentId: String) {
+        requireUserId()
+        require(studentId.isNotBlank()) { "Student ID cannot be blank" }
+        val docRef = db.collection("users").document(studentId)
+        try {
+            docRef.update(
+                mapOf(
+                    "boundDeviceId" to "",
+                    "boundDeviceModel" to "",
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
             throw e
         }
     }
@@ -337,6 +395,22 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .collect { emit(it) }
     }
 
+    fun observeClassById(classId: String): Flow<SvtClass?> = flow {
+        val path = "classes/$classId"
+        db.collection("classes").document(classId)
+            .snapshots()
+            .map { snapshot ->
+                if (snapshot.exists()) {
+                    snapshot.toObject(SvtClass::class.java, ServerTimestampBehavior.ESTIMATE)
+                } else {
+                    null
+                }
+            }
+            .retryTransientFirestoreErrors()
+            .logFirestoreErrors(OperationType.GET, path, requireUserId())
+            .collect { emit(it) }
+    }
+
     suspend fun createClass(
         teacherName: String,
         name: String,
@@ -356,6 +430,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
             "academicYear" to academicYear.trim(),
             "level" to level.trim(),
             "qrToken" to qrToken,
+            "visibleLabDomains" to SvtClass.DEFAULT_LAB_DOMAINS,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
@@ -380,12 +455,33 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 name = name.trim(),
                 academicYear = academicYear.trim(),
                 level = level.trim(),
-                qrToken = qrToken
+                qrToken = qrToken,
+                visibleLabDomains = SvtClass.DEFAULT_LAB_DOMAINS
             )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.CREATE, classRef.path)
+            throw e
+        }
+    }
+
+    suspend fun updateClassLabDomains(classId: String, domains: List<String>) {
+        requireUserId()
+        val sanitized = domains.map { it.trim() }.filter { it in SvtClass.DEFAULT_LAB_DOMAINS }.distinct()
+        require(sanitized.isNotEmpty()) { "At least one Labo SVT domain must remain selected." }
+        val docRef = db.collection("classes").document(classId)
+        try {
+            docRef.update(
+                mapOf(
+                    "visibleLabDomains" to sanitized,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
             throw e
         }
     }

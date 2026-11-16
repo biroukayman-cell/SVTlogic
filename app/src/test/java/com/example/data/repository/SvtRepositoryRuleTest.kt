@@ -275,6 +275,78 @@ class SvtRepositoryRuleTest : FirestoreEmulatorTestBase() {
         }
     }
 
+    @Test
+    fun deviceLock_and_classLabThemes_enforcedViaRepository() = runBlocking {
+        val teacherEmail = "lock_teacher_${UUID.randomUUID().toString().take(6)}@test.com"
+        val studentEmail = "lock_student_${UUID.randomUUID().toString().take(6)}@test.com"
+
+        val teacherUid = signInTestUser(teacherEmail)
+        val repo = SvtRepository(firestore)
+
+        withTimeout(TIMEOUT_MS) {
+            repo.createUserProfile("Prof. Nadia", "+212600000001", "teacher")
+        }
+        val svtClass = withTimeout(TIMEOUT_MS) {
+            repo.createClass("Prof. Nadia", "2Bac Bio", "2Bac", "2026-2027")
+        }
+        assertEquals(4, svtClass.visibleLabDomains.size)
+
+        withTimeout(TIMEOUT_MS) {
+            repo.updateClassLabDomains(svtClass.id, listOf("CELL_GENETICS", "ECOLOGY"))
+        }
+
+        // Student signs in, joins via QR auto-approval, binds device, and reads class themes
+        val studentUid = signInTestUser(studentEmail)
+        val studentProfile = withTimeout(TIMEOUT_MS) {
+            repo.createUserProfile(
+                fullName = "Salma",
+                phoneNumber = "+212600000009",
+                role = "student",
+                boundDeviceId = "phone_device_1",
+                boundDeviceModel = "Samsung A55"
+            )
+        }
+        assertEquals("phone_device_1", studentProfile.boundDeviceId)
+
+        // Matching device returns true; second device is rejected while bound
+        assertTrue(withTimeout(TIMEOUT_MS) { repo.bindStudentDeviceIfUnbound("phone_device_1", "Samsung A55") })
+        assertFalse(withTimeout(TIMEOUT_MS) { repo.bindStudentDeviceIfUnbound("phone_device_2", "Pixel 8") })
+
+        val classCode = withTimeout(TIMEOUT_MS) { repo.lookupClassByQrToken(svtClass.qrToken) }!!
+        withTimeout(TIMEOUT_MS) {
+            repo.requestEnrollment(
+                classCode = classCode,
+                studentName = "Salma",
+                studentPhone = "+212600000009",
+                qrToken = svtClass.qrToken,
+                autoApprove = true
+            )
+        }
+
+        val observedClass = withTimeout(FLOW_TIMEOUT_MS) {
+            repo.observeClassById(svtClass.id).first { it != null && it.visibleLabDomains.size == 2 }
+        }
+        assertEquals(listOf("CELL_GENETICS", "ECOLOGY"), observedClass?.visibleLabDomains)
+
+        // Teacher unlinks student's phone, then student claims new phone successfully
+        signInTestUser(teacherEmail)
+        assertTrue(teacherUid.isNotBlank())
+        withTimeout(TIMEOUT_MS) {
+            repo.resetStudentBoundDevice(studentUid)
+        }
+
+        signInTestUser(studentEmail)
+        val afterReset = withTimeout(FLOW_TIMEOUT_MS) {
+            repo.observeUserProfile(studentUid).first { it?.boundDeviceId.isNullOrEmpty() }
+        }
+        assertEquals("", afterReset?.boundDeviceId)
+        assertTrue(withTimeout(TIMEOUT_MS) { repo.bindStudentDeviceIfUnbound("phone_device_2", "Pixel 8") })
+        val rebound = withTimeout(FLOW_TIMEOUT_MS) {
+            repo.observeUserProfile(studentUid).first { it?.boundDeviceId == "phone_device_2" }
+        }
+        assertEquals("Pixel 8", rebound?.boundDeviceModel)
+    }
+
     private companion object {
         const val TIMEOUT_MS = 5000L
         const val FLOW_TIMEOUT_MS = 4000L

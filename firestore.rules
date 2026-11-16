@@ -66,6 +66,8 @@ service cloud.firestore {
              data.lastLoginDate is string && data.lastLoginDate.size() <= 20 &&
              data.unlockedBadgeIds is list && data.unlockedBadgeIds.size() <= 30 &&
              (data.unlockedBadgeIds.size() == 0 || data.unlockedBadgeIds[0] is string) &&
+             (!('boundDeviceId' in data) || (data.boundDeviceId is string && data.boundDeviceId.size() <= 128 && (data.boundDeviceId == '' || data.boundDeviceId.matches('^[a-zA-Z0-9_\\-]+$')))) &&
+             (!('boundDeviceModel' in data) || (data.boundDeviceModel is string && data.boundDeviceModel.size() <= 100)) &&
              isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);
     }
@@ -78,6 +80,13 @@ service cloud.firestore {
              data.level is string && data.level.size() >= 1 && data.level.size() <= 50 &&
              data.qrToken is string && data.qrToken.size() >= 6 && data.qrToken.size() <= 64 &&
              data.qrToken.matches('^[a-zA-Z0-9_\\-]+$') &&
+             (!('visibleLabDomains' in data) || (
+               data.visibleLabDomains is list &&
+               data.visibleLabDomains.size() >= 1 &&
+               data.visibleLabDomains.size() <= 4 &&
+               data.visibleLabDomains[0] is string &&
+               data.visibleLabDomains.hasOnly(['CELL_GENETICS', 'GEOLOGY', 'PHYSIOLOGY_IMMUNITY', 'ECOLOGY'])
+             )) &&
              isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);
     }
@@ -254,17 +263,39 @@ service cloud.firestore {
                        request.auth.uid == userId &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll(['userId', 'fullName', 'phoneNumber', 'role', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'createdAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['userId', 'fullName', 'phoneNumber', 'role', 'massarNumber', 'birthDate', 'email', 'mustChangePassword', 'acceptedTerms', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'fullName', 'phoneNumber', 'role', 'massarNumber', 'birthDate', 'email', 'mustChangePassword', 'acceptedTerms', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'boundDeviceId', 'boundDeviceModel', 'createdAt', 'updatedAt']) &&
                        isValidUserProfile(incoming());
 
       allow update: if isSignedIn() &&
                        isValidId(userId) &&
-                       (request.auth.uid == userId || isAdmin()) &&
                        isValidUserProfile(incoming()) &&
                        incoming().userId == existing().userId &&
                        incoming().role == existing().role &&
                        incoming().createdAt == existing().createdAt &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'massarNumber', 'birthDate', 'email', 'mustChangePassword', 'acceptedTerms', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'updatedAt']);
+                       (
+                         (
+                           (request.auth.uid == userId || isAdmin()) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'massarNumber', 'birthDate', 'email', 'mustChangePassword', 'acceptedTerms', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'boundDeviceId', 'boundDeviceModel', 'updatedAt']) &&
+                           (
+                             isAdmin() ||
+                             existing().role != 'student' ||
+                             !('boundDeviceId' in existing()) ||
+                             existing().boundDeviceId == '' ||
+                             (
+                               incoming().boundDeviceId == existing().boundDeviceId &&
+                               (!('boundDeviceModel' in existing()) || incoming().boundDeviceModel == existing().boundDeviceModel)
+                             )
+                           )
+                         ) ||
+                         (
+                           existing().role == 'student' &&
+                           exists(/databases/$(database)/documents/enrollments/$(userId)) &&
+                           get(/databases/$(database)/documents/enrollments/$(userId)).data.teacherId == request.auth.uid &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['boundDeviceId', 'boundDeviceModel', 'updatedAt']) &&
+                           incoming().boundDeviceId == '' &&
+                           incoming().boundDeviceModel == ''
+                         )
+                       );
 
       allow delete: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
     }
@@ -284,7 +315,7 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
                        isValidId(classId) &&
                        incoming().keys().hasAll(['teacherId', 'teacherName', 'name', 'academicYear', 'level', 'qrToken', 'createdAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['teacherId', 'teacherName', 'name', 'academicYear', 'level', 'qrToken', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['teacherId', 'teacherName', 'name', 'academicYear', 'level', 'qrToken', 'visibleLabDomains', 'createdAt', 'updatedAt']) &&
                        isValidSvtClass(incoming()) &&
                        incoming().teacherId == request.auth.uid;
 
@@ -294,7 +325,7 @@ service cloud.firestore {
                        (resource.data.teacherId == request.auth.uid || isAdmin()) &&
                        incoming().teacherId == existing().teacherId &&
                        incoming().createdAt == existing().createdAt &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['teacherName', 'name', 'academicYear', 'level', 'qrToken', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['teacherName', 'name', 'academicYear', 'level', 'qrToken', 'visibleLabDomains', 'updatedAt']);
 
       allow delete: if isSignedIn() && isValidId(classId) && (resource.data.teacherId == request.auth.uid || isAdmin());
     }

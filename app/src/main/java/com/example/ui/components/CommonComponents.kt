@@ -68,6 +68,7 @@ import com.example.R
 import com.example.core.AppLanguage
 import com.example.data.badges.SvtBadgeDefinition
 import com.example.data.model.StudentNotification
+import com.example.data.svt.SvtDomain
 import com.example.data.svt.SvtKnowledgeCatalog
 import kotlin.math.PI
 import kotlin.math.sin
@@ -478,10 +479,12 @@ fun SvtHeroBannerCard(
 @Composable
 fun SvtFactOfTheDayBanner(
     currentLanguage: AppLanguage,
-    onOpenLab: () -> Unit,
+    allowedDomains: Set<SvtDomain> = SvtDomain.entries.toSet(),
+    onOpenLab: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val facts = SvtKnowledgeCatalog.factsOfTheDay
+    val facts = SvtKnowledgeCatalog.factsOfTheDay.filter { it.domain in allowedDomains }
+        .ifEmpty { SvtKnowledgeCatalog.factsOfTheDay }
     if (facts.isEmpty()) return
     var factIndex by rememberSaveable { mutableIntStateOf(0) }
     val fact = facts[factIndex % facts.size]
@@ -548,20 +551,22 @@ fun SvtFactOfTheDayBanner(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = if (onOpenLab != null) Arrangement.SpaceBetween else Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(
-                    onClick = onOpenLab,
-                    modifier = Modifier.testTag("svt_fact_open_lab_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Biotech,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(id = R.string.svt_lab_open_button))
+                if (onOpenLab != null) {
+                    TextButton(
+                        onClick = onOpenLab,
+                        modifier = Modifier.testTag("svt_fact_open_lab_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Biotech,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(id = R.string.svt_lab_open_button))
+                    }
                 }
                 TextButton(
                     onClick = { factIndex = (factIndex + 1) % facts.size },

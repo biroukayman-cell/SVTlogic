@@ -1,10 +1,8 @@
 package com.example.ui.screens
 
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -33,9 +30,9 @@ import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.NavigateBefore
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.Biotech
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Lightbulb
@@ -46,10 +43,10 @@ import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Terrain
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -59,14 +56,12 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -86,15 +81,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.R
 import com.example.core.AppLanguage
 import com.example.core.BiologicalScaleHint
 import com.example.core.QrCodeUtils
 import com.example.core.SvtLabLogic
+import com.example.data.model.SvtClass
 import com.example.data.svt.SvtDomain
 import com.example.data.svt.SvtKnowledgeCatalog
+import com.example.ui.components.SvtFactOfTheDayBanner
+import com.example.ui.components.SvtHeroBannerCard
 import com.example.ui.theme.SvtCoralError
 import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtOceanSecondary
@@ -113,117 +109,241 @@ private enum class SvtLabTab(
     MICROSCOPE_GEOLOGY(R.string.svt_lab_tab_microscope, Icons.Filled.Public, "svt_lab_tab_microscope")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SvtLabDialog(
-    currentLanguage: AppLanguage,
-    onDismiss: () -> Unit
+fun TeacherClassLabThemesSelector(
+    svtClass: SvtClass,
+    onUpdateClassLabDomains: (classId: String, domains: List<String>) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+    val activeDomains = remember(svtClass.visibleLabDomains) {
+        SvtLabLogic.resolveVisibleLabDomains(svtClass.visibleLabDomains)
+    }
+
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f),
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier.fillMaxWidth()
     ) {
-        BackHandler(onBack = onDismiss)
-
-        var selectedTab by rememberSaveable { mutableStateOf(SvtLabTab.GLOSSARY) }
-
-        Surface(
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .safeDrawingPadding(),
-            color = MaterialTheme.colorScheme.background
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        ),
-                        title = {
-                            Column {
-                                Text(
-                                    text = stringResource(id = R.string.svt_lab_title),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = stringResource(id = R.string.svt_lab_subtitle),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(
-                                onClick = onDismiss,
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("svt_lab_close_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = stringResource(id = R.string.close)
-                                )
-                            }
-                        }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Tune,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(id = R.string.teacher_lab_themes_title),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = stringResource(id = R.string.teacher_lab_themes_desc),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            ) { innerPadding ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .widthIn(max = 760.dp)
-                            .align(Alignment.TopCenter)
-                    ) {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(SvtLabTab.entries) { tab ->
-                                FilterChip(
-                                    selected = selectedTab == tab,
-                                    onClick = { selectedTab = tab },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = tab.icon,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = stringResource(id = tab.labelRes),
-                                            maxLines = 1
-                                        )
-                                    },
-                                    modifier = Modifier.testTag(tab.testTag)
+            }
+
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                SvtDomain.entries.forEach { domain ->
+                    val selected = domain in activeDomains
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            val updatedSet = if (selected) activeDomains - domain else activeDomains + domain
+                            val updatedNames = SvtDomain.entries
+                                .filter { it in updatedSet }
+                                .map { it.name }
+                            onUpdateClassLabDomains(svtClass.id, updatedNames)
+                        },
+                        leadingIcon = if (selected) {
+                            {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
-                        }
+                        } else null,
+                        label = {
+                            Text(
+                                text = stringResource(id = domain.labelRes),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        modifier = Modifier.testTag("lab_theme_chip_${svtClass.id}_${domain.name}")
+                    )
+                }
+            }
+        }
+    }
+}
 
-                        HorizontalDivider()
+@Composable
+fun SvtLabTabScreen(
+    isTeacher: Boolean,
+    currentLanguage: AppLanguage,
+    selectedTeacherClass: SvtClass?,
+    studentAllowedDomains: Set<SvtDomain>,
+    onUpdateClassLabDomains: (classId: String, domains: List<String>) -> Unit
+) {
+    val effectiveDomains = remember(isTeacher, selectedTeacherClass?.visibleLabDomains, studentAllowedDomains) {
+        if (isTeacher) {
+            selectedTeacherClass?.let { SvtLabLogic.resolveVisibleLabDomains(it.visibleLabDomains) }
+                ?: SvtDomain.entries.toSet()
+        } else {
+            studentAllowedDomains.ifEmpty { SvtDomain.entries.toSet() }
+        }
+    }
 
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
+    val availableTabs = remember(effectiveDomains) {
+        SvtLabTab.entries.filter { tab ->
+            when (tab) {
+                SvtLabTab.DNA -> SvtDomain.CELL_GENETICS in effectiveDomains
+                else -> true
+            }
+        }
+    }
+
+    var selectedTab by rememberSaveable { mutableStateOf(SvtLabTab.GLOSSARY) }
+    var showTeacherThemeConfig by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(availableTabs) {
+        if (selectedTab !in availableTabs) {
+            selectedTab = availableTabs.first()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .widthIn(max = 760.dp)
+                .align(Alignment.TopCenter)
+        ) {
+            if (isTeacher && selectedTeacherClass != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = selectedTeacherClass.name,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        TextButton(
+                            onClick = { showTeacherThemeConfig = !showTeacherThemeConfig },
+                            modifier = Modifier.testTag("toggle_lab_themes_config")
                         ) {
-                            when (selectedTab) {
-                                SvtLabTab.GLOSSARY -> GlossaryLabSection(currentLanguage = currentLanguage)
-                                SvtLabTab.FLASHCARDS -> FlashcardsLabSection(currentLanguage = currentLanguage)
-                                SvtLabTab.DNA -> DnaSimulatorLabSection(currentLanguage = currentLanguage)
-                                SvtLabTab.MICROSCOPE_GEOLOGY -> MicroscopeAndGeologyLabSection(currentLanguage = currentLanguage)
-                            }
+                            Icon(
+                                imageVector = Icons.Filled.Tune,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(id = R.string.teacher_lab_themes_title))
                         }
                     }
+                    if (showTeacherThemeConfig) {
+                        TeacherClassLabThemesSelector(
+                            svtClass = selectedTeacherClass,
+                            onUpdateClassLabDomains = onUpdateClassLabDomains
+                        )
+                    }
+                }
+            } else if (!isTeacher && effectiveDomains.size < SvtDomain.entries.size) {
+                val activeDomainLabels = SvtDomain.entries
+                    .filter { it in effectiveDomains }
+                    .map { stringResource(id = it.labelRes) }
+                    .joinToString(", ")
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.student_lab_themes_active_info, activeDomainLabels),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(availableTabs) { tab ->
+                    FilterChip(
+                        selected = selectedTab == tab,
+                        onClick = { selectedTab = tab },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = stringResource(id = tab.labelRes),
+                                maxLines = 1
+                            )
+                        },
+                        modifier = Modifier.testTag(tab.testTag)
+                    )
+                }
+            }
+
+            HorizontalDivider()
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                when (selectedTab) {
+                    SvtLabTab.GLOSSARY -> GlossaryLabSection(
+                        currentLanguage = currentLanguage,
+                        allowedDomains = effectiveDomains
+                    )
+                    SvtLabTab.FLASHCARDS -> FlashcardsLabSection(
+                        currentLanguage = currentLanguage,
+                        allowedDomains = effectiveDomains
+                    )
+                    SvtLabTab.DNA -> DnaSimulatorLabSection(currentLanguage = currentLanguage)
+                    SvtLabTab.MICROSCOPE_GEOLOGY -> MicroscopeAndGeologyLabSection(
+                        currentLanguage = currentLanguage,
+                        showGeologySections = SvtDomain.GEOLOGY in effectiveDomains
+                    )
                 }
             }
         }
@@ -232,6 +352,7 @@ fun SvtLabDialog(
 
 @Composable
 private fun SvtDomainFilterRow(
+    availableDomains: List<SvtDomain>,
     selectedDomain: SvtDomain?,
     onSelectDomain: (SvtDomain?) -> Unit
 ) {
@@ -239,17 +360,19 @@ private fun SvtDomainFilterRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(vertical = 4.dp)
     ) {
-        item {
-            FilterChip(
-                selected = selectedDomain == null,
-                onClick = { onSelectDomain(null) },
-                label = { Text(stringResource(id = R.string.svt_domain_all)) }
-            )
+        if (availableDomains.size > 1) {
+            item {
+                FilterChip(
+                    selected = selectedDomain == null,
+                    onClick = { onSelectDomain(null) },
+                    label = { Text(stringResource(id = R.string.svt_domain_all)) }
+                )
+            }
         }
-        items(SvtDomain.entries) { domain ->
+        items(availableDomains) { domain ->
             FilterChip(
-                selected = selectedDomain == domain,
-                onClick = { onSelectDomain(domain) },
+                selected = selectedDomain == domain || (availableDomains.size == 1 && selectedDomain == null),
+                onClick = { onSelectDomain(if (availableDomains.size == 1) null else domain) },
                 label = { Text(stringResource(id = domain.labelRes)) }
             )
         }
@@ -257,20 +380,35 @@ private fun SvtDomainFilterRow(
 }
 
 @Composable
-private fun GlossaryLabSection(currentLanguage: AppLanguage) {
+private fun GlossaryLabSection(
+    currentLanguage: AppLanguage,
+    allowedDomains: Set<SvtDomain>
+) {
     var query by rememberSaveable { mutableStateOf("") }
     var selectedDomainName by rememberSaveable { mutableStateOf<String?>(null) }
-    val selectedDomain = selectedDomainName?.let { name -> SvtDomain.entries.firstOrNull { it.name == name } }
+    val availableDomains = remember(allowedDomains) {
+        SvtDomain.entries.filter { it in allowedDomains }
+    }
+    val selectedDomain = selectedDomainName?.let { name ->
+        availableDomains.firstOrNull { it.name == name }
+    }
 
-    val filtered = remember(query, selectedDomain, currentLanguage) {
+    LaunchedEffect(allowedDomains) {
+        if (selectedDomainName != null && availableDomains.none { it.name == selectedDomainName }) {
+            selectedDomainName = null
+        }
+    }
+
+    val filtered = remember(query, selectedDomain, allowedDomains, currentLanguage) {
         val q = query.trim().lowercase(Locale.getDefault())
         SvtKnowledgeCatalog.glossaryEntries.filter { entry ->
+            val allowedOk = entry.domain in allowedDomains
             val domainOk = selectedDomain == null || entry.domain == selectedDomain
             val textOk = q.isEmpty() ||
                 entry.term.get(currentLanguage).lowercase(Locale.getDefault()).contains(q) ||
                 entry.definition.get(currentLanguage).lowercase(Locale.getDefault()).contains(q) ||
                 entry.keyHint.get(currentLanguage).lowercase(Locale.getDefault()).contains(q)
-            domainOk && textOk
+            allowedOk && domainOk && textOk
         }
     }
 
@@ -279,6 +417,21 @@ private fun GlossaryLabSection(currentLanguage: AppLanguage) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            SvtHeroBannerCard(
+                title = stringResource(id = R.string.svt_lab_title),
+                subtitle = stringResource(id = R.string.svt_lab_subtitle)
+            )
+        }
+
+        item {
+            SvtFactOfTheDayBanner(
+                currentLanguage = currentLanguage,
+                allowedDomains = allowedDomains,
+                onOpenLab = null
+            )
+        }
+
         item {
             OutlinedTextField(
                 value = query,
@@ -301,6 +454,7 @@ private fun GlossaryLabSection(currentLanguage: AppLanguage) {
 
         item {
             SvtDomainFilterRow(
+                availableDomains = availableDomains,
                 selectedDomain = selectedDomain,
                 onSelectDomain = { selectedDomainName = it?.name }
             )
@@ -398,16 +552,33 @@ private fun GlossaryLabSection(currentLanguage: AppLanguage) {
 }
 
 @Composable
-private fun FlashcardsLabSection(currentLanguage: AppLanguage) {
+private fun FlashcardsLabSection(
+    currentLanguage: AppLanguage,
+    allowedDomains: Set<SvtDomain>
+) {
     var selectedDomainName by rememberSaveable { mutableStateOf<String?>(null) }
-    val selectedDomain = selectedDomainName?.let { name -> SvtDomain.entries.firstOrNull { it.name == name } }
+    val availableDomains = remember(allowedDomains) {
+        SvtDomain.entries.filter { it in allowedDomains }
+    }
+    val selectedDomain = selectedDomainName?.let { name ->
+        availableDomains.firstOrNull { it.name == name }
+    }
     var currentIndex by rememberSaveable { mutableIntStateOf(0) }
     var isFlipped by rememberSaveable { mutableStateOf(false) }
     var masteredIds by rememberSaveable { mutableStateOf(setOf<String>()) }
 
-    val cards = remember(selectedDomain) {
-        if (selectedDomain == null) SvtKnowledgeCatalog.flashcards
-        else SvtKnowledgeCatalog.flashcards.filter { it.domain == selectedDomain }
+    LaunchedEffect(allowedDomains) {
+        if (selectedDomainName != null && availableDomains.none { it.name == selectedDomainName }) {
+            selectedDomainName = null
+            currentIndex = 0
+            isFlipped = false
+        }
+    }
+
+    val cards = remember(selectedDomain, allowedDomains) {
+        val domainFiltered = SvtKnowledgeCatalog.flashcards.filter { it.domain in allowedDomains }
+        if (selectedDomain == null) domainFiltered
+        else domainFiltered.filter { it.domain == selectedDomain }
     }
     val safeIndex = if (cards.isEmpty()) 0 else currentIndex.coerceIn(0, cards.lastIndex)
     val card = cards.getOrNull(safeIndex)
@@ -421,6 +592,7 @@ private fun FlashcardsLabSection(currentLanguage: AppLanguage) {
     ) {
         item {
             SvtDomainFilterRow(
+                availableDomains = availableDomains,
                 selectedDomain = selectedDomain,
                 onSelectDomain = {
                     selectedDomainName = it?.name
@@ -941,7 +1113,10 @@ private fun StrandRow(
 }
 
 @Composable
-private fun MicroscopeAndGeologyLabSection(currentLanguage: AppLanguage) {
+private fun MicroscopeAndGeologyLabSection(
+    currentLanguage: AppLanguage,
+    showGeologySections: Boolean
+) {
     var eyepieceMag by rememberSaveable { mutableIntStateOf(10) }
     var objectiveMag by rememberSaveable { mutableIntStateOf(40) }
     var observedMmText by rememberSaveable { mutableStateOf("4.5") }
@@ -1086,103 +1261,105 @@ private fun MicroscopeAndGeologyLabSection(currentLanguage: AppLanguage) {
             }
         }
 
-        item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(top = 4.dp)
-            ) {
-                Icon(Icons.Filled.Public, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(
-                    text = stringResource(id = R.string.svt_geology_eras_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        items(SvtKnowledgeCatalog.geologicalEras, key = { it.id }) { era ->
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+        if (showGeologySections) {
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 4.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = era.name.get(currentLanguage),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = era.span.get(currentLanguage),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
+                    Icon(Icons.Filled.Public, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Text(
-                        text = era.highlights.get(currentLanguage),
-                        style = MaterialTheme.typography.bodySmall
+                        text = stringResource(id = R.string.svt_geology_eras_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
-        }
 
-        item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(top = 4.dp)
-            ) {
-                Icon(Icons.Filled.Terrain, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(
-                    text = stringResource(id = R.string.svt_rocks_families_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        items(SvtKnowledgeCatalog.rockFamilies, key = { it.id }) { family ->
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+            items(SvtKnowledgeCatalog.geologicalEras, key = { it.id }) { era ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
                 ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = era.name.get(currentLanguage),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = era.span.get(currentLanguage),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = era.highlights.get(currentLanguage),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Icon(Icons.Filled.Terrain, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Text(
-                        text = family.name.get(currentLanguage),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        text = stringResource(id = R.string.svt_rocks_families_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = family.origin.get(currentLanguage),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        text = family.examples.get(currentLanguage),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
+                }
+            }
+
+            items(SvtKnowledgeCatalog.rockFamilies, key = { it.id }) { family ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = family.name.get(currentLanguage),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = family.origin.get(currentLanguage),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = family.examples.get(currentLanguage),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
                 }
             }
         }

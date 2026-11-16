@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.outlined.Biotech
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Person
@@ -57,7 +58,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -98,6 +98,7 @@ enum class SvtTab(
     val testTag: String
 ) {
     EXERCISES(R.string.tab_exercises, Icons.Filled.Quiz, Icons.Outlined.Quiz, "tab_exercises"),
+    SVT_LAB(R.string.tab_svt_lab, Icons.Filled.Biotech, Icons.Outlined.Biotech, "tab_svt_lab"),
     RESOURCES(R.string.tab_resources, Icons.Filled.MenuBook, Icons.Outlined.MenuBook, "tab_resources"),
     ANNOUNCEMENTS(R.string.tab_announcements, Icons.Filled.Campaign, Icons.Outlined.Campaign, "tab_announcements"),
     MESSAGING(R.string.tab_messaging, Icons.AutoMirrored.Filled.Chat, Icons.AutoMirrored.Outlined.Chat, "tab_messaging"),
@@ -120,7 +121,6 @@ fun MainDashboardScreen(
     val isTeacher = profile.role == "teacher"
     var currentTab by rememberSaveable { mutableStateOf(SvtTab.EXERCISES) }
     var showNotificationsSheet by remember { mutableStateOf(false) }
-    var showSvtLab by rememberSaveable { mutableStateOf(false) }
     var showClassMenu by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -146,6 +146,7 @@ fun MainDashboardScreen(
     val teacherMessages by viewModel.teacherMessages.collectAsStateWithLifecycle()
 
     val studentEnrollment by viewModel.studentEnrollment.collectAsStateWithLifecycle()
+    val studentAllowedLabDomains by viewModel.studentAllowedLabDomains.collectAsStateWithLifecycle()
     val studentQuizzes by viewModel.studentQuizzes.collectAsStateWithLifecycle()
     val studentAttempts by viewModel.studentAttempts.collectAsStateWithLifecycle()
     val studentResources by viewModel.studentResources.collectAsStateWithLifecycle()
@@ -260,18 +261,6 @@ fun MainDashboardScreen(
                         }
                     },
                     actions = {
-                        IconButton(
-                            onClick = { showSvtLab = true },
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("open_svt_lab_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Biotech,
-                                contentDescription = stringResource(id = R.string.svt_lab_title),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
                         LanguageSwitcherRow(
                             currentLanguage = currentLanguage,
                             onLanguageSelected = onLanguageSelected,
@@ -317,6 +306,7 @@ fun MainDashboardScreen(
                                     Text(
                                         text = stringResource(id = tab.labelRes),
                                         maxLines = 1,
+                                        softWrap = false,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 },
@@ -345,7 +335,14 @@ fun MainDashboardScreen(
                                         contentDescription = stringResource(id = tab.labelRes)
                                     )
                                 },
-                                label = { Text(stringResource(id = tab.labelRes)) },
+                                label = {
+                                    Text(
+                                        text = stringResource(id = tab.labelRes),
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
                                 modifier = Modifier.testTag(tab.testTag)
                             )
                         }
@@ -412,8 +409,17 @@ fun MainDashboardScreen(
                                 onSubmitAttempt = { quiz, selectedAnswers, perQSecs, totalSecs, onDone ->
                                     viewModel.submitQuizAttempt(context, quiz, selectedAnswers, perQSecs, totalSecs, onDone)
                                 },
+                                currentLanguage = currentLanguage
+                            )
+
+                            SvtTab.SVT_LAB -> SvtLabTabScreen(
+                                isTeacher = isTeacher,
                                 currentLanguage = currentLanguage,
-                                onOpenSvtLab = { showSvtLab = true }
+                                selectedTeacherClass = selectedClass,
+                                studentAllowedDomains = studentAllowedLabDomains,
+                                onUpdateClassLabDomains = { classId, domains ->
+                                    viewModel.updateClassLabDomains(context, classId, domains)
+                                }
                             )
 
                             SvtTab.RESOURCES -> ResourcesTab(
@@ -559,6 +565,12 @@ fun MainDashboardScreen(
                                 onDeleteAppUpdate = { updateId ->
                                     viewModel.deleteAppUpdate(updateId)
                                 },
+                                onUpdateClassLabDomains = { classId, domains ->
+                                    viewModel.updateClassLabDomains(context, classId, domains)
+                                },
+                                onResetStudentDevice = { studentId ->
+                                    viewModel.resetStudentBoundDevice(context, studentId)
+                                },
                                 onShowError = { msg ->
                                     coroutineScope.launch {
                                         snackbarHostState.showSnackbar(msg)
@@ -585,13 +597,6 @@ fun MainDashboardScreen(
         BadgeCelebrationDialog(
             badges = unlockedBadges,
             onDismiss = { viewModel.dismissUnlockedBadges() }
-        )
-    }
-
-    if (showSvtLab) {
-        SvtLabDialog(
-            currentLanguage = currentLanguage,
-            onDismiss = { showSvtLab = false }
         )
     }
 }

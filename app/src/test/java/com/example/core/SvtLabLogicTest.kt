@@ -1,5 +1,7 @@
 package com.example.core
 
+import com.example.data.model.UserProfile
+import com.example.data.svt.SvtDomain
 import com.example.data.svt.SvtKnowledgeCatalog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -99,5 +101,42 @@ class SvtLabLogicTest {
                 assertTrue(card.explanation.get(lang).isNotBlank())
             }
         }
+    }
+
+    @Test
+    fun `resolveVisibleLabDomains parses valid subset and falls back safely`() {
+        assertEquals(
+            SvtDomain.entries.toSet(),
+            SvtLabLogic.resolveVisibleLabDomains(emptyList())
+        )
+        assertEquals(
+            SvtDomain.entries.toSet(),
+            SvtLabLogic.resolveVisibleLabDomains(listOf("INVALID_DOMAIN"))
+        )
+        assertEquals(
+            setOf(SvtDomain.GEOLOGY, SvtDomain.ECOLOGY),
+            SvtLabLogic.resolveVisibleLabDomains(listOf("GEOLOGY", "ECOLOGY", "UNKNOWN"))
+        )
+    }
+
+    @Test
+    fun `DeviceSessionManager enforces single phone for students only`() {
+        val teacherProfile = UserProfile(
+            userId = "t1",
+            role = "teacher",
+            boundDeviceId = "dev_a"
+        )
+        assertTrue(DeviceSessionManager.isDeviceAllowedForStudent(teacherProfile, "dev_other"))
+
+        val unboundStudent = UserProfile(
+            userId = "s1",
+            role = "student",
+            boundDeviceId = ""
+        )
+        assertTrue(DeviceSessionManager.isDeviceAllowedForStudent(unboundStudent, "dev_a"))
+
+        val boundStudent = unboundStudent.copy(boundDeviceId = "dev_a", boundDeviceModel = "Phone A")
+        assertTrue(DeviceSessionManager.isDeviceAllowedForStudent(boundStudent, "dev_a"))
+        assertFalse(DeviceSessionManager.isDeviceAllowedForStudent(boundStudent, "dev_b"))
     }
 }

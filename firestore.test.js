@@ -729,5 +729,191 @@ test("Auto-approved QR enrollment and first-time video_tracking + PDF open track
   );
 });
 
+test("Single-device student lock: immutable to student once bound, resettable only by enrolled teacher", async () => {
+  const teacherDb = testEnv.authenticatedContext(TEACHER_UID).firestore();
+  const studentADb = testEnv.authenticatedContext(STUDENT_A_UID).firestore();
+  const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
+  const now = serverNow();
+
+  // Seed class and approved enrollment for Student A with TEACHER_UID
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await db.collection("classes").doc("class_lock").set({
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      name: "2Bac Lock",
+      academicYear: "2026-2027",
+      level: "2Bac",
+      qrToken: "SVT_LOCK_1",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.collection("enrollments").doc(STUDENT_A_UID).set({
+      studentId: STUDENT_A_UID,
+      classId: "class_lock",
+      className: "2Bac Lock",
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      studentName: "Amina",
+      studentPhone: "0600000000",
+      status: "approved",
+      requestedAt: now,
+      updatedAt: now,
+    });
+  });
+
+  // Student A creates profile initially unbound
+  await assertSucceeds(
+    studentADb.collection("users").doc(STUDENT_A_UID).set({
+      userId: STUDENT_A_UID,
+      fullName: "Amina El Amrani",
+      phoneNumber: "+212600112233",
+      role: "student",
+      acceptedTerms: false,
+      xp: 0,
+      loginStreak: 1,
+      lastLoginDate: "2026-11-15",
+      unlockedBadgeIds: [],
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Student A claims their first physical device
+  await assertSucceeds(
+    studentADb.collection("users").doc(STUDENT_A_UID).update({
+      boundDeviceId: "dev_phone_1",
+      boundDeviceModel: "Samsung A55",
+      updatedAt: now,
+    })
+  );
+
+  // Student A cannot overwrite or clear their own boundDeviceId once set
+  await assertFails(
+    studentADb.collection("users").doc(STUDENT_A_UID).update({
+      boundDeviceId: "dev_phone_2",
+      boundDeviceModel: "Redmi Note 13",
+      updatedAt: now,
+    })
+  );
+  await assertFails(
+    studentADb.collection("users").doc(STUDENT_A_UID).update({
+      boundDeviceId: "",
+      boundDeviceModel: "",
+      updatedAt: now,
+    })
+  );
+
+  // Student B cannot reset Student A's boundDeviceId or read Student A's profile
+  await assertFails(
+    studentBDb.collection("users").doc(STUDENT_A_UID).update({
+      boundDeviceId: "",
+      boundDeviceModel: "",
+      updatedAt: now,
+    })
+  );
+  await assertFails(studentBDb.collection("users").doc(STUDENT_A_UID).get());
+
+  // Teacher cannot read Student A's private profile PII, nor set a fake device ID,
+  // but CAN reset Student A's boundDeviceId to ""
+  await assertFails(teacherDb.collection("users").doc(STUDENT_A_UID).get());
+  await assertFails(
+    teacherDb.collection("users").doc(STUDENT_A_UID).update({
+      boundDeviceId: "hijack_device",
+      boundDeviceModel: "Other",
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(
+    teacherDb.collection("users").doc(STUDENT_A_UID).update({
+      boundDeviceId: "",
+      boundDeviceModel: "",
+      updatedAt: now,
+    })
+  );
+
+  // Student A can now claim a new phone after teacher reset
+  await assertSucceeds(
+    studentADb.collection("users").doc(STUDENT_A_UID).update({
+      boundDeviceId: "dev_phone_2",
+      boundDeviceModel: "Pixel 8a",
+      updatedAt: now,
+    })
+  );
+});
+
+test("Class visibleLabDomains: teacher updates valid themes, approved student reads via get, invalid/empty denied", async () => {
+  const teacherDb = testEnv.authenticatedContext(TEACHER_UID).firestore();
+  const studentADb = testEnv.authenticatedContext(STUDENT_A_UID).firestore();
+  const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
+  const now = serverNow();
+
+  await assertSucceeds(
+    teacherDb.collection("classes").doc("class_themes").set({
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      name: "2Bac Thèmes",
+      academicYear: "2026-2027",
+      level: "2Bac",
+      qrToken: "SVT_THEMES_1",
+      visibleLabDomains: ["CELL_GENETICS", "GEOLOGY", "PHYSIOLOGY_IMMUNITY", "ECOLOGY"],
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Teacher updates themes to a subset
+  await assertSucceeds(
+    teacherDb.collection("classes").doc("class_themes").update({
+      visibleLabDomains: ["CELL_GENETICS", "ECOLOGY"],
+      updatedAt: now,
+    })
+  );
+
+  // Empty visibleLabDomains or unknown domain name fails
+  await assertFails(
+    teacherDb.collection("classes").doc("class_themes").update({
+      visibleLabDomains: [],
+      updatedAt: now,
+    })
+  );
+  await assertFails(
+    teacherDb.collection("classes").doc("class_themes").update({
+      visibleLabDomains: ["ASTROLOGY"],
+      updatedAt: now,
+    })
+  );
+
+  // Seed approved enrollment for Student A
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().collection("enrollments").doc(STUDENT_A_UID).set({
+      studentId: STUDENT_A_UID,
+      classId: "class_themes",
+      className: "2Bac Thèmes",
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      studentName: "Amina",
+      studentPhone: "0600000000",
+      status: "approved",
+      requestedAt: now,
+      updatedAt: now,
+    });
+  });
+
+  // Approved student A can read class_themes doc, cannot modify themes, cannot scrape all classes
+  await assertSucceeds(studentADb.collection("classes").doc("class_themes").get());
+  await assertFails(studentADb.collection("classes").get());
+  await assertFails(
+    studentADb.collection("classes").doc("class_themes").update({
+      visibleLabDomains: ["GEOLOGY"],
+      updatedAt: now,
+    })
+  );
+
+  // Unapproved student B cannot read class_themes doc
+  await assertFails(studentBDb.collection("classes").doc("class_themes").get());
+});
+
+
 
 

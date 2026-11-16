@@ -9,8 +9,10 @@ import com.example.R
 import com.example.core.AppLanguage
 import com.example.core.AuthSessionDraft
 import com.example.core.ConnectivityObserver
+import com.example.core.DeviceSessionManager
 import com.example.core.ImportedStudentRow
 import com.example.core.NotificationHelper
+import com.example.core.SvtLabLogic
 import com.example.data.ai.AiAppCheckException
 import com.example.data.ai.GeneratedQuizDraft
 import com.example.data.ai.SvtAiRepository
@@ -37,6 +39,7 @@ import com.example.data.offline.PendingVideoTracking
 import com.example.data.repository.ResourceReadException
 import com.example.data.repository.ResourceUploadTooLargeException
 import com.example.data.repository.SvtRepository
+import com.example.data.svt.SvtDomain
 import com.google.firebase.Firebase
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuthException
@@ -87,6 +90,11 @@ class SvtMainViewModel(
 
     private val context = appContext.applicationContext
     private val syncMutex = Mutex()
+    private val deviceBindMutex = Mutex()
+    private var deviceBindAttempted = false
+
+    val currentDeviceId: String = DeviceSessionManager.getDeviceId(context)
+    val currentDeviceModel: String = DeviceSessionManager.getDeviceModel()
 
     val isOnline: StateFlow<Boolean> = connectivityObserver.isOnline
 
@@ -232,6 +240,19 @@ class SvtMainViewModel(
     }
 
     private val isApprovedStudent = approvedClassId.map { it != null }
+
+    val studentClass: StateFlow<SvtClass?> = approvedClassId.flatMapLatest { classId ->
+        if (classId != null) repository.observeClassById(classId).catch { emit(null) }
+        else flowOf(null)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+
+    val studentAllowedLabDomains: StateFlow<Set<SvtDomain>> = studentClass.map { cls ->
+        if (cls == null) {
+            SvtDomain.entries.toSet()
+        } else {
+            SvtLabLogic.resolveVisibleLabDomains(cls.visibleLabDomains)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), SvtDomain.entries.toSet())
 
     private val remoteStudentQuizzes: StateFlow<List<Quiz>> = approvedClassId.flatMapLatest { classId ->
         if (classId != null) repository.observeStudentQuizzes(classId).catch { emit(emptyList()) }
@@ -429,7 +450,9 @@ class SvtMainViewModel(
                     massarNumber = massarNumber,
                     birthDate = birthDate,
                     email = email,
-                    mustChangePassword = mustChangePassword
+                    mustChangePassword = mustChangePassword,
+                    boundDeviceId = if (role == "student") currentDeviceId else "",
+                    boundDeviceModel = if (role == "student") currentDeviceModel else ""
                 )
                 _optimisticProfile.value = createdProfile
                 _profileRetryTrigger.value += 1
@@ -626,6 +649,63 @@ class SvtMainViewModel(
             try {
                 _optimisticEnrollment.value = null
                 repository.clearOwnEnrollment()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun claimStudentDeviceIfNeeded() {
+        val currentProfile = (profileState.value as? ProfileGateState.Ready)?.profile ?: return
+        if (currentProfile.role != "student" || currentProfile.boundDeviceId.isNotBlank()) return
+        viewModelScope.launch {
+            deviceBindMutex.withLock {
+                if (deviceBindAttempted) return@withLock
+                deviceBindAttempted = true
+                try {
+                    val bound = repository.bindStudentDeviceIfUnbound(currentDeviceId, currentDeviceModel)
+                    if (bound) {
+                        _optimisticProfile.value = currentProfile.copy(
+                            boundDeviceId = currentDeviceId,
+                            boundDeviceModel = currentDeviceModel
+                        )
+                    } else {
+                        _profileRetryTrigger.value += 1
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    deviceBindAttempted = false
+                    Log.w(TAG, "Device lock bind warning", e)
+                }
+            }
+        }
+    }
+
+    fun resetStudentBoundDevice(uiContext: Context, studentId: String) {
+        viewModelScope.launch {
+            try {
+                repository.resetStudentBoundDevice(studentId)
+                _statusMessage.value = uiContext.getString(R.string.device_lock_reset_success)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun updateClassLabDomains(uiContext: Context, classId: String, domains: List<String>) {
+        if (domains.isEmpty()) {
+            _actionError.value = uiContext.getString(R.string.teacher_lab_themes_min_one)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                repository.updateClassLabDomains(classId, domains)
+                _statusMessage.value = uiContext.getString(R.string.teacher_lab_themes_updated)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

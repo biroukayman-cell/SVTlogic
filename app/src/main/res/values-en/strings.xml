@@ -466,4 +466,18 @@
     <string name="svt_stats_published">Published</string>
     <string name="svt_stats_submissions">Submissions</string>
     <string name="svt_ai_chapter_presets_label">Quick SVT topics</string>
+
+    <!-- SVT Lab tab, Single-Device Lock & Per-Class Themes -->
+    <string name="tab_svt_lab">SVT Lab</string>
+    <string name="device_lock_blocked_title">Account linked to another phone</string>
+    <string name="device_lock_blocked_body">For security reasons, each student account works on a single phone only. This account is already linked to: %1$s.</string>
+    <string name="device_lock_teacher_hint">If you changed phones, ask your teacher to unlink your previous device in Profile → Student list.</string>
+    <string name="device_lock_reset_button">Unlink phone</string>
+    <string name="device_lock_reset_confirm">Allow %1$s to sign in from a new phone? The previous device lock will be cleared.</string>
+    <string name="device_lock_reset_success">Student phone unlinked successfully.</string>
+    <string name="teacher_lab_themes_title">SVT Lab themes for this class</string>
+    <string name="teacher_lab_themes_desc">Choose which SVT themes appear to students of this class in the SVT Lab tab.</string>
+    <string name="teacher_lab_themes_min_one">At least one SVT theme must stay enabled.</string>
+    <string name="teacher_lab_themes_updated">SVT Lab themes updated for this class.</string>
+    <string name="student_lab_themes_active_info">Themes enabled by your teacher: %1$s</string>
 </resources>

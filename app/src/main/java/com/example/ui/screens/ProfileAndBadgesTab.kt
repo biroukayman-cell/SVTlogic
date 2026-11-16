@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
@@ -167,6 +168,8 @@ fun ProfileAndBadgesTab(
     onExportRosterPdf: (SvtClass, List<RosterStudent>) -> Unit,
     onPublishAppUpdate: (classId: String, versionCode: Int, versionName: String, releaseNotes: String, downloadUrl: String) -> Unit,
     onDeleteAppUpdate: (String) -> Unit,
+    onUpdateClassLabDomains: (classId: String, domains: List<String>) -> Unit,
+    onResetStudentDevice: (studentId: String) -> Unit,
     onShowError: (String) -> Unit,
     onSignOut: () -> Unit
 ) {
@@ -180,6 +183,7 @@ fun ProfileAndBadgesTab(
     var qrDialogClass by remember { mutableStateOf<SvtClass?>(null) }
     var classToDelete by remember { mutableStateOf<SvtClass?>(null) }
     var studentToDelete by remember { mutableStateOf<Enrollment?>(null) }
+    var studentToResetDevice by remember { mutableStateOf<Enrollment?>(null) }
     var updateToDelete by remember { mutableStateOf<AppUpdateRelease?>(null) }
     var selectedBadgeCategory by remember { mutableStateOf<BadgeCategory?>(null) }
 
@@ -709,6 +713,11 @@ fun ProfileAndBadgesTab(
                             }
                         }
 
+                        TeacherClassLabThemesSelector(
+                            svtClass = svtClass,
+                            onUpdateClassLabDomains = onUpdateClassLabDomains
+                        )
+
                         // Generated Roster & Provisional Passwords Section
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -887,15 +896,27 @@ fun ProfileAndBadgesTab(
                                         )
                                     }
                                 }
-                                IconButton(
-                                    onClick = { studentToDelete = enrollment },
-                                    modifier = Modifier.testTag("delete_student_${enrollment.studentId}")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Delete,
-                                        contentDescription = stringResource(id = R.string.teacher_delete_student),
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = { studentToResetDevice = enrollment },
+                                        modifier = Modifier.testTag("reset_device_${enrollment.studentId}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.LockOpen,
+                                            contentDescription = stringResource(id = R.string.device_lock_reset_button),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { studentToDelete = enrollment },
+                                        modifier = Modifier.testTag("delete_student_${enrollment.studentId}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Delete,
+                                            contentDescription = stringResource(id = R.string.teacher_delete_student),
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1155,6 +1176,30 @@ fun ProfileAndBadgesTab(
             },
             dismissButton = {
                 TextButton(onClick = { studentToDelete = null }) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
+        )
+    }
+
+    studentToResetDevice?.let { enrollment ->
+        AlertDialog(
+            onDismissRequest = { studentToResetDevice = null },
+            title = { Text(stringResource(id = R.string.device_lock_reset_button)) },
+            text = { Text(stringResource(id = R.string.device_lock_reset_confirm, enrollment.studentName)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onResetStudentDevice(enrollment.studentId)
+                        studentToResetDevice = null
+                    },
+                    modifier = Modifier.testTag("confirm_reset_device_${enrollment.studentId}")
+                ) {
+                    Text(stringResource(id = R.string.device_lock_reset_button))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { studentToResetDevice = null }) {
                     Text(stringResource(id = R.string.cancel))
                 }
             }

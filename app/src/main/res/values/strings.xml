@@ -466,4 +466,18 @@
     <string name="svt_stats_published">QCM publiés</string>
     <string name="svt_stats_submissions">Copies reçues</string>
     <string name="svt_ai_chapter_presets_label">Thèmes SVT rapides</string>
+
+    <!-- Onglet Labo SVT, Verrouillage téléphone unique & Thèmes par classe -->
+    <string name="tab_svt_lab">Labo SVT</string>
+    <string name="device_lock_blocked_title">Compte lié à un autre téléphone</string>
+    <string name="device_lock_blocked_body">Par sécurité, chaque compte élève ne fonctionne que sur un seul téléphone. Ce compte est déjà associé à l\'appareil : %1$s.</string>
+    <string name="device_lock_teacher_hint">Si vous avez changé de téléphone, demandez à votre professeur de délier votre ancien appareil depuis Profil → Liste des élèves.</string>
+    <string name="device_lock_reset_button">Délier téléphone</string>
+    <string name="device_lock_reset_confirm">Autoriser %1$s à se connecter depuis un nouveau téléphone ? L\'ancien appareil ne sera plus lié.</string>
+    <string name="device_lock_reset_success">Téléphone de l\'élève délié avec succès.</string>
+    <string name="teacher_lab_themes_title">Thèmes du Labo SVT pour cette classe</string>
+    <string name="teacher_lab_themes_desc">Choisissez les thèmes affichés aux élèves de cette classe dans l\'onglet Labo SVT.</string>
+    <string name="teacher_lab_themes_min_one">Au moins un thème SVT doit rester activé.</string>
+    <string name="teacher_lab_themes_updated">Thèmes du Labo SVT mis à jour pour la classe.</string>
+    <string name="student_lab_themes_active_info">Thèmes activés par votre professeur : %1$s</string>
 </resources>

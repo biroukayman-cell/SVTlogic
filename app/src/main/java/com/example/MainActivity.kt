@@ -42,6 +42,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.core.AppLanguage
 import com.example.core.AuthSessionDraft
+import com.example.core.DeviceSessionManager
 import com.example.core.LanguagePreferences
 import com.example.core.NetworkConnectivityObserver
 import com.example.core.NotificationHelper
@@ -54,6 +55,7 @@ import com.example.data.offline.OfflineStorageManager
 import com.example.data.repository.SvtRepository
 import com.example.ui.screens.AccountSetupScreen
 import com.example.ui.screens.AuthScreen
+import com.example.ui.screens.DeviceLockedBlockedScreen
 import com.example.ui.screens.MainDashboardScreen
 import com.example.ui.screens.PendingApprovalScreen
 import com.example.ui.screens.QrJoinClassScreen
@@ -400,22 +402,35 @@ private fun AuthenticatedSvtFlow(
         is ProfileGateState.Ready -> {
             val profile = state.profile
             if (profile.role == "student") {
-                val enrollment = studentEnrollment
-                when {
-                    !profile.acceptedTerms -> {
-                        TermsAcceptanceScreen(
-                            studentName = profile.fullName,
-                            currentLanguage = currentLanguage,
-                            onLanguageSelected = onLanguageSelected,
-                            isSubmitting = isAcceptingTerms,
-                            errorMessage = actionError,
-                            onAccept = {
-                                viewModel.clearError()
-                                viewModel.acceptTermsOfUse()
-                            },
-                            onSignOut = onSignOut
-                        )
+                if (!DeviceSessionManager.isDeviceAllowedForStudent(profile, viewModel.currentDeviceId)) {
+                    DeviceLockedBlockedScreen(
+                        boundDeviceModel = profile.boundDeviceModel,
+                        currentLanguage = currentLanguage,
+                        onLanguageSelected = onLanguageSelected,
+                        onSignOut = onSignOut
+                    )
+                } else {
+                    LaunchedEffect(profile.userId, profile.boundDeviceId) {
+                        if (profile.boundDeviceId.isBlank()) {
+                            viewModel.claimStudentDeviceIfNeeded()
+                        }
                     }
+                    val enrollment = studentEnrollment
+                    when {
+                        !profile.acceptedTerms -> {
+                            TermsAcceptanceScreen(
+                                studentName = profile.fullName,
+                                currentLanguage = currentLanguage,
+                                onLanguageSelected = onLanguageSelected,
+                                isSubmitting = isAcceptingTerms,
+                                errorMessage = actionError,
+                                onAccept = {
+                                    viewModel.clearError()
+                                    viewModel.acceptTermsOfUse()
+                                },
+                                onSignOut = onSignOut
+                            )
+                        }
 
                     enrollment == null -> {
                         val pendingToken = authDraft.pendingClassQrToken
@@ -497,6 +512,7 @@ private fun AuthenticatedSvtFlow(
                             onSignOut = onSignOut
                         )
                     }
+                }
                 }
             } else {
                 MainDashboardScreen(

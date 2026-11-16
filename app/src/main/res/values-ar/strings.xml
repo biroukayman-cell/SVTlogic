@@ -466,4 +466,18 @@
     <string name="svt_stats_published">تمارين منشورة</string>
     <string name="svt_stats_submissions">إجابات مستلمة</string>
     <string name="svt_ai_chapter_presets_label">محاور SVT سريعة</string>
+
+    <!-- تبويب المختبر، قفل الهاتف الواحد ومحاور القسم -->
+    <string name="tab_svt_lab">المختبر</string>
+    <string name="device_lock_blocked_title">الحساب مرتبط بهاتف آخر</string>
+    <string name="device_lock_blocked_body">لأسباب أمنية، يعمل حساب التلميذ على هاتف واحد فقط. هذا الحساب مرتبط مسبقاً بالجهاز: %1$s.</string>
+    <string name="device_lock_teacher_hint">إذا غيّرت هاتفك، اطلب من أستاذك إلغاء ربط الجهاز السابق من الملف الشخصي ← لائحة التلاميذ.</string>
+    <string name="device_lock_reset_button">فك ربط الهاتف</string>
+    <string name="device_lock_reset_confirm">هل تريد السماح لـ %1$s بتسجيل الدخول من هاتف جديد؟ سيتم إلغاء ربط الهاتف السابق.</string>
+    <string name="device_lock_reset_success">تم فك ربط هاتف التلميذ بنجاح.</string>
+    <string name="teacher_lab_themes_title">محاور مختبر SVT لهذا القسم</string>
+    <string name="teacher_lab_themes_desc">اختر المحاور التي تظهر لتلاميذ هذا القسم في تبويب مختبر SVT.</string>
+    <string name="teacher_lab_themes_min_one">يجب الإبقاء على محور واحد على الأقل مفعّلاً.</string>
+    <string name="teacher_lab_themes_updated">تم تحديث محاور مختبر SVT للقسم.</string>
+    <string name="student_lab_themes_active_info">المحاور المفعّلة من طرف أستاذك: %1$s</string>
 </resources>
