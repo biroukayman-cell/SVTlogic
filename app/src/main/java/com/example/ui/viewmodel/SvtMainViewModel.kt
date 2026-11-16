@@ -1085,6 +1085,20 @@ class SvtMainViewModel(
         }
     }
 
+    fun deleteQuiz(uiContext: Context, quiz: Quiz) {
+        viewModelScope.launch {
+            try {
+                repository.deleteQuiz(quiz)
+                offlineStorage.removeOfflineQuiz(quiz.id)
+                _statusMessage.value = uiContext.getString(R.string.quiz_deleted_success)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
     fun downloadQuizOffline(uiContext: Context, quiz: Quiz) {
         viewModelScope.launch {
             try {
@@ -1562,6 +1576,19 @@ class SvtMainViewModel(
                     notifTitle = notifTitle,
                     notifBody = notifBody
                 )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun deleteAnnouncement(uiContext: Context, announcement: Announcement) {
+        viewModelScope.launch {
+            try {
+                repository.deleteAnnouncement(announcement)
+                _statusMessage.value = uiContext.getString(R.string.announcement_deleted_success)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

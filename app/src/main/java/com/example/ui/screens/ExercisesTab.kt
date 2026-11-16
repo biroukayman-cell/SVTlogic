@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.Edit
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -133,6 +135,7 @@ fun ExercisesTab(
         totalSeconds: Long,
         onDone: (QuizAttempt) -> Unit
     ) -> Unit,
+    onDeleteQuiz: (Quiz) -> Unit = {},
     currentLanguage: AppLanguage = AppLanguage.FR
 ) {
     var activeQuizId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -145,10 +148,12 @@ fun ExercisesTab(
     var showAiGeneratorDialog by rememberSaveable { mutableStateOf(false) }
     var showExternalAiDialog by rememberSaveable { mutableStateOf(false) }
     var statsQuizId by rememberSaveable { mutableStateOf<String?>(null) }
+    var quizToDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
     var offlineOnlyFilter by rememberSaveable { mutableStateOf(false) }
     val activeQuizToPlay = activeQuizId?.let { id -> quizzes.firstOrNull { it.id == id } }
     val attemptToView = justSubmittedAttempt ?: attemptQuizId?.let { id -> attempts.firstOrNull { it.quizId == id } }
     val statsQuiz = statsQuizId?.let { id -> quizzes.firstOrNull { it.id == id } }
+    val quizToDelete = quizToDeleteId?.let { id -> quizzes.firstOrNull { it.id == id } }
 
     val classQuizzes = remember(quizzes, selectedClassId, isTeacher) {
         if (isTeacher && selectedClassId != null) quizzes.filter { it.classId == selectedClassId }
@@ -294,7 +299,18 @@ fun ExercisesTab(
                                     style = MaterialTheme.typography.titleMedium
                                 )
                             }
-                            if (!isTeacher) {
+                            if (isTeacher) {
+                                IconButton(
+                                    onClick = { quizToDeleteId = quiz.id },
+                                    modifier = Modifier.testTag("delete_quiz_${quiz.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = stringResource(id = R.string.delete),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            } else {
                                 Surface(
                                     shape = RoundedCornerShape(14.dp),
                                     color = if (studentAttempt != null) SvtSuccess.copy(alpha = 0.14f)
@@ -525,6 +541,31 @@ fun ExercisesTab(
             quiz = quiz,
             attempts = quizAttempts,
             onDismiss = { statsQuizId = null }
+        )
+    }
+
+    quizToDelete?.let { quiz ->
+        AlertDialog(
+            onDismissRequest = { quizToDeleteId = null },
+            title = { Text(stringResource(id = R.string.confirm_delete_title)) },
+            text = { Text(stringResource(id = R.string.confirm_delete_quiz_msg, quiz.title)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteQuiz(quiz)
+                        quizToDeleteId = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("confirm_delete_quiz_button")
+                ) {
+                    Text(stringResource(id = R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { quizToDeleteId = null }) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
         )
     }
 

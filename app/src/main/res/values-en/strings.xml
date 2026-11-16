@@ -515,4 +515,8 @@
     <string name="quiz_external_ai_parse_error">Could not detect valid QCM questions in this text. Check the format or edit manually.</string>
     <string name="quiz_external_ai_preview_ok">%1$d question(s) detected and ready to publish.</string>
     <string name="quiz_external_ai_edit_manual">Edit before publishing</string>
+    <string name="confirm_delete_quiz_msg">Permanently delete quiz \"%1$s\" and its submissions for the entire class?</string>
+    <string name="confirm_delete_announcement_msg">Delete announcement \"%1$s\" for the entire class?</string>
+    <string name="quiz_deleted_success">Quiz deleted.</string>
+    <string name="announcement_deleted_success">Announcement deleted.</string>
 </resources>

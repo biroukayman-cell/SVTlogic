@@ -515,4 +515,8 @@
     <string name="quiz_external_ai_parse_error">تعذر استخراج أسئلة صالحة من هذا النص. تحقق من الصيغة أو عدّل يدوياً.</string>
     <string name="quiz_external_ai_preview_ok">تم اكتشاف %1$d سؤال جاهز للنشر.</string>
     <string name="quiz_external_ai_edit_manual">تعديل قبل النشر</string>
+    <string name="confirm_delete_quiz_msg">هل تريد حذف التمرين «%1$s» ونتائجه نهائياً من القسم بأكمله؟</string>
+    <string name="confirm_delete_announcement_msg">هل تريد حذف الإعلان «%1$s» من القسم بأكمله؟</string>
+    <string name="quiz_deleted_success">تم حذف التمرين.</string>
+    <string name="announcement_deleted_success">تم حذف الإعلان.</string>
 </resources>

@@ -412,6 +412,9 @@ fun MainDashboardScreen(
                                 onSubmitAttempt = { quiz, selectedAnswers, perQSecs, totalSecs, onDone ->
                                     viewModel.submitQuizAttempt(context, quiz, selectedAnswers, perQSecs, totalSecs, onDone)
                                 },
+                                onDeleteQuiz = { quiz ->
+                                    viewModel.deleteQuiz(context, quiz)
+                                },
                                 currentLanguage = currentLanguage
                             )
 
@@ -488,6 +491,9 @@ fun MainDashboardScreen(
                                 onPublishAnnouncement = { clsId, title, content ->
                                     val notifTitle = context.getString(R.string.tab_announcements)
                                     viewModel.publishAnnouncement(clsId, title, content, notifTitle, title)
+                                },
+                                onDeleteAnnouncement = { ann ->
+                                    viewModel.deleteAnnouncement(context, ann)
                                 }
                             )
 

@@ -924,6 +924,33 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
     }
 
+    suspend fun deleteQuiz(quiz: Quiz) {
+        val uid = requireUserId()
+        if (quiz.id.isBlank()) return
+        try {
+            val refsToDelete = mutableListOf(
+                db.collection("quizzes").document(quiz.id)
+            )
+            val attemptSnaps = db.collection("quiz_attempts")
+                .whereEqualTo("teacherId", uid)
+                .whereEqualTo("quizId", quiz.id)
+                .get()
+                .await()
+            refsToDelete.addAll(attemptSnaps.documents.map { it.reference })
+
+            refsToDelete.chunked(400).forEach { group ->
+                val batch = db.batch()
+                group.forEach { batch.delete(it) }
+                batch.commit().await()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, "quizzes/${quiz.id}")
+            throw e
+        }
+    }
+
     suspend fun submitQuizAttempt(
         quiz: Quiz,
         studentName: String,
@@ -1535,6 +1562,20 @@ class SvtRepository(private val db: FirebaseFirestore) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.CREATE, annRef.path)
+            throw e
+        }
+    }
+
+    suspend fun deleteAnnouncement(announcement: Announcement) {
+        requireUserId()
+        if (announcement.id.isBlank()) return
+        val docRef = db.collection("announcements").document(announcement.id)
+        try {
+            docRef.delete().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docRef.path)
             throw e
         }
     }

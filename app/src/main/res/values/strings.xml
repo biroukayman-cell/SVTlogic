@@ -515,4 +515,8 @@
     <string name="quiz_external_ai_parse_error">Impossible de détecter des questions QCM valides dans ce texte. Vérifiez le format ou utilisez l\'éditeur manuel.</string>
     <string name="quiz_external_ai_preview_ok">%1$d question(s) détectée(s) et prêtes à être publiées.</string>
     <string name="quiz_external_ai_edit_manual">Modifier avant publication</string>
+    <string name="confirm_delete_quiz_msg">Supprimer définitivement l\'exercice « %1$s » et ses résultats pour toute la classe ?</string>
+    <string name="confirm_delete_announcement_msg">Supprimer l\'annonce « %1$s » pour toute la classe ?</string>
+    <string name="quiz_deleted_success">Exercice supprimé.</string>
+    <string name="announcement_deleted_success">Annonce supprimée.</string>
 </resources>

@@ -24,11 +24,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -43,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,13 +67,18 @@ fun AnnouncementsTab(
     isTeacher: Boolean,
     selectedClassId: String?,
     announcements: List<Announcement>,
-    onPublishAnnouncement: (classId: String, title: String, content: String) -> Unit
+    onPublishAnnouncement: (classId: String, title: String, content: String) -> Unit,
+    onDeleteAnnouncement: (Announcement) -> Unit = {}
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
+    var announcementToDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val visibleAnnouncements = remember(announcements, selectedClassId, isTeacher) {
         if (isTeacher && selectedClassId != null) announcements.filter { it.classId == selectedClassId }
         else announcements
+    }
+    val announcementToDelete = remember(announcementToDeleteId, announcements) {
+        announcementToDeleteId?.let { id -> announcements.firstOrNull { it.id == id } }
     }
 
     LazyColumn(
@@ -146,6 +154,18 @@ fun AnnouncementsTab(
                                     )
                                 }
                             }
+                            if (isTeacher) {
+                                IconButton(
+                                    onClick = { announcementToDeleteId = ann.id },
+                                    modifier = Modifier.testTag("delete_announcement_${ann.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = stringResource(id = R.string.delete),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
                         }
                         Text(
                             text = ann.content,
@@ -192,6 +212,31 @@ fun AnnouncementsTab(
             },
             dismissButton = {
                 TextButton(onClick = { showCreateDialog = false }) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
+        )
+    }
+
+    announcementToDelete?.let { ann ->
+        AlertDialog(
+            onDismissRequest = { announcementToDeleteId = null },
+            title = { Text(stringResource(id = R.string.confirm_delete_title)) },
+            text = { Text(stringResource(id = R.string.confirm_delete_announcement_msg, ann.title)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteAnnouncement(ann)
+                        announcementToDeleteId = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("confirm_delete_announcement_button")
+                ) {
+                    Text(stringResource(id = R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { announcementToDeleteId = null }) {
                     Text(stringResource(id = R.string.cancel))
                 }
             }
