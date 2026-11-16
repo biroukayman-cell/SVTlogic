@@ -1,9 +1,13 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,18 +24,24 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DownloadForOffline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -64,6 +74,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -71,9 +82,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.core.AppLanguage
+import com.example.core.ExternalAiParsedQuiz
+import com.example.core.ExternalAiQuizHelper
+import com.example.core.QrCodeUtils
+import com.example.data.ai.GeneratedQuizDraft
 import com.example.data.model.Quiz
 import com.example.data.model.QuizAttempt
 import com.example.data.model.QuizQuestion
+import com.example.data.model.SvtClass
 import com.example.data.svt.SvtKnowledgeCatalog
 import com.example.ui.components.SvtEmptyStateCard
 import com.example.ui.components.SvtHeroBannerCard
@@ -85,11 +101,13 @@ import com.example.ui.theme.SvtWarning
 import com.example.ui.viewmodel.AiQuizState
 import kotlinx.coroutines.delay
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ExercisesTab(
     isTeacher: Boolean,
     isOnline: Boolean,
     selectedClassId: String?,
+    teacherClasses: List<SvtClass> = emptyList(),
     quizzes: List<Quiz>,
     attempts: List<QuizAttempt>,
     downloadedQuizIds: Set<String>,
@@ -98,7 +116,7 @@ fun ExercisesTab(
     onGenerateWithAi: (chapter: String, level: String, count: Int) -> Unit,
     onResetAiState: () -> Unit,
     onPublishQuiz: (
-        classId: String,
+        classIds: List<String>,
         title: String,
         description: String,
         chapter: String,
@@ -122,7 +140,10 @@ fun ExercisesTab(
     var justSubmittedAttempt by remember { mutableStateOf<QuizAttempt?>(null) }
     var showCreateQuizDialog by rememberSaveable { mutableStateOf(false) }
     var preFilledManualChapter by rememberSaveable { mutableStateOf("") }
+    var preFilledDraft by remember { mutableStateOf<GeneratedQuizDraft?>(null) }
+    var preFilledTargetClassIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showAiGeneratorDialog by rememberSaveable { mutableStateOf(false) }
+    var showExternalAiDialog by rememberSaveable { mutableStateOf(false) }
     var statsQuizId by rememberSaveable { mutableStateOf<String?>(null) }
     var offlineOnlyFilter by rememberSaveable { mutableStateOf(false) }
     val activeQuizToPlay = activeQuizId?.let { id -> quizzes.firstOrNull { it.id == id } }
@@ -156,7 +177,7 @@ fun ExercisesTab(
 
         if (isTeacher) {
             item {
-                if (selectedClassId == null) {
+                if (teacherClasses.isEmpty()) {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
                     ) {
@@ -167,20 +188,21 @@ fun ExercisesTab(
                         )
                     }
                 } else {
-                    Row(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
                             onClick = {
                                 preFilledManualChapter = ""
+                                preFilledDraft = null
+                                preFilledTargetClassIds = emptySet()
                                 showCreateQuizDialog = true
                             },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("create_quiz_button")
+                            modifier = Modifier.testTag("create_quiz_button")
                         ) {
-                            Icon(Icons.Filled.Add, contentDescription = null)
+                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text(stringResource(id = R.string.quiz_create))
                         }
@@ -189,13 +211,19 @@ fun ExercisesTab(
                                 onResetAiState()
                                 showAiGeneratorDialog = true
                             },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("ai_generate_quiz_button")
+                            modifier = Modifier.testTag("ai_generate_quiz_button")
                         ) {
-                            Icon(Icons.Filled.AutoAwesome, contentDescription = null)
+                            Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text(stringResource(id = R.string.quiz_ai_generate))
+                        }
+                        OutlinedButton(
+                            onClick = { showExternalAiDialog = true },
+                            modifier = Modifier.testTag("external_ai_quiz_button")
+                        ) {
+                            Icon(Icons.Filled.Psychology, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(id = R.string.quiz_external_ai_button))
                         }
                     }
                 }
@@ -500,35 +528,67 @@ fun ExercisesTab(
         )
     }
 
-    if (showAiGeneratorDialog && selectedClassId != null) {
+    if (showAiGeneratorDialog && teacherClasses.isNotEmpty()) {
         AiQuizGeneratorDialog(
             aiQuizState = aiQuizState,
+            teacherClasses = teacherClasses,
+            defaultClassId = selectedClassId,
             currentLanguage = currentLanguage,
             onGenerate = onGenerateWithAi,
-            onPublishDraft = { draftTitle, draftDesc, chapter, questions, isDownloadable ->
-                onPublishQuiz(selectedClassId, draftTitle, draftDesc, chapter, questions, isDownloadable)
+            onPublishDraft = { targetClassIds, draftTitle, draftDesc, chapter, questions, isDownloadable ->
+                onPublishQuiz(targetClassIds, draftTitle, draftDesc, chapter, questions, isDownloadable)
                 showAiGeneratorDialog = false
             },
             onFallbackToManual = { chapterText ->
                 showAiGeneratorDialog = false
                 preFilledManualChapter = chapterText
+                preFilledDraft = null
+                preFilledTargetClassIds = emptySet()
                 showCreateQuizDialog = true
             },
             onDismiss = { showAiGeneratorDialog = false }
         )
     }
 
-    if (showCreateQuizDialog && selectedClassId != null) {
+    if (showExternalAiDialog && teacherClasses.isNotEmpty()) {
+        ExternalAiQuizDialog(
+            teacherClasses = teacherClasses,
+            defaultClassId = selectedClassId,
+            currentLanguage = currentLanguage,
+            onPublishDraft = { targetClassIds, draftTitle, draftDesc, chapter, questions, isDownloadable ->
+                onPublishQuiz(targetClassIds, draftTitle, draftDesc, chapter, questions, isDownloadable)
+                showExternalAiDialog = false
+            },
+            onEditInManual = { draft, chapter, chosenClassIds ->
+                showExternalAiDialog = false
+                preFilledDraft = draft
+                preFilledManualChapter = chapter
+                preFilledTargetClassIds = chosenClassIds
+                showCreateQuizDialog = true
+            },
+            onDismiss = { showExternalAiDialog = false }
+        )
+    }
+
+    if (showCreateQuizDialog && teacherClasses.isNotEmpty()) {
         ManualCreateQuizDialog(
+            teacherClasses = teacherClasses,
+            defaultClassId = selectedClassId,
             initialChapter = preFilledManualChapter,
-            onPublish = { title, desc, chapter, questions, isDownloadable ->
-                onPublishQuiz(selectedClassId, title, desc, chapter, questions, isDownloadable)
+            initialDraft = preFilledDraft,
+            initialTargetClassIds = preFilledTargetClassIds,
+            onPublish = { targetClassIds, title, desc, chapter, questions, isDownloadable ->
+                onPublishQuiz(targetClassIds, title, desc, chapter, questions, isDownloadable)
                 showCreateQuizDialog = false
                 preFilledManualChapter = ""
+                preFilledDraft = null
+                preFilledTargetClassIds = emptySet()
             },
             onDismiss = {
                 showCreateQuizDialog = false
                 preFilledManualChapter = ""
+                preFilledDraft = null
+                preFilledTargetClassIds = emptySet()
             }
         )
     }
@@ -896,12 +956,86 @@ private fun StatMetricChip(label: String, color: Color, modifier: Modifier = Mod
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TargetClassesSelector(
+    teacherClasses: List<SvtClass>,
+    selectedClassIds: Set<String>,
+    onToggleClass: (String) -> Unit,
+    onSelectAll: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(id = R.string.quiz_target_classes_label),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
+            )
+            if (teacherClasses.size > 1) {
+                TextButton(
+                    onClick = onSelectAll,
+                    modifier = Modifier.testTag("select_all_target_classes_button")
+                ) {
+                    Text(stringResource(id = R.string.quiz_select_all_classes))
+                }
+            }
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            teacherClasses.forEach { svtClass ->
+                val isSelected = selectedClassIds.contains(svtClass.id)
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onToggleClass(svtClass.id) },
+                    leadingIcon = if (isSelected) {
+                        {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    } else null,
+                    label = {
+                        Text(
+                            text = svtClass.name,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    modifier = Modifier.testTag("target_class_chip_${svtClass.id}")
+                )
+            }
+        }
+        if (selectedClassIds.isEmpty()) {
+            Text(
+                text = stringResource(id = R.string.quiz_min_one_class_error),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
 @Composable
 private fun AiQuizGeneratorDialog(
     aiQuizState: AiQuizState,
+    teacherClasses: List<SvtClass>,
+    defaultClassId: String?,
     currentLanguage: AppLanguage = AppLanguage.FR,
     onGenerate: (chapter: String, level: String, count: Int) -> Unit,
     onPublishDraft: (
+        classIds: List<String>,
         title: String,
         desc: String,
         chapter: String,
@@ -915,6 +1049,11 @@ private fun AiQuizGeneratorDialog(
     var level by remember { mutableStateOf("2ème Bac SVT") }
     var countText by remember { mutableStateOf("4") }
     var isDownloadable by remember { mutableStateOf(true) }
+    var selectedClassIds by remember(defaultClassId, teacherClasses) {
+        val initial = defaultClassId?.takeIf { id -> teacherClasses.any { it.id == id } }
+            ?: teacherClasses.firstOrNull()?.id
+        mutableStateOf(if (initial != null) setOf(initial) else emptySet())
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -931,6 +1070,21 @@ private fun AiQuizGeneratorDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                TargetClassesSelector(
+                    teacherClasses = teacherClasses,
+                    selectedClassIds = selectedClassIds,
+                    onToggleClass = { clsId ->
+                        selectedClassIds = if (selectedClassIds.contains(clsId)) {
+                            selectedClassIds - clsId
+                        } else {
+                            selectedClassIds + clsId
+                        }
+                    },
+                    onSelectAll = {
+                        selectedClassIds = teacherClasses.map { it.id }.toSet()
+                    }
+                )
+
                 Text(
                     text = stringResource(id = R.string.svt_ai_chapter_presets_label),
                     style = MaterialTheme.typography.labelMedium,
@@ -949,18 +1103,21 @@ private fun AiQuizGeneratorDialog(
                 OutlinedTextField(
                     value = chapter,
                     onValueChange = { chapter = it },
-                    label = { Text(stringResource(id = R.string.quiz_ai_chapter)) }
+                    label = { Text(stringResource(id = R.string.quiz_ai_chapter)) },
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = level,
                     onValueChange = { level = it },
-                    label = { Text(stringResource(id = R.string.quiz_ai_level)) }
+                    label = { Text(stringResource(id = R.string.quiz_ai_level)) },
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = countText,
                     onValueChange = { countText = it.filter { ch -> ch.isDigit() } },
                     label = { Text(stringResource(id = R.string.quiz_ai_count)) },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 Row(
@@ -1038,10 +1195,19 @@ private fun AiQuizGeneratorDialog(
                 Button(
                     onClick = {
                         val draft = aiQuizState.draft
-                        onPublishDraft(draft.title, draft.description, chapter, draft.questions, isDownloadable)
-                    }
+                        onPublishDraft(
+                            selectedClassIds.toList(),
+                            draft.title,
+                            draft.description,
+                            chapter,
+                            draft.questions,
+                            isDownloadable
+                        )
+                    },
+                    enabled = selectedClassIds.isNotEmpty(),
+                    modifier = Modifier.testTag("ai_publish_button")
                 ) {
-                    Text(stringResource(id = R.string.quiz_publish))
+                    Text(stringResource(id = R.string.quiz_publish_classes_count, selectedClassIds.size))
                 }
             } else {
                 Button(
@@ -1061,10 +1227,392 @@ private fun AiQuizGeneratorDialog(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ExternalAiQuizDialog(
+    teacherClasses: List<SvtClass>,
+    defaultClassId: String?,
+    currentLanguage: AppLanguage,
+    onPublishDraft: (
+        classIds: List<String>,
+        title: String,
+        desc: String,
+        chapter: String,
+        questions: List<QuizQuestion>,
+        isDownloadable: Boolean
+    ) -> Unit,
+    onEditInManual: (
+        draft: GeneratedQuizDraft,
+        chapter: String,
+        selectedClassIds: Set<String>
+    ) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var chapter by remember { mutableStateOf("La division cellulaire (Mitose & Méiose)") }
+    var level by remember { mutableStateOf("2ème Bac SVT") }
+    var countText by remember { mutableStateOf("5") }
+    var sourceNotes by remember { mutableStateOf("") }
+    var pastedResponse by remember { mutableStateOf("") }
+    var isDownloadable by remember { mutableStateOf(true) }
+    var statusNotice by remember { mutableStateOf<String?>(null) }
+    var parseError by remember { mutableStateOf<String?>(null) }
+    var parsedQuiz by remember { mutableStateOf<ExternalAiParsedQuiz?>(null) }
+    var selectedClassIds by remember(defaultClassId, teacherClasses) {
+        val initial = defaultClassId?.takeIf { id -> teacherClasses.any { it.id == id } }
+            ?: teacherClasses.firstOrNull()?.id
+        mutableStateOf(if (initial != null) setOf(initial) else emptySet())
+    }
+
+    fun buildCurrentPrompt(): String {
+        val count = (countText.toIntOrNull() ?: 5).coerceIn(1, 20)
+        return ExternalAiQuizHelper.buildExternalAiQuizPrompt(
+            chapter = chapter,
+            level = level,
+            questionCount = count,
+            sourceNotes = sourceNotes,
+            language = currentLanguage
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Filled.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(id = R.string.quiz_external_ai_title))
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = stringResource(id = R.string.quiz_external_ai_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                TargetClassesSelector(
+                    teacherClasses = teacherClasses,
+                    selectedClassIds = selectedClassIds,
+                    onToggleClass = { clsId ->
+                        selectedClassIds = if (selectedClassIds.contains(clsId)) {
+                            selectedClassIds - clsId
+                        } else {
+                            selectedClassIds + clsId
+                        }
+                    },
+                    onSelectAll = {
+                        selectedClassIds = teacherClasses.map { it.id }.toSet()
+                    }
+                )
+
+                Text(
+                    text = stringResource(id = R.string.svt_ai_chapter_presets_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(SvtKnowledgeCatalog.chapterPresets) { preset ->
+                        val topic = preset.get(currentLanguage)
+                        FilterChip(
+                            selected = chapter == topic,
+                            onClick = { chapter = topic },
+                            label = { Text(topic, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = chapter,
+                    onValueChange = { chapter = it },
+                    label = { Text(stringResource(id = R.string.quiz_ai_chapter)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = level,
+                        onValueChange = { level = it },
+                        label = { Text(stringResource(id = R.string.quiz_ai_level)) },
+                        modifier = Modifier.weight(1.4f)
+                    )
+                    OutlinedTextField(
+                        value = countText,
+                        onValueChange = { countText = it.filter { ch -> ch.isDigit() } },
+                        label = { Text(stringResource(id = R.string.quiz_ai_count)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(0.8f)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = sourceNotes,
+                    onValueChange = { sourceNotes = it },
+                    label = { Text(stringResource(id = R.string.quiz_external_ai_notes_label)) },
+                    placeholder = { Text(stringResource(id = R.string.quiz_external_ai_notes_hint)) },
+                    minLines = 2,
+                    maxLines = 4,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("external_ai_notes_input")
+                )
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val prompt = buildCurrentPrompt()
+                            QrCodeUtils.copyTextToClipboard(context, "SVT Prompt", prompt)
+                            statusNotice = context.getString(R.string.quiz_external_ai_prompt_copied)
+                        },
+                        modifier = Modifier.testTag("external_ai_copy_prompt_button")
+                    ) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(id = R.string.quiz_external_ai_copy_prompt))
+                    }
+
+                    Button(
+                        onClick = {
+                            val prompt = buildCurrentPrompt()
+                            QrCodeUtils.copyTextToClipboard(context, "SVT Prompt", prompt)
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, prompt)
+                            }
+                            val chooser = Intent.createChooser(
+                                sendIntent,
+                                context.getString(R.string.quiz_external_ai_send_app)
+                            )
+                            val launched = runCatching { context.startActivity(chooser) }.isSuccess
+                            statusNotice = if (launched) {
+                                context.getString(R.string.quiz_external_ai_prompt_copied)
+                            } else {
+                                context.getString(R.string.quiz_external_ai_no_app_error)
+                            }
+                        },
+                        modifier = Modifier.testTag("external_ai_send_app_button")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(id = R.string.quiz_external_ai_send_app))
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val prompt = buildCurrentPrompt()
+                            QrCodeUtils.copyTextToClipboard(context, "SVT Prompt", prompt)
+                            val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://chatgpt.com/"))
+                            val launched = runCatching { context.startActivity(viewIntent) }.isSuccess
+                            statusNotice = if (launched) {
+                                context.getString(R.string.quiz_external_ai_prompt_copied)
+                            } else {
+                                context.getString(R.string.quiz_external_ai_no_app_error)
+                            }
+                        },
+                        modifier = Modifier.testTag("external_ai_open_chatgpt_button")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(id = R.string.quiz_external_ai_open_chatgpt))
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val prompt = buildCurrentPrompt()
+                            QrCodeUtils.copyTextToClipboard(context, "SVT Prompt", prompt)
+                            val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://gemini.google.com/"))
+                            val launched = runCatching { context.startActivity(viewIntent) }.isSuccess
+                            statusNotice = if (launched) {
+                                context.getString(R.string.quiz_external_ai_prompt_copied)
+                            } else {
+                                context.getString(R.string.quiz_external_ai_no_app_error)
+                            }
+                        },
+                        modifier = Modifier.testTag("external_ai_open_gemini_button")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(id = R.string.quiz_external_ai_open_gemini))
+                    }
+                }
+
+                statusNotice?.let { notice ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = notice,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = pastedResponse,
+                    onValueChange = {
+                        pastedResponse = it
+                        parseError = null
+                    },
+                    label = { Text(stringResource(id = R.string.quiz_external_ai_paste_label)) },
+                    placeholder = { Text(stringResource(id = R.string.quiz_external_ai_paste_hint)) },
+                    minLines = 4,
+                    maxLines = 8,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("external_ai_paste_input")
+                )
+
+                OutlinedButton(
+                    onClick = {
+                        val res = ExternalAiQuizHelper.parseExternalAiQuizResponse(
+                            rawText = pastedResponse,
+                            fallbackChapter = chapter
+                        )
+                        res.onSuccess { parsed ->
+                            parsedQuiz = parsed
+                            parseError = null
+                        }.onFailure {
+                            parsedQuiz = null
+                            parseError = context.getString(R.string.quiz_external_ai_parse_error)
+                        }
+                    },
+                    enabled = pastedResponse.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("external_ai_parse_button")
+                ) {
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(id = R.string.quiz_external_ai_parse_btn))
+                }
+
+                parseError?.let { err ->
+                    Text(
+                        text = err,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                parsedQuiz?.let { parsed ->
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    id = R.string.quiz_external_ai_preview_ok,
+                                    parsed.draft.questions.size
+                                ),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = SvtSuccess,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = parsed.draft.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            parsed.draft.questions.forEachIndexed { idx, q ->
+                                val correctText = q.options.getOrElse(q.correctIndex) { "" }
+                                Text(
+                                    text = "${idx + 1}. ${q.questionText}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "✓ $correctText",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    onEditInManual(parsed.draft, parsed.chapterSvt, selectedClassIds)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("external_ai_edit_manual_button")
+                            ) {
+                                Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(id = R.string.quiz_external_ai_edit_manual))
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.teacher_mark_downloadable),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = isDownloadable,
+                        onCheckedChange = { isDownloadable = it },
+                        modifier = Modifier.testTag("external_ai_downloadable_switch")
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val parsed = parsedQuiz ?: return@Button
+                    onPublishDraft(
+                        selectedClassIds.toList(),
+                        parsed.draft.title,
+                        parsed.draft.description,
+                        parsed.chapterSvt,
+                        parsed.draft.questions,
+                        isDownloadable
+                    )
+                },
+                enabled = parsedQuiz != null && selectedClassIds.isNotEmpty(),
+                modifier = Modifier.testTag("external_ai_publish_button")
+            ) {
+                Text(stringResource(id = R.string.quiz_publish_classes_count, selectedClassIds.size))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(id = R.string.cancel)) }
+        }
+    )
+}
+
 @Composable
 private fun ManualCreateQuizDialog(
+    teacherClasses: List<SvtClass>,
+    defaultClassId: String?,
     initialChapter: String = "",
+    initialDraft: GeneratedQuizDraft? = null,
+    initialTargetClassIds: Set<String> = emptySet(),
     onPublish: (
+        classIds: List<String>,
         title: String,
         desc: String,
         chapter: String,
@@ -1073,9 +1621,9 @@ private fun ManualCreateQuizDialog(
     ) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
+    var title by remember(initialDraft) { mutableStateOf(initialDraft?.title.orEmpty()) }
     var chapter by remember(initialChapter) { mutableStateOf(initialChapter) }
-    var desc by remember { mutableStateOf("") }
+    var desc by remember(initialDraft) { mutableStateOf(initialDraft?.description.orEmpty()) }
     var isDownloadable by remember { mutableStateOf(true) }
     var qText by remember { mutableStateOf("") }
     var opt1 by remember { mutableStateOf("") }
@@ -1083,7 +1631,23 @@ private fun ManualCreateQuizDialog(
     var opt3 by remember { mutableStateOf("") }
     var correctIdx by remember { mutableIntStateOf(0) }
     var explanation by remember { mutableStateOf("") }
-    val questionsList = remember { mutableStateListOf<QuizQuestion>() }
+    val questionsList = remember(initialDraft) {
+        mutableStateListOf<QuizQuestion>().apply {
+            initialDraft?.questions?.let { addAll(it) }
+        }
+    }
+    var selectedClassIds by remember(defaultClassId, teacherClasses, initialTargetClassIds) {
+        val seed = initialTargetClassIds.filter { id -> teacherClasses.any { it.id == id } }.toSet()
+        val fallback = defaultClassId?.takeIf { id -> teacherClasses.any { it.id == id } }
+            ?: teacherClasses.firstOrNull()?.id
+        mutableStateOf(
+            when {
+                seed.isNotEmpty() -> seed
+                fallback != null -> setOf(fallback)
+                else -> emptySet()
+            }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1095,9 +1659,39 @@ private fun ManualCreateQuizDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(stringResource(id = R.string.quiz_title_label)) })
-                OutlinedTextField(value = chapter, onValueChange = { chapter = it }, label = { Text(stringResource(id = R.string.quiz_chapter_label)) })
-                OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text(stringResource(id = R.string.quiz_desc_label)) })
+                TargetClassesSelector(
+                    teacherClasses = teacherClasses,
+                    selectedClassIds = selectedClassIds,
+                    onToggleClass = { clsId ->
+                        selectedClassIds = if (selectedClassIds.contains(clsId)) {
+                            selectedClassIds - clsId
+                        } else {
+                            selectedClassIds + clsId
+                        }
+                    },
+                    onSelectAll = {
+                        selectedClassIds = teacherClasses.map { it.id }.toSet()
+                    }
+                )
+
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text(stringResource(id = R.string.quiz_title_label)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = chapter,
+                    onValueChange = { chapter = it },
+                    label = { Text(stringResource(id = R.string.quiz_chapter_label)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = desc,
+                    onValueChange = { desc = it },
+                    label = { Text(stringResource(id = R.string.quiz_desc_label)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1115,12 +1709,67 @@ private fun ManualCreateQuizDialog(
                     )
                 }
 
+                if (questionsList.isNotEmpty()) {
+                    questionsList.forEachIndexed { idx, existingQ ->
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${idx + 1}. ${existingQ.questionText}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(
+                                    onClick = { questionsList.removeAt(idx) },
+                                    modifier = Modifier.testTag("manual_remove_question_$idx")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.DeleteOutline,
+                                        contentDescription = stringResource(id = R.string.cancel),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(4.dp))
                 Text("${stringResource(id = R.string.quiz_add_question)} (${questionsList.size})", style = MaterialTheme.typography.titleSmall)
-                OutlinedTextField(value = qText, onValueChange = { qText = it }, label = { Text(stringResource(id = R.string.quiz_question_text)) })
-                OutlinedTextField(value = opt1, onValueChange = { opt1 = it }, label = { Text(stringResource(id = R.string.quiz_option_label, 1)) })
-                OutlinedTextField(value = opt2, onValueChange = { opt2 = it }, label = { Text(stringResource(id = R.string.quiz_option_label, 2)) })
-                OutlinedTextField(value = opt3, onValueChange = { opt3 = it }, label = { Text(stringResource(id = R.string.quiz_option_label, 3)) })
+                OutlinedTextField(
+                    value = qText,
+                    onValueChange = { qText = it },
+                    label = { Text(stringResource(id = R.string.quiz_question_text)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = opt1,
+                    onValueChange = { opt1 = it },
+                    label = { Text(stringResource(id = R.string.quiz_option_label, 1)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = opt2,
+                    onValueChange = { opt2 = it },
+                    label = { Text(stringResource(id = R.string.quiz_option_label, 2)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = opt3,
+                    onValueChange = { opt3 = it },
+                    label = { Text(stringResource(id = R.string.quiz_option_label, 3)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(id = R.string.quiz_correct_option), style = MaterialTheme.typography.labelMedium)
@@ -1131,7 +1780,12 @@ private fun ManualCreateQuizDialog(
                         }
                     }
                 }
-                OutlinedTextField(value = explanation, onValueChange = { explanation = it }, label = { Text(stringResource(id = R.string.quiz_explanation_label)) })
+                OutlinedTextField(
+                    value = explanation,
+                    onValueChange = { explanation = it },
+                    label = { Text(stringResource(id = R.string.quiz_explanation_label)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 OutlinedButton(
                     onClick = {
@@ -1161,10 +1815,11 @@ private fun ManualCreateQuizDialog(
             }
         },
         confirmButton = {
+            val pendingOpts = listOf(opt1.trim(), opt2.trim(), opt3.trim()).filter { it.isNotEmpty() }
+            val hasAtLeastOneQuestion = questionsList.isNotEmpty() || (qText.isNotBlank() && pendingOpts.size >= 2)
             Button(
                 onClick = {
                     val finalQuestions = questionsList.toMutableList()
-                    val pendingOpts = listOf(opt1.trim(), opt2.trim(), opt3.trim()).filter { it.isNotEmpty() }
                     if (qText.isNotBlank() && pendingOpts.size >= 2) {
                         finalQuestions.add(
                             QuizQuestion(
@@ -1175,18 +1830,21 @@ private fun ManualCreateQuizDialog(
                             )
                         )
                     }
-                    if (title.trim().length >= 2 && finalQuestions.isNotEmpty()) {
+                    if (title.trim().length >= 2 && finalQuestions.isNotEmpty() && selectedClassIds.isNotEmpty()) {
                         onPublish(
-                            title.trim(),
-                            desc.trim(),
-                            chapter.trim().ifBlank { "SVT" },
-                            finalQuestions,
+                            selectedClassIds.toList(),
+                            title.trim().take(200),
+                            desc.trim().take(1000),
+                            chapter.trim().ifBlank { "SVT" }.take(150),
+                            finalQuestions.take(20),
                             isDownloadable
                         )
                     }
-                }
+                },
+                enabled = title.trim().length >= 2 && hasAtLeastOneQuestion && selectedClassIds.isNotEmpty(),
+                modifier = Modifier.testTag("manual_publish_button")
             ) {
-                Text(stringResource(id = R.string.quiz_publish))
+                Text(stringResource(id = R.string.quiz_publish_classes_count, selectedClassIds.size))
             }
         },
         dismissButton = {

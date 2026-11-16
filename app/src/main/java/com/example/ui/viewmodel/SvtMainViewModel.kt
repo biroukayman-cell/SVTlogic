@@ -1009,22 +1009,62 @@ class SvtMainViewModel(
         notifBody: String,
         isDownloadable: Boolean = false
     ) {
-        val approvedIds = teacherEnrollments.value
-            .filter { it.classId == classId && it.status == "approved" }
-            .map { it.studentId }
+        publishQuizToClasses(
+            uiContext = context,
+            classIds = listOf(classId),
+            title = title,
+            description = description,
+            chapterSvt = chapterSvt,
+            questions = questions,
+            notifTitle = notifTitle,
+            notifBody = notifBody,
+            isDownloadable = isDownloadable
+        )
+    }
+
+    fun publishQuizToClasses(
+        uiContext: Context,
+        classIds: List<String>,
+        title: String,
+        description: String,
+        chapterSvt: String,
+        questions: List<QuizQuestion>,
+        notifTitle: String,
+        notifBody: String,
+        isDownloadable: Boolean = false
+    ) {
+        val targetClassIds = classIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (targetClassIds.isEmpty()) {
+            _actionError.value = uiContext.getString(R.string.quiz_min_one_class_error)
+            return
+        }
+        val enrollmentsSnapshot = teacherEnrollments.value
         viewModelScope.launch {
+            var publishedCount = 0
             try {
-                repository.createQuizForClass(
-                    classId = classId,
-                    title = title,
-                    description = description,
-                    chapterSvt = chapterSvt,
-                    questions = questions,
-                    approvedStudentIds = approvedIds,
-                    notifTitle = notifTitle,
-                    notifBody = notifBody,
-                    isDownloadable = isDownloadable
-                )
+                for (targetClassId in targetClassIds) {
+                    val approvedIds = enrollmentsSnapshot
+                        .filter { it.classId == targetClassId && it.status == "approved" }
+                        .map { it.studentId }
+                    repository.createQuizForClass(
+                        classId = targetClassId,
+                        title = title,
+                        description = description,
+                        chapterSvt = chapterSvt,
+                        questions = questions,
+                        approvedStudentIds = approvedIds,
+                        notifTitle = notifTitle,
+                        notifBody = notifBody,
+                        isDownloadable = isDownloadable
+                    )
+                    publishedCount++
+                }
+                if (publishedCount > 0) {
+                    _statusMessage.value = uiContext.getString(
+                        R.string.quiz_published_classes_success,
+                        publishedCount
+                    )
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

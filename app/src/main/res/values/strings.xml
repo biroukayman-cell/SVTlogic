@@ -490,4 +490,29 @@
     <string name="teacher_lab_themes_min_one">Au moins un thème SVT doit rester activé.</string>
     <string name="teacher_lab_themes_updated">Thèmes du Labo SVT mis à jour pour la classe.</string>
     <string name="student_lab_themes_active_info">Thèmes activés par votre professeur : %1$s</string>
+
+    <!-- QCM multi-classes & IA externe -->
+    <string name="quiz_target_classes_label">Classes concernées par ce QCM</string>
+    <string name="quiz_select_all_classes">Tout sélectionner</string>
+    <string name="quiz_publish_classes_count">Publier (%1$d classe(s))</string>
+    <string name="quiz_min_one_class_error">Sélectionnez au moins une classe cible.</string>
+    <string name="quiz_published_classes_success">QCM publié dans %1$d classe(s) avec succès.</string>
+
+    <string name="quiz_external_ai_button">IA Externe</string>
+    <string name="quiz_external_ai_title">Synthétiser avec une IA externe</string>
+    <string name="quiz_external_ai_desc">Générez un prompt SVT prêt à l\'emploi pour votre application d\'IA externe (ChatGPT, Gemini, Claude…), puis collez sa réponse ici pour créer le QCM.</string>
+    <string name="quiz_external_ai_notes_label">Texte d\'exercice ou consignes (optionnel)</string>
+    <string name="quiz_external_ai_notes_hint">Collez un document, exercice ou précision à synthétiser...</string>
+    <string name="quiz_external_ai_copy_prompt">Copier le prompt</string>
+    <string name="quiz_external_ai_send_app">Envoyer vers une app IA</string>
+    <string name="quiz_external_ai_open_chatgpt">Ouvrir ChatGPT</string>
+    <string name="quiz_external_ai_open_gemini">Ouvrir Gemini</string>
+    <string name="quiz_external_ai_prompt_copied">Prompt SVT copié dans le presse-papiers</string>
+    <string name="quiz_external_ai_no_app_error">Aucune application externe ou navigateur disponible.</string>
+    <string name="quiz_external_ai_paste_label">Réponse de l\'IA externe (JSON ou QCM texte)</string>
+    <string name="quiz_external_ai_paste_hint">Collez ici le QCM généré par l\'application IA externe...</string>
+    <string name="quiz_external_ai_parse_btn">Analyser et prévisualiser</string>
+    <string name="quiz_external_ai_parse_error">Impossible de détecter des questions QCM valides dans ce texte. Vérifiez le format ou utilisez l\'éditeur manuel.</string>
+    <string name="quiz_external_ai_preview_ok">%1$d question(s) détectée(s) et prêtes à être publiées.</string>
+    <string name="quiz_external_ai_edit_manual">Modifier avant publication</string>
 </resources>

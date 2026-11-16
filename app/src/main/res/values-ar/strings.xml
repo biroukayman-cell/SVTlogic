@@ -490,4 +490,29 @@
     <string name="teacher_lab_themes_min_one">يجب الإبقاء على محور واحد على الأقل مفعّلاً.</string>
     <string name="teacher_lab_themes_updated">تم تحديث محاور مختبر SVT للقسم.</string>
     <string name="student_lab_themes_active_info">المحاور المفعّلة من طرف أستاذك: %1$s</string>
+
+    <!-- اختبارات متعددة الأقسام والذكاء الاصطناعي الخارجي -->
+    <string name="quiz_target_classes_label">الأقسام المعنية بهذا الاختبار</string>
+    <string name="quiz_select_all_classes">تحديد الكل</string>
+    <string name="quiz_publish_classes_count">نشر (%1$d قسم)</string>
+    <string name="quiz_min_one_class_error">يرجى اختيار قسم واحد على الأقل.</string>
+    <string name="quiz_published_classes_success">تم نشر الاختبار في %1$d قسم بنجاح.</string>
+
+    <string name="quiz_external_ai_button">ذكاء اصطناعي خارجي</string>
+    <string name="quiz_external_ai_title">تركيب الاختبار عبر ذكاء اصطناعي خارجي</string>
+    <string name="quiz_external_ai_desc">أنشئ أمراً جاهزاً لتطبيق الذكاء الاصطناعي الخارجي (ChatGPT، Gemini، Claude…)، ثم الصق النتيجة هنا لإنشاء الاختبار.</string>
+    <string name="quiz_external_ai_notes_label">نص التمرين أو التوجيهات (اختياري)</string>
+    <string name="quiz_external_ai_notes_hint">الصق وثيقة أو تمريناً أو تعليمات لتركيب الاختبار...</string>
+    <string name="quiz_external_ai_copy_prompt">نسخ الأمر</string>
+    <string name="quiz_external_ai_send_app">إرسال لتطبيق ذكاء اصطناعي</string>
+    <string name="quiz_external_ai_open_chatgpt">فتح ChatGPT</string>
+    <string name="quiz_external_ai_open_gemini">فتح Gemini</string>
+    <string name="quiz_external_ai_prompt_copied">تم نسخ أمر SVT إلى الحافظة</string>
+    <string name="quiz_external_ai_no_app_error">لم يتم العثور على تطبيق خارجي أو متصفح.</string>
+    <string name="quiz_external_ai_paste_label">إجابة الذكاء الاصطناعي الخارجي (JSON أو نص)</string>
+    <string name="quiz_external_ai_paste_hint">الصق هنا الاختبار الذي أنشأه التطبيق الخارجي...</string>
+    <string name="quiz_external_ai_parse_btn">تحليل ومعاينة</string>
+    <string name="quiz_external_ai_parse_error">تعذر استخراج أسئلة صالحة من هذا النص. تحقق من الصيغة أو عدّل يدوياً.</string>
+    <string name="quiz_external_ai_preview_ok">تم اكتشاف %1$d سؤال جاهز للنشر.</string>
+    <string name="quiz_external_ai_edit_manual">تعديل قبل النشر</string>
 </resources>

@@ -376,6 +376,7 @@ fun MainDashboardScreen(
                                 isTeacher = isTeacher,
                                 isOnline = isOnline,
                                 selectedClassId = selectedClassId,
+                                teacherClasses = teacherClasses,
                                 quizzes = if (isTeacher) teacherQuizzes else studentQuizzes,
                                 attempts = if (isTeacher) teacherAttempts else studentAttempts,
                                 downloadedQuizIds = downloadedQuizzes.keys,
@@ -385,17 +386,18 @@ fun MainDashboardScreen(
                                     viewModel.generateQuizWithAi(chapter, level, count, currentLanguage)
                                 },
                                 onResetAiState = { viewModel.resetAiState() },
-                                onPublishQuiz = { clsId, title, desc, chapter, questions, isDownloadable ->
+                                onPublishQuiz = { clsIds, title, desc, chapter, questions, isDownloadable ->
                                     val notifTitle = context.getString(R.string.tab_exercises)
-                                    viewModel.publishQuiz(
-                                        clsId,
-                                        title,
-                                        desc,
-                                        chapter,
-                                        questions,
-                                        notifTitle,
-                                        title,
-                                        isDownloadable
+                                    viewModel.publishQuizToClasses(
+                                        uiContext = context,
+                                        classIds = clsIds,
+                                        title = title,
+                                        description = desc,
+                                        chapterSvt = chapter,
+                                        questions = questions,
+                                        notifTitle = notifTitle,
+                                        notifBody = title,
+                                        isDownloadable = isDownloadable
                                     )
                                 },
                                 onToggleQuizDownloadable = { quiz ->
