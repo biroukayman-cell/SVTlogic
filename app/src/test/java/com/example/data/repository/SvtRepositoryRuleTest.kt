@@ -318,8 +318,7 @@ class SvtRepositoryRuleTest : FirestoreEmulatorTestBase() {
                 classCode = classCode,
                 studentName = "Salma",
                 studentPhone = "+212600000009",
-                qrToken = svtClass.qrToken,
-                autoApprove = true
+                qrToken = svtClass.qrToken
             )
         }
 
