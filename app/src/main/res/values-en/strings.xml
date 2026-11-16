@@ -397,8 +397,11 @@
     <!-- SVT Lab, Glossary, Flashcards, DNA, Microscope & Geology -->
     <string name="svt_domain_all">All</string>
     <string name="svt_domain_genetics">Genetics &amp; Cell</string>
+    <string name="svt_domain_immunity">Immunity</string>
+    <string name="svt_domain_reproduction">Reproduction</string>
+    <string name="svt_domain_physiology">Physiology &amp; Metabolism</string>
+    <string name="svt_domain_nervous">Nervous &amp; Muscle</string>
     <string name="svt_domain_geology">Geology</string>
-    <string name="svt_domain_physiology">Physiology &amp; Immunity</string>
     <string name="svt_domain_ecology">Ecology</string>
 
     <string name="svt_lab_title">SVT Lab</string>
@@ -409,8 +412,15 @@
     <string name="svt_lab_tab_dna">DNA → Protein</string>
     <string name="svt_lab_tab_microscope">Microscope &amp; Geol</string>
 
-    <string name="svt_glossary_search_hint">Search a concept (mitosis, Moho, synapse...)</string>
-    <string name="svt_glossary_empty">No glossary entries match this filter.</string>
+    <string name="svt_glossary_search_hint">SVT term (immunity, meiosis, fertilization...)</string>
+    <string name="svt_glossary_empty">No SVT terms match this filter.</string>
+    <string name="svt_glossary_search_action">Search</string>
+    <string name="svt_glossary_lookup_button">Look up SVT definition</string>
+    <string name="svt_glossary_searching">Looking up SVT definition...</string>
+    <string name="svt_glossary_only_svt_title">SVT-Only Search</string>
+    <string name="svt_glossary_only_svt_body">Only terms related to Life and Earth Sciences (Biology &amp; Geology) are accepted in the Lab.</string>
+    <string name="svt_glossary_offline_miss">Term not in the offline glossary. Connect to the internet to look up more SVT terms.</string>
+    <string name="svt_glossary_lookup_error">Unable to look up this SVT term right now: %1$s</string>
 
     <string name="svt_flashcards_progress">Card %1$d / %2$d</string>
     <string name="svt_flashcards_mastered_count">%1$d / %2$d mastered</string>

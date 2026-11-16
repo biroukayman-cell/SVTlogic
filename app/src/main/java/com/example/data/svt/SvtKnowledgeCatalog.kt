@@ -18,8 +18,11 @@ data class LocalizedSvtText(
 
 enum class SvtDomain(@StringRes val labelRes: Int) {
     CELL_GENETICS(R.string.svt_domain_genetics),
-    GEOLOGY(R.string.svt_domain_geology),
+    IMMUNITY(R.string.svt_domain_immunity),
+    REPRODUCTION(R.string.svt_domain_reproduction),
     PHYSIOLOGY_IMMUNITY(R.string.svt_domain_physiology),
+    NERVOUS_MUSCULAR(R.string.svt_domain_nervous),
+    GEOLOGY(R.string.svt_domain_geology),
     ECOLOGY(R.string.svt_domain_ecology)
 }
 
@@ -28,7 +31,8 @@ data class SvtGlossaryEntry(
     val domain: SvtDomain,
     val term: LocalizedSvtText,
     val definition: LocalizedSvtText,
-    val keyHint: LocalizedSvtText
+    val keyHint: LocalizedSvtText,
+    val keywords: List<String> = emptyList()
 )
 
 data class SvtFlashcard(
@@ -80,14 +84,19 @@ object SvtKnowledgeCatalog {
             ar = "تعبير الخبر الوراثي (ADN → بروتين)"
         ),
         LocalizedSvtText(
+            fr = "Réponse immunitaire & Vaccination",
+            en = "Immune Response & Vaccination",
+            ar = "الاستجابة المناعية والتلقيح"
+        ),
+        LocalizedSvtText(
+            fr = "Reproduction humaine & Cycles hormonaux",
+            en = "Human Reproduction & Hormonal Cycles",
+            ar = "التوالد البشري والدورات الهرمونية"
+        ),
+        LocalizedSvtText(
             fr = "Tectonique des plaques & Séismes",
             en = "Plate Tectonics & Earthquakes",
             ar = "تكتونية الصفائح والزلازل"
-        ),
-        LocalizedSvtText(
-            fr = "Réponse immunitaire & Anticorps",
-            en = "Immune Response & Antibodies",
-            ar = "الاستجابة المناعية ومضادات الأجسام"
         ),
         LocalizedSvtText(
             fr = "Photosynthèse & Respiration cellulaire",
@@ -147,6 +156,34 @@ object SvtKnowledgeCatalog {
             )
         ),
         SvtFactOfTheDay(
+            id = "fact_immunity",
+            domain = SvtDomain.IMMUNITY,
+            title = LocalizedSvtText(
+                fr = "La mémoire immunitaire protège durablement",
+                en = "Immune memory gives lasting protection",
+                ar = "الذاكرة المناعية توفر حماية طويلة الأمد"
+            ),
+            body = LocalizedSvtText(
+                fr = "Lors d'un second contact avec le même antigène, les lymphocytes B et T mémoire déclenchent une réponse plus rapide, plus intense et plus longue.",
+                en = "Upon re-exposure to the same antigen, memory B and T cells trigger a faster, stronger, and longer-lasting immune response.",
+                ar = "عند الاتصال الثاني بنفس مولد المضاد، تطلق اللمفاويات الذاكرة استجابة أسرع وأقوى وأطول مدة."
+            )
+        ),
+        SvtFactOfTheDay(
+            id = "fact_reproduction",
+            domain = SvtDomain.REPRODUCTION,
+            title = LocalizedSvtText(
+                fr = "De deux gamètes haploïdes (n) à un organisme diploïde (2n)",
+                en = "From two haploid gametes (n) to a diploid organism (2n)",
+                ar = "من مشيجين أحاديي الصيغة (n) إلى كائن ثنائي الصيغة (2n)"
+            ),
+            body = LocalizedSvtText(
+                fr = "La méiose divise par deux le nombre de chromosomes, puis la fécondation rétablit le caryotype de l'espèce (2n = 46 chez l'être humain) tout en créant une combinaison génétique unique.",
+                en = "Meiosis halves the chromosome count, and fertilization restores the species karyotype (2n = 46 in humans) while generating a unique genetic combination.",
+                ar = "يختزل الانقسام الاختزالي عدد الصبغيات إلى النصف، ثم يعيد الإخصاب الصيغة الصبغية للنوع (2n = 46) مع تركيب وراثي فريد."
+            )
+        ),
+        SvtFactOfTheDay(
             id = "fact_subduction",
             domain = SvtDomain.GEOLOGY,
             title = LocalizedSvtText(
@@ -175,22 +212,8 @@ object SvtKnowledgeCatalog {
             )
         ),
         SvtFactOfTheDay(
-            id = "fact_photosynthesis",
-            domain = SvtDomain.ECOLOGY,
-            title = LocalizedSvtText(
-                fr = "L'oxygène provient de la photolyse de l'eau",
-                en = "Oxygen comes from water photolysis",
-                ar = "الأكسجين ناتج عن التحليل الضوئي للماء"
-            ),
-            body = LocalizedSvtText(
-                fr = "Dans les thylakoïdes du chloroplaste, la lumière casse la molécule H₂O pour libérer O₂, tandis que le CO₂ est fixé dans le stroma.",
-                en = "Inside chloroplast thylakoids, light splits H₂O to release O₂, while CO₂ is fixed into sugars in the stroma.",
-                ar = "داخل تيلاكويدات البلاستيدة الخضراء، يفكك الضوء جزيئة الماء لتحرير ثنائي الأكسجين بينما يُثبَّت CO₂ في الستروما."
-            )
-        ),
-        SvtFactOfTheDay(
             id = "fact_synapse",
-            domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
+            domain = SvtDomain.NERVOUS_MUSCULAR,
             title = LocalizedSvtText(
                 fr = "L'influx nerveux voyage jusqu'à 120 m/s",
                 en = "Nerve impulses travel up to 120 m/s",
@@ -203,263 +226,22 @@ object SvtKnowledgeCatalog {
             )
         ),
         SvtFactOfTheDay(
-            id = "fact_immunity",
-            domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
+            id = "fact_photosynthesis",
+            domain = SvtDomain.ECOLOGY,
             title = LocalizedSvtText(
-                fr = "La mémoire immunitaire protège durablement",
-                en = "Immune memory gives lasting protection",
-                ar = "الذاكرة المناعية توفر حماية طويلة الأمد"
+                fr = "L'oxygène provient de la photolyse de l'eau",
+                en = "Oxygen comes from water photolysis",
+                ar = "الأكسجين ناتج عن التحليل الضوئي للماء"
             ),
             body = LocalizedSvtText(
-                fr = "Lors d'un second contact avec le même antigène, les lymphocytes B et T mémoire déclenchent une réponse plus rapide, plus intense et plus longue.",
-                en = "Upon re-exposure to the same antigen, memory B and T cells trigger a faster, stronger, and longer-lasting immune response.",
-                ar = "عند الاتصال الثاني بنفس مولد المضاد، تطلق اللمفاويات الذاكرة استجابة أسرع وأقوى وأطول مدة."
+                fr = "Dans les thylakoïdes du chloroplaste, la lumière casse la molécule H₂O pour libérer O₂, tandis que le CO₂ est fixé dans le stroma.",
+                en = "Inside chloroplast thylakoids, light splits H₂O to release O₂, while CO₂ is fixed into sugars in the stroma.",
+                ar = "داخل تيلاكويدات البلاستيدة الخضراء، يفكك الضوء جزيئة الماء لتحرير ثنائي الأكسجين بينما يُثبَّت CO₂ في الستروما."
             )
         )
     )
 
-    val glossaryEntries: List<SvtGlossaryEntry> = listOf(
-        SvtGlossaryEntry(
-            id = "mitosis",
-            domain = SvtDomain.CELL_GENETICS,
-            term = LocalizedSvtText("Mitose", "Mitosis", "الانقسام غير المباشر"),
-            definition = LocalizedSvtText(
-                fr = "Division cellulaire conforme donnant deux cellules filles génétiquement identiques à la cellule mère (2n → 2n).",
-                en = "Equational cell division producing two daughter cells genetically identical to the parent cell (2n → 2n).",
-                ar = "انقسام خلوي مطابق ينتج عنه خليتان بنتان متطابقتان وراثياً مع الخلية الأم (2n → 2n)."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "4 phases : Prophase, Métaphase, Anaphase, Télophase (PMAT)",
-                en = "4 phases: Prophase, Metaphase, Anaphase, Telophase (PMAT)",
-                ar = "4 أطوار: التمهيدي، الاستوائي، الانفصالي، النهائي"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "meiosis",
-            domain = SvtDomain.CELL_GENETICS,
-            term = LocalizedSvtText("Méiose", "Meiosis", "الانقسام الاختزالي"),
-            definition = LocalizedSvtText(
-                fr = "Succession de deux divisions produisant 4 cellules haploïdes (gamètes, n chromosomes) et assurant le brassage génétique.",
-                en = "Two consecutive divisions yielding 4 haploid gametes (n chromosomes) while driving genetic recombination.",
-                ar = "تتالي انقسامين يعطي 4 خلايا أحادية الصيغة الصبغية (أمشاج n) ويحقق التخليط الوراثي."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Crossing-over en Prophase I • Brassage interchromosomique en Anaphase I",
-                en = "Crossing-over in Prophase I • Independent assortment in Anaphase I",
-                ar = "العبور الصبغي في التمهيدية I • التخليط البيصبغي في الانفصالية I"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "dna",
-            domain = SvtDomain.CELL_GENETICS,
-            term = LocalizedSvtText("ADN (Acide désoxyribonucléique)", "DNA (Deoxyribonucleic Acid)", "ADN (الحمض النووي الريبوزي منقوص الأكسجين)"),
-            definition = LocalizedSvtText(
-                fr = "Molécule en double hélice support de l'information génétique, constituée de nucléotides complémentaires (A=T et C≡G).",
-                en = "Double-helix molecule carrying genetic information, built from complementary base pairs (A=T and C≡G).",
-                ar = "جزيئة مزدوجة اللولب حاملة للخبر الوراثي، مكونة من نيكليوتيدات متكاملة (A=T و C≡G)."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Réplication semi-conservative en phase S (ADN polymérase)",
-                en = "Semi-conservative replication during S phase (DNA polymerase)",
-                ar = "تضاعف نصف محافظ خلال الطور S بواسطة أنزيم ADN بوليميراز"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "transcription",
-            domain = SvtDomain.CELL_GENETICS,
-            term = LocalizedSvtText("Transcription & Traduction", "Transcription & Translation", "النسخ والترجمة"),
-            definition = LocalizedSvtText(
-                fr = "La transcription copie un gène d'ADN en ARNm dans le noyau ; la traduction assemble les acides aminés au ribosome.",
-                en = "Transcription copies a DNA gene into mRNA in the nucleus; translation assembles amino acids at the ribosome.",
-                ar = "ينسخ النسخ المورثة من ADN إلى ARNm داخل النواة، بينما تترجم الريبوزومات الكودونات إلى أحماض أمينية."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Codon initiateur : AUG (Met) • Codons stop : UAA, UAG, UGA",
-                en = "Start codon: AUG (Met) • Stop codons: UAA, UAG, UGA",
-                ar = "وحدة البداية: AUG (Met) • وحدات التوقف: UAA, UAG, UGA"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "allele",
-            domain = SvtDomain.CELL_GENETICS,
-            term = LocalizedSvtText("Allèle, Génotype & Phénotype", "Allele, Genotype & Phenotype", "الحليل، النمط الوراثي والمظهر الخارجي"),
-            definition = LocalizedSvtText(
-                fr = "Un allèle est une version d'un gène. Le génotype désigne l'ensemble des allèles ; le phénotype représente les caractères observables.",
-                en = "An allele is a gene variant. Genotype is the set of alleles; phenotype is the set of observable traits.",
-                ar = "الحليل هو شكل من أشكال المورثة. النمط الوراثي هو مجموع الحليلات، والمظهر الخارجي هو الصفات الملاحظة."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Homozygote (A//A) • Hétérozygote (A//a) • Codominance ou dominance",
-                en = "Homozygous (AA) • Heterozygous (Aa) • Dominance or codominance",
-                ar = "متشابه الاقتران • مختلف الاقتران • سيادة تامة أو تساوي السيادة"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "subduction",
-            domain = SvtDomain.GEOLOGY,
-            term = LocalizedSvtText("Subduction", "Subduction", "الطمر"),
-            definition = LocalizedSvtText(
-                fr = "Enfoncement d'une plaque lithosphérique océanique dense dans l'asthénosphère sous une plaque moins dense.",
-                en = "Sinking of a denser oceanic lithospheric plate into the asthenosphere beneath a less dense plate.",
-                ar = "انغراز صفيحة صخرية محيطية أكثر كثافة تحت صفيحة أقل كثافة داخل الأستينوسفير."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Fosse océanique, plan de Wadati-Benioff, volcanisme andésitique",
-                en = "Oceanic trench, Wadati-Benioff zone, andesitic volcanism",
-                ar = "حفرة محيطية، مستوى بينيوف، بركانية أنديزيتية"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "metamorphism",
-            domain = SvtDomain.GEOLOGY,
-            term = LocalizedSvtText("Métamorphisme & Anatexie", "Metamorphism & Anatexis", "التحول والأناتيكسي"),
-            definition = LocalizedSvtText(
-                fr = "Transformation minéralogique et structurale d'une roche à l'état solide sous l'effet de la pression et de la température.",
-                en = "Solid-state mineralogical and textural transformation of rocks caused by increased pressure and temperature.",
-                ar = "تغير معادن وبنية الصخور في الحالة الصلبة تحت تأثير ارتفاع الضغط ودرجة الحرارة."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Argile → Schiste → Micaschiste → Gneiss → Migmatite (fusion partielle)",
-                en = "Clay → Slate/Schist → Micaschist → Gneiss → Migmatite (partial melting)",
-                ar = "طين → شيست → ميكاشيست → غنيس → ميغماتيت (انصهار جزئي)"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "obduction_collision",
-            domain = SvtDomain.GEOLOGY,
-            term = LocalizedSvtText("Obduction & Collision continentale", "Obduction & Continental Collision", "الطفو والاصطدام القاري"),
-            definition = LocalizedSvtText(
-                fr = "Chevauchement d'une lithosphère océanique sur un continent (ophiolites), puis affrontement de deux croûtes continentales.",
-                en = "Thrusting of oceanic lithosphere onto a continent (ophiolites), followed by collision of two continental crusts.",
-                ar = "زحف غلاف صخري محيطي فوق قارة (أوفيوليت) ثم تجابه قشرتين قاريتين وتكون سلاسل الاصطدام."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Plis, failles inverses, nappes de charriage et racine crustale",
-                en = "Folds, reverse faults, thrust nappes, and crustal root",
-                ar = "طيات، فوالق معكوسة، سدائم وجذر قشري"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "seismograph",
-            domain = SvtDomain.GEOLOGY,
-            term = LocalizedSvtText("Ondes sismiques (P, S, L)", "Seismic Waves (P, S, L)", "الموجات الزلزالية (P, S, L)"),
-            definition = LocalizedSvtText(
-                fr = "Vibrations propagées depuis le foyer d'un séisme. Les ondes P sont les plus rapides ; les ondes S ne traversent pas les liquides.",
-                en = "Vibrations radiating from a quake focus. P-waves are fastest; S-waves cannot travel through liquids.",
-                ar = "اهتزازات تنتشر من البؤرة الزلزالية. الموجات P أسرعها، بينما لا تخترق الموجات S الأوساط السائلة."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Discontinuités : Moho (30 km), Gutenberg (2900 km), Lehmann (5150 km)",
-                en = "Discontinuities: Moho (30 km), Gutenberg (2900 km), Lehmann (5150 km)",
-                ar = "الانقطاعات: موهو (30 كلم)، غوتنبرغ (2900 كلم)، ليمان (5150 كلم)"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "synapse",
-            domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
-            term = LocalizedSvtText("Synapse chimique", "Chemical Synapse", "السينابس الكيميائي"),
-            definition = LocalizedSvtText(
-                fr = "Zone de jonction entre deux neurones où le potentiel d'action déclenche la libération d'un neurotransmetteur (ex : acétylcholine).",
-                en = "Junction between two neurons where an action potential triggers neurotransmitter release across the synaptic cleft.",
-                ar = "منطقة ارتباط بين عصبونين حيث يسبب جهد العمل تحرير مبلغ عصبي في الحيز السينابسي."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Entrée de Ca²⁺ → Exocytose des vésicules → Récepteurs post-synaptiques",
-                en = "Ca²⁺ influx → Vesicle exocytosis → Post-synaptic receptors",
-                ar = "دخول أيونات الكالسيوم ← إخراج خلوي للحويصلات ← مستقبلات بعد سينابسية"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "immunity_humoral",
-            domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
-            term = LocalizedSvtText("Immunité humorale & cellulaire", "Humoral & Cell-Mediated Immunity", "المناعة الخلطية والخلوية"),
-            definition = LocalizedSvtText(
-                fr = "La voie humorale repose sur les lymphocytes B et les anticorps ; la voie cellulaire implique les lymphocytes T cytotoxiques (LTc).",
-                en = "Humoral immunity relies on B cells and antibodies; cell-mediated immunity uses cytotoxic T cells (Tc).",
-                ar = "تعتمد المناعة الخلطية على اللمفاويات B ومضادات الأجسام، بينما تعتمد الخلوية على اللمفاويات T القاتلة."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "LT4 auxiliaires (interleukines) coordonnent les deux réponses spécifiques",
-                en = "Helper T4 cells (interleukins) coordinate both specific responses",
-                ar = "تنسق اللمفاويات المساعدة LT4 الاستجابتين عبر الأنترلوكينات"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "sarcomere",
-            domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
-            term = LocalizedSvtText("Sarcomère & Contraction musculaire", "Sarcomere & Muscle Contraction", "الساركومير والتقلص العضلي"),
-            definition = LocalizedSvtText(
-                fr = "Unité fonctionnelle de la myofibrille délimitée par deux stries Z, où glissent les filaments d'actine et de myosine grâce à l'ATP.",
-                en = "Functional unit of a myofibril between two Z-discs where actin and myosin filaments slide using ATP.",
-                ar = "الوحدة الوظيفية للييف العضلي بين حزي Z حيث تنزلق خييطات الأكتين والميوزين باستعمال ATP."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Ca²⁺ libéré par le réticulum sarcoplasmique + hydrolyse d'ATP",
-                en = "Ca²⁺ released from sarcoplasmic reticulum + ATP hydrolysis",
-                ar = "تحرير Ca²⁺ من الشبكة الساركوبلازمية + حلمأة جزيئات ATP"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "photosynthesis_entry",
-            domain = SvtDomain.ECOLOGY,
-            term = LocalizedSvtText("Photosynthèse", "Photosynthesis", "التركيب الضوئي"),
-            definition = LocalizedSvtText(
-                fr = "Synthèse de matière organique (glucose) par les végétaux chlorophylliens à partir de CO₂, d'H₂O et d'énergie lumineuse.",
-                en = "Synthesis of organic matter (glucose) by chlorophyllous plants from CO₂, H₂O, and light energy.",
-                ar = "إنتاج المادة العضوية (الكليكوز) لدى النباتات اليخضورية انطلاقاً من CO₂ والماء والطاقة الضوئية."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "6 CO₂ + 6 H₂O + Lumière → C₆H₁₂O₆ + 6 O₂",
-                en = "6 CO₂ + 6 H₂O + Light → C₆H₁₂O₆ + 6 O₂",
-                ar = "6 CO₂ + 6 H₂O + طاقة ضوئية ← C₆H₁₂O₆ + 6 O₂"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "trophic_chain",
-            domain = SvtDomain.ECOLOGY,
-            term = LocalizedSvtText("Chaîne trophique & Écosystème", "Food Chain & Ecosystem", "السلسلة الغذائية والحميلة البيئية"),
-            definition = LocalizedSvtText(
-                fr = "Transfert de matière et d'énergie entre producteurs primaires (autotrophes), consommateurs et décomposeurs d'un biotope.",
-                en = "Transfer of matter and energy across primary producers (autotrophs), consumers, and decomposers in a biotope.",
-                ar = "انتقال المادة والطاقة بين المنتجين الأوليين والمستهلكين والمحللات داخل وسط بيئي."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Environ 10 % seulement de l'énergie passe d'un niveau trophique au suivant",
-                en = "Only ~10% of energy transfers from one trophic level to the next",
-                ar = "ينتقل نحو 10% فقط من الطاقة من مستوى غذائي إلى الذي يليه"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "carbon_cycle",
-            domain = SvtDomain.ECOLOGY,
-            term = LocalizedSvtText("Cycle du carbone & Effet de serre", "Carbon Cycle & Greenhouse Effect", "دورة الكربون والاحتباس الحراري"),
-            definition = LocalizedSvtText(
-                fr = "Échanges continus de carbone entre atmosphère, biosphère, hydrosphère et lithosphère régulés par la photosynthèse et la respiration.",
-                en = "Continuous carbon exchange between atmosphere, biosphere, hydrosphere, and lithosphere driven by photosynthesis and respiration.",
-                ar = "تبادلات مستمرة للكربون بين الغلاف الجوي والمحيط الحيوي والمائي والصخري عبر التركيب الضوئي والتنفس."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Puits de carbone : océans, forêts, roches carbonatées",
-                en = "Carbon sinks: oceans, forests, carbonate rocks",
-                ar = "خزانات الكربون: المحيطات، الغابات والصخور الكلسية"
-            )
-        ),
-        SvtGlossaryEntry(
-            id = "enzyme",
-            domain = SvtDomain.CELL_GENETICS,
-            term = LocalizedSvtText("Enzyme & Site actif", "Enzyme & Active Site", "الأنزيم والموقع النشيط"),
-            definition = LocalizedSvtText(
-                fr = "Biocatalyseur protéique qui accélère une réaction chimique spécifique en abaissant son énergie d'activation sans être consommé.",
-                en = "Protein biocatalyst that speeds up a specific chemical reaction by lowering activation energy without being consumed.",
-                ar = "وسيط حيوي بروتيني يسرّع تفاعلاً كيميائياً نوعياً دون أن يُستهلك."
-            ),
-            keyHint = LocalizedSvtText(
-                fr = "Spécificité de substrat (complexe E–S) • Sensible au pH et à la température",
-                en = "Substrate specificity (E–S complex) • Sensitive to pH and temperature",
-                ar = "نوعية الركيزة (مركب أنزيم–ركيزة) • يتأثر بالحرارة ودرجة الحموضة pH"
-            )
-        )
-    )
+    val glossaryEntries: List<SvtGlossaryEntry> = SvtGlossaryCatalogData.allEntries
 
     val flashcards: List<SvtFlashcard> = listOf(
         SvtFlashcard(
@@ -512,22 +294,117 @@ object SvtKnowledgeCatalog {
             )
         ),
         SvtFlashcard(
-            id = "fc_4",
-            domain = SvtDomain.CELL_GENETICS,
+            id = "fc_imm_1",
+            domain = SvtDomain.IMMUNITY,
             question = LocalizedSvtText(
-                fr = "Quel est le rôle du codon AUG sur l'ARNm ?",
-                en = "What is the role of the AUG codon on mRNA?",
-                ar = "ما دور الوحدة الرمزية AUG على جزيئة ARNm؟"
+                fr = "Quelles cellules immunitaires sécrètent les anticorps ?",
+                en = "Which immune cells secrete antibodies?",
+                ar = "ما الخلايا المناعية التي تفرز مضادات الأجسام؟"
             ),
             answer = LocalizedSvtText(
-                fr = "Codon initiateur (Méthionine)",
-                en = "Start codon (Methionine)",
-                ar = "وحدة البداية (تُرمّز للميثيونين Met)"
+                fr = "Les plasmocytes (issus des lymphocytes B)",
+                en = "Plasma cells (derived from B lymphocytes)",
+                ar = "البلزميات (الناتجة عن تفريق اللمفاويات B)"
             ),
             explanation = LocalizedSvtText(
-                fr = "La traduction commence toujours au codon AUG et s'achève aux codons STOP (UAA, UAG ou UGA).",
-                en = "Translation begins at AUG and ends when a STOP codon (UAA, UAG, UGA) is reached.",
-                ar = "تبدأ الترجمة دائماً عند الكودون AUG وتتوقف عند أحد كودونات التوقف (UAA, UAG, UGA)."
+                fr = "Après sélection clonale et stimulation par les LT4, les LB se différencient en plasmocytes sécréteurs et LB mémoire.",
+                en = "After clonal selection and T4 help, B cells differentiate into antibody-secreting plasma cells and memory B cells.",
+                ar = "بعد الانتقاء اللمي والتنشيط بواسطة LT4، تتحول اللمفاويات B إلى بلزميات منتجة لمضادات الأجسام."
+            )
+        ),
+        SvtFlashcard(
+            id = "fc_imm_2",
+            domain = SvtDomain.IMMUNITY,
+            question = LocalizedSvtText(
+                fr = "Quelle est la principale différence entre vaccination et sérothérapie ?",
+                en = "What is the main difference between vaccination and serotherapy?",
+                ar = "ما الفرق الرئيسي بين التلقيح والاستمصال؟"
+            ),
+            answer = LocalizedSvtText(
+                fr = "Vaccin : actif, préventif et durable • Sérum : passif, curatif et temporaire",
+                en = "Vaccine: active, preventive, lasting • Serum: passive, curative, temporary",
+                ar = "اللقاح: نشيط، وقائي ودائم • المصل: سلبي، علاجي ومؤقت"
+            ),
+            explanation = LocalizedSvtText(
+                fr = "Le vaccin stimule la fabrication de lymphocytes mémoire, alors que le sérum apporte des anticorps déjà prêts.",
+                en = "A vaccine stimulates production of memory cells, while serum supplies ready-made antibodies.",
+                ar = "يحفز اللقاح إنتاج الذاكرة المناعية، بينما يوفر المصل مضادات أجسام جاهزة."
+            )
+        ),
+        SvtFlashcard(
+            id = "fc_imm_3",
+            domain = SvtDomain.IMMUNITY,
+            question = LocalizedSvtText(
+                fr = "Quel type de cellule immunitaire est principalement ciblé par le VIH ?",
+                en = "Which immune cell type is primarily targeted by HIV?",
+                ar = "ما نوع الخلايا المناعية الذي يستهدفه فيروس VIH أساساً؟"
+            ),
+            answer = LocalizedSvtText(
+                fr = "Les lymphocytes T4 (auxiliaires / CD4+)",
+                en = "Helper T4 (CD4+) lymphocytes",
+                ar = "اللمفاويات المساعدة T4 (CD4+)"
+            ),
+            explanation = LocalizedSvtText(
+                fr = "Les LT4 coordonnent les réponses humorale et cellulaire : leur destruction paralyse l'immunité spécifique.",
+                en = "T4 cells coordinate both humoral and cell-mediated immunity; losing them cripples specific defense.",
+                ar = "تنسق LT4 الاستجابتين الخلطية والخلوية، لذا يؤدي تدميرها إلى انهيار المناعة النوعية."
+            )
+        ),
+        SvtFlashcard(
+            id = "fc_rep_1",
+            domain = SvtDomain.REPRODUCTION,
+            question = LocalizedSvtText(
+                fr = "Quelle hormone hypophysaire déclenche directement l'ovulation au 14e jour du cycle ?",
+                en = "Which pituitary hormone directly triggers ovulation around day 14 of the cycle?",
+                ar = "ما الهرمون النخامي الذي يحفز الإباضة مباشرة في اليوم 14 من الدورة؟"
+            ),
+            answer = LocalizedSvtText(
+                fr = "Le pic de LH (Hormone Lutéinisante)",
+                en = "The LH (Luteinizing Hormone) surge",
+                ar = "ذروة هرمون LH (الهرمون اللوتيئيني)"
+            ),
+            explanation = LocalizedSvtText(
+                fr = "La hausse rapide des œstrogènes exerce un rétrocontrôle positif provoquant un pic de LH qui rompt le follicule mûr.",
+                en = "High estrogen levels trigger positive feedback causing an LH surge that ruptures the mature follicle.",
+                ar = "يسبب ارتفاع الأستروجين مفعولاً رجعياً إيجابياً يؤدي إلى ذروة LH وانفجار الجريب الناضج."
+            )
+        ),
+        SvtFlashcard(
+            id = "fc_rep_2",
+            domain = SvtDomain.REPRODUCTION,
+            question = LocalizedSvtText(
+                fr = "Où a lieu normalement la fécondation chez l'espèce humaine ?",
+                en = "Where does fertilization normally occur in humans?",
+                ar = "أين يحدث الإخصاب عادةً عند الإنسان؟"
+            ),
+            answer = LocalizedSvtText(
+                fr = "Dans le tiers supérieur de la trompe utérine",
+                en = "In the upper third of the Fallopian tube",
+                ar = "في الثلث العلوي للخرطوم (قناة فالوب)"
+            ),
+            explanation = LocalizedSvtText(
+                fr = "La cellule-œuf formée migre ensuite tout en se divisant jusqu'à l'utérus pour s'y implanter (nidation).",
+                en = "The resulting zygote divides as it travels down to the uterus for implantation.",
+                ar = "تهاجر البيضة المخصبة مع انقسامها نحو الرحم لتنغرس في مخاطيته (التعشيش)."
+            )
+        ),
+        SvtFlashcard(
+            id = "fc_rep_3",
+            domain = SvtDomain.REPRODUCTION,
+            question = LocalizedSvtText(
+                fr = "Pourquoi les règles n'apparaissent-elles pas au début d'une grossesse ?",
+                en = "Why does menstruation stop at the beginning of pregnancy?",
+                ar = "لماذا يتوقف الحيض في بداية الحمل؟"
+            ),
+            answer = LocalizedSvtText(
+                fr = "L'hormone HCG maintient le corps jaune, qui continue de sécréter la progestérone",
+                en = "hCG maintains the corpus luteum, keeping progesterone levels high",
+                ar = "يحافظ هرمون HCG على الجسم الأصفر الذي يستمر في إفراز البروجستيرون"
+            ),
+            explanation = LocalizedSvtText(
+                fr = "La progestérone maintient la muqueuse utérine développée et bloque les contractions du myomètre.",
+                en = "Progesterone keeps the uterine endometrium intact and inhibits myometrial contractions.",
+                ar = "يحافظ البروجستيرون على نمو مخاطية الرحم ويمنع تقلصات عضلة الرحم."
             )
         ),
         SvtFlashcard(
@@ -580,46 +457,8 @@ object SvtKnowledgeCatalog {
             )
         ),
         SvtFlashcard(
-            id = "fc_8",
-            domain = SvtDomain.GEOLOGY,
-            question = LocalizedSvtText(
-                fr = "Comment reconnaît-on un complexe ophiolitique sur un continent ?",
-                en = "What indicates an ophiolite complex on a continent?",
-                ar = "بماذا يتميز المركب الأوفيوليتي فوق القارة؟"
-            ),
-            answer = LocalizedSvtText(
-                fr = "Péridotite + Gabbro + Basalte en coussins",
-                en = "Peridotite + Gabbro + Pillow basalts",
-                ar = "بيريدوتيت + غابرو + بازلت وسائدي"
-            ),
-            explanation = LocalizedSvtText(
-                fr = "C'est un lambeau d'ancienne lithosphère océanique charrié sur le continent lors d'une obduction.",
-                en = "It represents a slice of ancient oceanic lithosphere thrust onto a continent during obduction.",
-                ar = "هو بقايا غلاف صخري محيطي قديم طفا فوق القارة أثناء ظاهرة الطفو."
-            )
-        ),
-        SvtFlashcard(
-            id = "fc_9",
-            domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
-            question = LocalizedSvtText(
-                fr = "Quelles cellules immunitaires sécrètent les anticorps ?",
-                en = "Which immune cells secrete antibodies?",
-                ar = "ما الخلايا المناعية التي تفرز مضادات الأجسام؟"
-            ),
-            answer = LocalizedSvtText(
-                fr = "Les plasmocytes (issus des lymphocytes B)",
-                en = "Plasma cells (derived from B lymphocytes)",
-                ar = "البلزميات (الناتجة عن تفريق اللمفاويات B)"
-            ),
-            explanation = LocalizedSvtText(
-                fr = "Après sélection clonale et stimulation par les LT4, les LB se différencient en plasmocytes sécréteurs et LB mémoire.",
-                en = "After clonal selection and T4 help, B cells differentiate into antibody-secreting plasma cells and memory B cells.",
-                ar = "بعد الانتقاء اللمي والتنشيط بواسطة LT4، تتحول اللمفاويات B إلى بلزميات منتجة لمضادات الأجسام."
-            )
-        ),
-        SvtFlashcard(
             id = "fc_10",
-            domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
+            domain = SvtDomain.NERVOUS_MUSCULAR,
             question = LocalizedSvtText(
                 fr = "Quelle molécule énergétique se fixe sur la tête de myosine lors de la contraction ?",
                 en = "Which energy molecule binds to the myosin head during muscle contraction?",
@@ -630,6 +469,21 @@ object SvtKnowledgeCatalog {
                 fr = "L'hydrolyse de l'ATP en ADP + Pi fournit l'énergie mécanique nécessaire au pivotement des têtes de myosine.",
                 en = "Hydrolysis of ATP into ADP + Pi provides the mechanical energy for the myosin power stroke.",
                 ar = "توفر حلمأة ATP إلى ADP + Pi الطاقة اللازمة لدوران رؤوس الميوزين وسحب خييطات الأكتين."
+            )
+        ),
+        SvtFlashcard(
+            id = "fc_nerv_2",
+            domain = SvtDomain.NERVOUS_MUSCULAR,
+            question = LocalizedSvtText(
+                fr = "Quel ion déclenche l'exocytose du neurotransmetteur au bouton synaptique ?",
+                en = "Which ion triggers neurotransmitter exocytosis at the presynaptic terminal?",
+                ar = "ما الأيون الذي يحفز تحرير المبلغ العصبي في الحيز السينابسي؟"
+            ),
+            answer = LocalizedSvtText("L'ion Calcium (Ca²⁺)", "Calcium ion (Ca²⁺)", "أيون الكالسيوم (Ca²⁺)"),
+            explanation = LocalizedSvtText(
+                fr = "L'arrivée d'un potentiel d'action ouvre des canaux Ca²⁺ voltage-dépendants, entraînant la fusion des vésicules synaptiques.",
+                en = "Action potential arrival opens voltage-gated Ca²⁺ channels, causing synaptic vesicles to fuse.",
+                ar = "يؤدي وصول جهد العمل إلى فتح قنوات Ca²⁺ المرتبطة بالجهد والتحام الحويصلات بالغشاء."
             )
         ),
         SvtFlashcard(
@@ -645,6 +499,21 @@ object SvtKnowledgeCatalog {
                 fr = "La glycolyse a lieu dans le hyaloplasme, puis le pyruvate entre dans la matrice et les crêtes mitochondriales.",
                 en = "Glycolysis occurs in the cytosol, then pyruvate enters the mitochondrial matrix and cristae.",
                 ar = "يحدث انحلال الكليكوز في الجبلة الشفافة، ثم ينفذ حمض البيروفيك إلى الماتريس وأعراف الميتوكوندريا."
+            )
+        ),
+        SvtFlashcard(
+            id = "fc_phys_2",
+            domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
+            question = LocalizedSvtText(
+                fr = "Quelle hormone pancréatique fait baisser la glycémie après un repas ?",
+                en = "Which pancreatic hormone lowers blood glucose levels after a meal?",
+                ar = "ما الهرمون البنكرياسي الذي يخفض نسبة السكر في الدم بعد الأكل؟"
+            ),
+            answer = LocalizedSvtText("L'insuline", "Insulin", "الأنسولين"),
+            explanation = LocalizedSvtText(
+                fr = "Sécrétée par les cellules β des îlots de Langerhans, elle favorise la captation du glucose et sa mise en réserve sous forme de glycogène.",
+                en = "Secreted by pancreatic β-cells, it stimulates cellular glucose uptake and glycogen storage.",
+                ar = "تفرزه خلايا بيتا في جزر لانغرهانس ويحفز دخول الكليكوز إلى الخلايا وتخزينه على شكل غليكوجين."
             )
         ),
         SvtFlashcard(
@@ -721,18 +590,18 @@ object SvtKnowledgeCatalog {
                 ar = "تبريد بطيء في العمق (بلوتونية) أو سريع على السطح (بركانية)."
             ),
             examples = LocalizedSvtText(
-                fr = "Granite (grenue), Gabbro, Basalte (microlithique), Andésite",
-                en = "Granite (phaneritic), Gabbro, Basalt (microlitic), Andesite",
-                ar = "غرانيت (محببة)، غابرو، بازلت (ميكروليتية)، أنديزيت"
+                fr = "Granite (grenue), Gabbro, Basalte (microlitique), Andésite",
+                en = "Granite (coarse-grained), Gabbro, Basalt (microlitic), Andesite",
+                ar = "غرانيت، غابرو، بازلت، أنديزيت"
             )
         ),
         SvtRockFamily(
             id = "sedimentary",
             name = LocalizedSvtText("Roches sédimentaires", "Sedimentary Rocks", "صخور رسوبية"),
             origin = LocalizedSvtText(
-                fr = "Érosion, transport, dépôt en strates et diagenèse en surface (contiennent souvent des fossiles).",
-                en = "Weathering, transport, layered deposition, and diagenesis (often contain fossils).",
-                ar = "حت ونقل وترسب على شكل طبقات وتصخر (تحتوي غالباً على مستحاثات)."
+                fr = "Accumulation, compaction et cimentation (diagenèse) de débris ou précipités chimiques.",
+                en = "Deposition, compaction, and cementation (diagenesis) of sediments or mineral precipitates.",
+                ar = "تراكم وتماسك وتصخر الرواسب الفتاتية أو الكيميائية أو الإحيائية."
             ),
             examples = LocalizedSvtText(
                 fr = "Calcaire, Grès, Argile, Phosphates, Charbon",

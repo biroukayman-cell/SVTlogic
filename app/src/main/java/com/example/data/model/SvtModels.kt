@@ -45,8 +45,11 @@ data class SvtClass(
     companion object {
         val DEFAULT_LAB_DOMAINS: List<String> = listOf(
             "CELL_GENETICS",
-            "GEOLOGY",
+            "IMMUNITY",
+            "REPRODUCTION",
             "PHYSIOLOGY_IMMUNITY",
+            "NERVOUS_MUSCULAR",
+            "GEOLOGY",
             "ECOLOGY"
         )
     }

@@ -856,16 +856,24 @@ test("Class visibleLabDomains: teacher updates valid themes, approved student re
       academicYear: "2026-2027",
       level: "2Bac",
       qrToken: "SVT_THEMES_1",
-      visibleLabDomains: ["CELL_GENETICS", "GEOLOGY", "PHYSIOLOGY_IMMUNITY", "ECOLOGY"],
+      visibleLabDomains: [
+        "CELL_GENETICS",
+        "IMMUNITY",
+        "REPRODUCTION",
+        "PHYSIOLOGY_IMMUNITY",
+        "NERVOUS_MUSCULAR",
+        "GEOLOGY",
+        "ECOLOGY",
+      ],
       createdAt: now,
       updatedAt: now,
     })
   );
 
-  // Teacher updates themes to a subset
+  // Teacher updates themes to a subset including IMMUNITY & REPRODUCTION
   await assertSucceeds(
     teacherDb.collection("classes").doc("class_themes").update({
-      visibleLabDomains: ["CELL_GENETICS", "ECOLOGY"],
+      visibleLabDomains: ["IMMUNITY", "REPRODUCTION", "NERVOUS_MUSCULAR"],
       updatedAt: now,
     })
   );

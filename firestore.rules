@@ -83,9 +83,17 @@ service cloud.firestore {
              (!('visibleLabDomains' in data) || (
                data.visibleLabDomains is list &&
                data.visibleLabDomains.size() >= 1 &&
-               data.visibleLabDomains.size() <= 4 &&
+               data.visibleLabDomains.size() <= 7 &&
                data.visibleLabDomains[0] is string &&
-               data.visibleLabDomains.hasOnly(['CELL_GENETICS', 'GEOLOGY', 'PHYSIOLOGY_IMMUNITY', 'ECOLOGY'])
+               data.visibleLabDomains.hasOnly([
+                 'CELL_GENETICS',
+                 'IMMUNITY',
+                 'REPRODUCTION',
+                 'PHYSIOLOGY_IMMUNITY',
+                 'NERVOUS_MUSCULAR',
+                 'GEOLOGY',
+                 'ECOLOGY'
+               ])
              )) &&
              isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);

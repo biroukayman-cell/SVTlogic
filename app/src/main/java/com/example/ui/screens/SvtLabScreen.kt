@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.MenuBook
@@ -47,6 +49,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -73,10 +76,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,7 +101,9 @@ import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtOceanSecondary
 import com.example.ui.theme.SvtSuccess
 import com.example.ui.theme.SvtWarning
+import com.example.ui.viewmodel.LabSvtSearchState
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 private enum class SvtLabTab(
     @StringRes val labelRes: Int,
@@ -199,9 +206,13 @@ fun TeacherClassLabThemesSelector(
 @Composable
 fun SvtLabTabScreen(
     isTeacher: Boolean,
+    isOnline: Boolean,
     currentLanguage: AppLanguage,
     selectedTeacherClass: SvtClass?,
     studentAllowedDomains: Set<SvtDomain>,
+    labSvtSearchState: LabSvtSearchState,
+    onSearchLabSvtTerm: (String) -> Unit,
+    onClearLabSvtSearch: () -> Unit,
     onUpdateClassLabDomains: (classId: String, domains: List<String>) -> Unit
 ) {
     val effectiveDomains = remember(isTeacher, selectedTeacherClass?.visibleLabDomains, studentAllowedDomains) {
@@ -332,8 +343,12 @@ fun SvtLabTabScreen(
             ) {
                 when (selectedTab) {
                     SvtLabTab.GLOSSARY -> GlossaryLabSection(
+                        isOnline = isOnline,
                         currentLanguage = currentLanguage,
-                        allowedDomains = effectiveDomains
+                        allowedDomains = effectiveDomains,
+                        labSvtSearchState = labSvtSearchState,
+                        onSearchLabSvtTerm = onSearchLabSvtTerm,
+                        onClearLabSvtSearch = onClearLabSvtSearch
                     )
                     SvtLabTab.FLASHCARDS -> FlashcardsLabSection(
                         currentLanguage = currentLanguage,
@@ -381,9 +396,14 @@ private fun SvtDomainFilterRow(
 
 @Composable
 private fun GlossaryLabSection(
+    isOnline: Boolean,
     currentLanguage: AppLanguage,
-    allowedDomains: Set<SvtDomain>
+    allowedDomains: Set<SvtDomain>,
+    labSvtSearchState: LabSvtSearchState,
+    onSearchLabSvtTerm: (String) -> Unit,
+    onClearLabSvtSearch: () -> Unit
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
     var query by rememberSaveable { mutableStateOf("") }
     var selectedDomainName by rememberSaveable { mutableStateOf<String?>(null) }
     val availableDomains = remember(allowedDomains) {
@@ -399,16 +419,26 @@ private fun GlossaryLabSection(
         }
     }
 
+    val isSearching = query.isNotBlank()
     val filtered = remember(query, selectedDomain, allowedDomains, currentLanguage) {
-        val q = query.trim().lowercase(Locale.getDefault())
-        SvtKnowledgeCatalog.glossaryEntries.filter { entry ->
-            val allowedOk = entry.domain in allowedDomains
-            val domainOk = selectedDomain == null || entry.domain == selectedDomain
-            val textOk = q.isEmpty() ||
-                entry.term.get(currentLanguage).lowercase(Locale.getDefault()).contains(q) ||
-                entry.definition.get(currentLanguage).lowercase(Locale.getDefault()).contains(q) ||
-                entry.keyHint.get(currentLanguage).lowercase(Locale.getDefault()).contains(q)
-            allowedOk && domainOk && textOk
+        SvtLabLogic.filterGlossaryEntries(
+            entries = SvtKnowledgeCatalog.glossaryEntries,
+            rawQuery = query,
+            language = currentLanguage,
+            allowedDomains = allowedDomains,
+            selectedDomain = selectedDomain
+        )
+    }
+    val isSearchableQuery = remember(query) { SvtLabLogic.isSearchableSvtQuery(query) }
+
+    LaunchedEffect(query, currentLanguage, filtered.size) {
+        if (query.isBlank() || filtered.isNotEmpty()) {
+            onClearLabSvtSearch()
+        } else if (SvtLabLogic.isSearchableSvtQuery(query)) {
+            delay(650L)
+            onSearchLabSvtTerm(query.trim())
+        } else {
+            onClearLabSvtSearch()
         }
     }
 
@@ -440,11 +470,50 @@ private fun GlossaryLabSection(
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }) {
-                            Icon(Icons.Filled.Clear, contentDescription = stringResource(id = R.string.svt_dna_clear))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (filtered.isEmpty()) {
+                                IconButton(
+                                    onClick = {
+                                        keyboardController?.hide()
+                                        onSearchLabSvtTerm(query.trim())
+                                    },
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("svt_glossary_search_submit")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Search,
+                                        contentDescription = stringResource(id = R.string.svt_glossary_search_action),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = {
+                                    query = ""
+                                    onClearLabSvtSearch()
+                                },
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("svt_glossary_search_clear")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Clear,
+                                    contentDescription = stringResource(id = R.string.svt_dna_clear)
+                                )
+                            }
                         }
                     }
                 },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        keyboardController?.hide()
+                        if (filtered.isEmpty() && query.isNotBlank()) {
+                            onSearchLabSvtTerm(query.trim())
+                        }
+                    }
+                ),
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -462,27 +531,213 @@ private fun GlossaryLabSection(
 
         if (filtered.isEmpty()) {
             item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                    )
-                ) {
-                    Text(
-                        text = stringResource(id = R.string.svt_glossary_empty),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        textAlign = TextAlign.Center
-                    )
+                if (!isSearching) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        )
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.svt_glossary_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    when (labSvtSearchState) {
+                        is LabSvtSearchState.Loading -> {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(20.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Text(
+                                        text = stringResource(id = R.string.svt_glossary_searching),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        is LabSvtSearchState.Definition -> {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("svt_glossary_ai_definition_card")
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = labSvtSearchState.term,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = labSvtSearchState.definition,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        }
+
+                        is LabSvtSearchState.NonSvtRejected -> {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("svt_glossary_rejected_card")
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ErrorOutline,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(
+                                            text = stringResource(id = R.string.svt_glossary_only_svt_title),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        Text(
+                                            text = stringResource(id = R.string.svt_glossary_only_svt_body),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        is LabSvtSearchState.Error -> {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("svt_glossary_error_card")
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = labSvtSearchState.message,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (!labSvtSearchState.isOfflineOrAppCheck && isOnline) {
+                                        TextButton(
+                                            onClick = { onSearchLabSvtTerm(query.trim()) },
+                                            modifier = Modifier.minimumInteractiveComponentSize()
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Refresh,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(stringResource(id = R.string.svt_glossary_search_action))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        LabSvtSearchState.Idle -> {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(
+                                            id = if (isSearchableQuery && !isOnline) {
+                                                R.string.svt_glossary_offline_miss
+                                            } else {
+                                                R.string.svt_glossary_empty
+                                            }
+                                        ),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    if (isSearchableQuery && isOnline) {
+                                        FilledTonalButton(
+                                            onClick = {
+                                                keyboardController?.hide()
+                                                onSearchLabSvtTerm(query.trim())
+                                            },
+                                            modifier = Modifier
+                                                .minimumInteractiveComponentSize()
+                                                .testTag("svt_glossary_lookup_btn")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Search,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(stringResource(id = R.string.svt_glossary_lookup_button))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         } else {
             items(filtered, key = { it.id }) { entry ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("svt_glossary_card_${entry.id}")
                 ) {
                     Column(
                         modifier = Modifier
@@ -490,58 +745,72 @@ private fun GlossaryLabSection(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        if (isSearching) {
+                            // Search mode: definition only
                             Text(
                                 text = entry.term.get(currentLanguage),
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
+                                fontWeight = FontWeight.Bold
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Surface(
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    text = stringResource(id = entry.domain.labelRes),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = entry.definition.get(currentLanguage),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
-                            shape = MaterialTheme.shapes.small
-                        ) {
+                            Text(
+                                text = entry.definition.get(currentLanguage),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        } else {
+                            // Browse mode: term, domain chip, definition & key hint
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Lightbulb,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.size(16.dp)
-                                )
                                 Text(
-                                    text = entry.keyHint.get(currentLanguage),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    text = entry.term.get(currentLanguage),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                Spacer(Modifier.width(8.dp))
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(id = entry.domain.labelRes),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = entry.definition.get(currentLanguage),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                                shape = MaterialTheme.shapes.small
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Lightbulb,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = entry.keyHint.get(currentLanguage),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
                             }
                         }
                     }

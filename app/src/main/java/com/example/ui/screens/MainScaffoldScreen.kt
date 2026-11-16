@@ -157,6 +157,7 @@ fun MainDashboardScreen(
     val studentNotifications by viewModel.studentNotifications.collectAsStateWithLifecycle()
 
     val aiQuizState by viewModel.aiQuizState.collectAsStateWithLifecycle()
+    val labSvtSearchState by viewModel.labSvtSearchState.collectAsStateWithLifecycle()
     val unlockedBadges by viewModel.newlyUnlockedBadges.collectAsStateWithLifecycle()
     val isUploadingResource by viewModel.isUploadingResource.collectAsStateWithLifecycle()
     val appUpdates by viewModel.appUpdates.collectAsStateWithLifecycle()
@@ -414,9 +415,17 @@ fun MainDashboardScreen(
 
                             SvtTab.SVT_LAB -> SvtLabTabScreen(
                                 isTeacher = isTeacher,
+                                isOnline = isOnline,
                                 currentLanguage = currentLanguage,
                                 selectedTeacherClass = selectedClass,
                                 studentAllowedDomains = studentAllowedLabDomains,
+                                labSvtSearchState = labSvtSearchState,
+                                onSearchLabSvtTerm = { query ->
+                                    viewModel.searchLabSvtTerm(query, currentLanguage)
+                                },
+                                onClearLabSvtSearch = {
+                                    viewModel.clearLabSvtSearch()
+                                },
                                 onUpdateClassLabDomains = { classId, domains ->
                                     viewModel.updateClassLabDomains(context, classId, domains)
                                 }

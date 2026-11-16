@@ -397,8 +397,11 @@
     <!-- Labo SVT, Glossaire, Flashcards, ADN, Microscope & Géologie -->
     <string name="svt_domain_all">Tous</string>
     <string name="svt_domain_genetics">Génétique &amp; Cellule</string>
+    <string name="svt_domain_immunity">Immunité</string>
+    <string name="svt_domain_reproduction">Reproduction</string>
+    <string name="svt_domain_physiology">Physiologie &amp; Métabolisme</string>
+    <string name="svt_domain_nervous">Système nerveux &amp; Muscle</string>
     <string name="svt_domain_geology">Géologie</string>
-    <string name="svt_domain_physiology">Physiologie &amp; Immunité</string>
     <string name="svt_domain_ecology">Écologie</string>
 
     <string name="svt_lab_title">Labo SVT</string>
@@ -409,8 +412,15 @@
     <string name="svt_lab_tab_dna">ADN → Protéine</string>
     <string name="svt_lab_tab_microscope">Microscope &amp; Géol</string>
 
-    <string name="svt_glossary_search_hint">Rechercher une notion (mitose, Moho, synapse...)</string>
-    <string name="svt_glossary_empty">Aucune notion trouvée pour ce filtre.</string>
+    <string name="svt_glossary_search_hint">Terme SVT (immunité, méiose, fécondation...)</string>
+    <string name="svt_glossary_empty">Aucune notion SVT trouvée pour ce filtre.</string>
+    <string name="svt_glossary_search_action">Rechercher</string>
+    <string name="svt_glossary_lookup_button">Rechercher la définition SVT</string>
+    <string name="svt_glossary_searching">Recherche de la définition SVT...</string>
+    <string name="svt_glossary_only_svt_title">Recherche réservée aux SVT</string>
+    <string name="svt_glossary_only_svt_body">Seuls les termes en relation avec les Sciences de la Vie et de la Terre (SVT) sont acceptés dans le Labo.</string>
+    <string name="svt_glossary_offline_miss">Terme absent du glossaire hors-ligne. Connectez-vous pour rechercher d\'autres notions de SVT.</string>
+    <string name="svt_glossary_lookup_error">Impossible de rechercher ce terme SVT pour le moment : %1$s</string>
 
     <string name="svt_flashcards_progress">Carte %1$d / %2$d</string>
     <string name="svt_flashcards_mastered_count">%1$d / %2$d maîtrisées</string>

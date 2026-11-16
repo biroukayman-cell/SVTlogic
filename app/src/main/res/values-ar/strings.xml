@@ -397,8 +397,11 @@
     <!-- مختبر SVT، المعجم، البطاقات التعليمية، ADN، المجهر والجيولوجيا -->
     <string name="svt_domain_all">الكل</string>
     <string name="svt_domain_genetics">الوراثة والخلية</string>
+    <string name="svt_domain_immunity">المناعة</string>
+    <string name="svt_domain_reproduction">التوالد</string>
+    <string name="svt_domain_physiology">الفيزيولوجيا والاستقلاب</string>
+    <string name="svt_domain_nervous">الجهاز العصبي والعضلة</string>
     <string name="svt_domain_geology">الجيولوجيا</string>
-    <string name="svt_domain_physiology">الفيزيولوجيا والمناعة</string>
     <string name="svt_domain_ecology">البيئة</string>
 
     <string name="svt_lab_title">مختبر SVT</string>
@@ -409,8 +412,15 @@
     <string name="svt_lab_tab_dna">ADN ← بروتين</string>
     <string name="svt_lab_tab_microscope">المجهر والجيولوجيا</string>
 
-    <string name="svt_glossary_search_hint">ابحث عن مفهوم (الانقسام، موهو، سينابس...)</string>
-    <string name="svt_glossary_empty">لم يتم العثور على أي مفهوم لهذا البحث.</string>
+    <string name="svt_glossary_search_hint">مصطلح SVT (مناعة، إخصاب، انقسام...)</string>
+    <string name="svt_glossary_empty">لم يتم العثور على أي مصطلح SVT لهذا البحث.</string>
+    <string name="svt_glossary_search_action">بحث</string>
+    <string name="svt_glossary_lookup_button">البحث عن التعريف العلمي</string>
+    <string name="svt_glossary_searching">جاري البحث عن التعريف العلمي...</string>
+    <string name="svt_glossary_only_svt_title">البحث مقتصر على علوم الحياة والأرض</string>
+    <string name="svt_glossary_only_svt_body">يُقبل البحث فقط عن المصطلحات المرتبطة بعلوم الحياة والأرض (SVT) داخل المختبر.</string>
+    <string name="svt_glossary_offline_miss">المصطلح غير موجود في المعجم المحلي. اتصل بالإنترنت للبحث عن مصطلحات SVT أخرى.</string>
+    <string name="svt_glossary_lookup_error">تعذر البحث عن هذا المصطلح حالياً: %1$s</string>
 
     <string name="svt_flashcards_progress">البطاقة %1$d / %2$d</string>
     <string name="svt_flashcards_mastered_count">تم إتقان %1$d / %2$d</string>

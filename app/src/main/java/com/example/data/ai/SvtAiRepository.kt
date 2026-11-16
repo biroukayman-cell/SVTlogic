@@ -18,6 +18,12 @@ data class GeneratedQuizDraft(
     val questions: List<QuizQuestion>
 )
 
+data class SvtTermLookupResult(
+    val isSvtTerm: Boolean,
+    val term: String,
+    val definition: String
+)
+
 class AiAppCheckException(cause: Throwable) : IllegalStateException(
     cause.message ?: "Firebase App Check token missing",
     cause
@@ -46,6 +52,14 @@ class SvtAiRepository {
         )
     )
 
+    private val definitionSchema = Schema.obj(
+        properties = mapOf(
+            "isSvtTerm" to Schema.boolean(description = "True ONLY if the query belongs strictly to Life and Earth Sciences (SVT: biology, genetics, immunity, reproduction, physiology, ecology, geology). False for any other topic."),
+            "term" to Schema.string(description = "Canonical SVT scientific term name in the requested language, or empty string if isSvtTerm is false."),
+            "definition" to Schema.string(description = "ONLY the concise scientific SVT definition (1 to 3 sentences, no tips, no extra commentary), or empty string if isSvtTerm is false.")
+        )
+    )
+
     private val primaryModel by lazy {
         Firebase.ai.generativeModel(
             modelName = PRIMARY_MODEL,
@@ -62,6 +76,26 @@ class SvtAiRepository {
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = quizSchema
+            }
+        )
+    }
+
+    private val definitionPrimaryModel by lazy {
+        Firebase.ai.generativeModel(
+            modelName = PRIMARY_MODEL,
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = definitionSchema
+            }
+        )
+    }
+
+    private val definitionFallbackModel by lazy {
+        Firebase.ai.generativeModel(
+            modelName = FALLBACK_MODEL,
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = definitionSchema
             }
         )
     }
@@ -113,6 +147,77 @@ class SvtAiRepository {
                 throw fallbackError
             }
         }
+    }
+
+    suspend fun lookupSvtTermDefinition(
+        query: String,
+        language: AppLanguage
+    ): SvtTermLookupResult {
+        val cleanQuery = query.trim()
+        val langInstruction = when (language) {
+            AppLanguage.FR -> "Respond in French."
+            AppLanguage.AR -> "Respond in Modern Standard Arabic (العربية الفصحى العلمية)."
+            AppLanguage.EN -> "Respond in English."
+        }
+        val prompt = """
+            You are a strict dictionary exclusively for Life and Earth Sciences (SVT - Sciences de la Vie et de la Terre): biology, cell biology, genetics, immunology, human/plant reproduction, physiology, neurobiology, anatomy, microbiology, biochemistry, ecology, geology, plate tectonics, petrology, seismology, and paleontology.
+            User query: "$cleanQuery"
+            Rules:
+            1. Decide whether the query is genuinely a term, concept, organ, organism, molecule, or phenomenon related to SVT.
+            2. If the query is NOT related to SVT (e.g. sports, history, politics, cooking, software/coding, celebrities, random chat, non-SVT math/physics/general words, or nonsense), set isSvtTerm=false, term="", and definition="".
+            3. If isSvtTerm=true:
+               - $langInstruction
+               - Set "term" to the clean canonical SVT term name.
+               - Set "definition" to ONLY a clear, precise scientific definition (1 to 3 sentences). Do NOT add examples, tips, study advice, greetings, or anything other than the definition.
+        """.trimIndent()
+
+        try {
+            return lookupDefinitionWithModel(definitionPrimaryModel, prompt)
+        } catch (e: TimeoutCancellationException) {
+            Log.e(TAG, "Primary definition model timed out", e)
+            throw IllegalStateException("Search timed out after 60s. Please retry.", e)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (primaryError: Exception) {
+            Log.w(TAG, "Primary definition model failed, trying fallback", primaryError)
+            return try {
+                lookupDefinitionWithModel(definitionFallbackModel, prompt)
+            } catch (e: TimeoutCancellationException) {
+                Log.e(TAG, "Fallback definition model timed out", e)
+                throw IllegalStateException("Search timed out after 60s. Please retry.", e)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (fallbackError: Exception) {
+                Log.e(TAG, "Fallback definition model failed", fallbackError)
+                if (isAppCheckOrTokenError(fallbackError) || isAppCheckOrTokenError(primaryError)) {
+                    throw AiAppCheckException(fallbackError)
+                }
+                throw fallbackError
+            }
+        }
+    }
+
+    private suspend fun lookupDefinitionWithModel(
+        model: com.google.firebase.ai.GenerativeModel,
+        prompt: String
+    ): SvtTermLookupResult {
+        val response = withTimeout(60_000L) {
+            model.generateContent(prompt)
+        }
+        val jsonText = response.text?.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("Empty response from Gemini.")
+
+        val root = JSONObject(jsonText)
+        val isSvt = root.optBoolean("isSvtTerm", false)
+        if (!isSvt) {
+            return SvtTermLookupResult(isSvtTerm = false, term = "", definition = "")
+        }
+        val term = root.optString("term", "").trim()
+        val definition = root.optString("definition", "").trim()
+        if (definition.isBlank()) {
+            return SvtTermLookupResult(isSvtTerm = false, term = "", definition = "")
+        }
+        return SvtTermLookupResult(isSvtTerm = true, term = term, definition = definition)
     }
 
     private suspend fun generateWithModel(

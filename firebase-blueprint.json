@@ -37,7 +37,7 @@
         "academicYear": { "type": "string" },
         "level": { "type": "string" },
         "qrToken": { "type": "string" },
-        "visibleLabDomains": { "type": "array", "description": "Enabled Labo SVT theme domain keys visible to students of this class" },
+        "visibleLabDomains": { "type": "array", "description": "Enabled Labo SVT theme domain keys visible to students (CELL_GENETICS, IMMUNITY, REPRODUCTION, PHYSIOLOGY_IMMUNITY, NERVOUS_MUSCULAR, GEOLOGY, ECOLOGY)" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },

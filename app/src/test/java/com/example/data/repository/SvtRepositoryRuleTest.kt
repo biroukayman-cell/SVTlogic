@@ -289,10 +289,10 @@ class SvtRepositoryRuleTest : FirestoreEmulatorTestBase() {
         val svtClass = withTimeout(TIMEOUT_MS) {
             repo.createClass("Prof. Nadia", "2Bac Bio", "2Bac", "2026-2027")
         }
-        assertEquals(4, svtClass.visibleLabDomains.size)
+        assertEquals(7, svtClass.visibleLabDomains.size)
 
         withTimeout(TIMEOUT_MS) {
-            repo.updateClassLabDomains(svtClass.id, listOf("CELL_GENETICS", "ECOLOGY"))
+            repo.updateClassLabDomains(svtClass.id, listOf("IMMUNITY", "REPRODUCTION", "NERVOUS_MUSCULAR"))
         }
 
         // Student signs in, joins via QR auto-approval, binds device, and reads class themes
@@ -323,9 +323,9 @@ class SvtRepositoryRuleTest : FirestoreEmulatorTestBase() {
         }
 
         val observedClass = withTimeout(FLOW_TIMEOUT_MS) {
-            repo.observeClassById(svtClass.id).first { it != null && it.visibleLabDomains.size == 2 }
+            repo.observeClassById(svtClass.id).first { it != null && it.visibleLabDomains.size == 3 }
         }
-        assertEquals(listOf("CELL_GENETICS", "ECOLOGY"), observedClass?.visibleLabDomains)
+        assertEquals(listOf("IMMUNITY", "REPRODUCTION", "NERVOUS_MUSCULAR"), observedClass?.visibleLabDomains)
 
         // Teacher unlinks student's phone, then student claims new phone successfully
         signInTestUser(teacherEmail)

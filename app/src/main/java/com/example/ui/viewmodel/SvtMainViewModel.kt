@@ -49,6 +49,7 @@ import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -76,6 +77,14 @@ sealed interface AiQuizState {
     data object Loading : AiQuizState
     data class Success(val draft: GeneratedQuizDraft) : AiQuizState
     data class Error(val message: String) : AiQuizState
+}
+
+sealed interface LabSvtSearchState {
+    data object Idle : LabSvtSearchState
+    data object Loading : LabSvtSearchState
+    data class Definition(val query: String, val term: String, val definition: String) : LabSvtSearchState
+    data class NonSvtRejected(val query: String) : LabSvtSearchState
+    data class Error(val query: String, val message: String, val isOfflineOrAppCheck: Boolean = false) : LabSvtSearchState
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -384,6 +393,10 @@ class SvtMainViewModel(
     private val _aiQuizState = MutableStateFlow<AiQuizState>(AiQuizState.Idle)
     val aiQuizState: StateFlow<AiQuizState> = _aiQuizState.asStateFlow()
 
+    private val _labSvtSearchState = MutableStateFlow<LabSvtSearchState>(LabSvtSearchState.Idle)
+    val labSvtSearchState: StateFlow<LabSvtSearchState> = _labSvtSearchState.asStateFlow()
+    private var labSearchJob: Job? = null
+
     private val _isImportingRoster = MutableStateFlow(false)
     val isImportingRoster: StateFlow<Boolean> = _isImportingRoster.asStateFlow()
 
@@ -425,6 +438,71 @@ class SvtMainViewModel(
 
     fun resetAiState() {
         _aiQuizState.value = AiQuizState.Idle
+    }
+
+    fun clearLabSvtSearch() {
+        labSearchJob?.cancel()
+        labSearchJob = null
+        _labSvtSearchState.value = LabSvtSearchState.Idle
+    }
+
+    fun searchLabSvtTerm(rawQuery: String, language: AppLanguage) {
+        val cleanQuery = rawQuery.trim()
+        if (!SvtLabLogic.isSearchableSvtQuery(cleanQuery)) {
+            labSearchJob?.cancel()
+            labSearchJob = null
+            _labSvtSearchState.value = if (cleanQuery.isBlank()) {
+                LabSvtSearchState.Idle
+            } else {
+                LabSvtSearchState.NonSvtRejected(cleanQuery)
+            }
+            return
+        }
+
+        if (!isOnline.value) {
+            labSearchJob?.cancel()
+            labSearchJob = null
+            _labSvtSearchState.value = LabSvtSearchState.Error(
+                query = cleanQuery,
+                message = context.getString(R.string.svt_glossary_offline_miss),
+                isOfflineOrAppCheck = true
+            )
+            return
+        }
+
+        labSearchJob?.cancel()
+        labSearchJob = viewModelScope.launch {
+            _labSvtSearchState.value = LabSvtSearchState.Loading
+            try {
+                val result = aiRepository.lookupSvtTermDefinition(cleanQuery, language)
+                _labSvtSearchState.value = if (result.isSvtTerm && result.definition.isNotBlank()) {
+                    LabSvtSearchState.Definition(
+                        query = cleanQuery,
+                        term = result.term.ifBlank { cleanQuery },
+                        definition = result.definition.trim()
+                    )
+                } else {
+                    LabSvtSearchState.NonSvtRejected(cleanQuery)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: AiAppCheckException) {
+                _labSvtSearchState.value = LabSvtSearchState.Error(
+                    query = cleanQuery,
+                    message = context.getString(R.string.svt_glossary_offline_miss),
+                    isOfflineOrAppCheck = true
+                )
+            } catch (e: Exception) {
+                _labSvtSearchState.value = LabSvtSearchState.Error(
+                    query = cleanQuery,
+                    message = context.getString(
+                        R.string.svt_glossary_lookup_error,
+                        e.localizedMessage ?: "Error"
+                    ),
+                    isOfflineOrAppCheck = false
+                )
+            }
+        }
     }
 
     fun setupProfile(

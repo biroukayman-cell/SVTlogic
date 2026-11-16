@@ -139,4 +139,108 @@ class SvtLabLogicTest {
         assertTrue(DeviceSessionManager.isDeviceAllowedForStudent(boundStudent, "dev_a"))
         assertFalse(DeviceSessionManager.isDeviceAllowedForStudent(boundStudent, "dev_b"))
     }
+
+    @Test
+    fun `normalizeSearchText strips French accents and normalizes Arabic forms`() {
+        assertEquals("meiose", SvtLabLogic.normalizeSearchText("  Méiose "))
+        assertEquals("fecondation", SvtLabLogic.normalizeSearchText("Fécondation"))
+        assertEquals("immunite", SvtLabLogic.normalizeSearchText("Immunité"))
+        assertEquals("noeud de ranvier", SvtLabLogic.normalizeSearchText("Nœud de Ranvier"))
+        assertEquals("الاخصاب", SvtLabLogic.normalizeSearchText("الإخصاب"))
+        assertEquals("المناعه", SvtLabLogic.normalizeSearchText("المَنَاعَة"))
+    }
+
+    @Test
+    fun `isSearchableSvtQuery rejects empty short or numeric-only queries`() {
+        assertFalse(SvtLabLogic.isSearchableSvtQuery(""))
+        assertFalse(SvtLabLogic.isSearchableSvtQuery("a"))
+        assertFalse(SvtLabLogic.isSearchableSvtQuery("12345"))
+        assertTrue(SvtLabLogic.isSearchableSvtQuery("adn"))
+        assertTrue(SvtLabLogic.isSearchableSvtQuery("anticorps"))
+    }
+
+    @Test
+    fun `filterGlossaryEntries finds unaccented SVT queries across allowed domains and ignores non-SVT queries`() {
+        val allDomains = SvtDomain.entries.toSet()
+
+        val meiosisResults = SvtLabLogic.filterGlossaryEntries(
+            entries = SvtKnowledgeCatalog.glossaryEntries,
+            rawQuery = "meiose",
+            language = AppLanguage.FR,
+            allowedDomains = allDomains,
+            selectedDomain = SvtDomain.GEOLOGY
+        )
+        assertTrue(meiosisResults.any { it.id == "meiosis" })
+
+        val immunityResults = SvtLabLogic.filterGlossaryEntries(
+            entries = SvtKnowledgeCatalog.glossaryEntries,
+            rawQuery = "anticorps",
+            language = AppLanguage.FR,
+            allowedDomains = allDomains,
+            selectedDomain = null
+        )
+        assertTrue(immunityResults.any { it.domain == SvtDomain.IMMUNITY })
+
+        val reproResults = SvtLabLogic.filterGlossaryEntries(
+            entries = SvtKnowledgeCatalog.glossaryEntries,
+            rawQuery = "fecondation",
+            language = AppLanguage.FR,
+            allowedDomains = allDomains,
+            selectedDomain = null
+        )
+        assertTrue(reproResults.any { it.domain == SvtDomain.REPRODUCTION })
+
+        // Respect teacher's allowedDomains restriction
+        val restrictedResults = SvtLabLogic.filterGlossaryEntries(
+            entries = SvtKnowledgeCatalog.glossaryEntries,
+            rawQuery = "fecondation",
+            language = AppLanguage.FR,
+            allowedDomains = setOf(SvtDomain.GEOLOGY),
+            selectedDomain = null
+        )
+        assertTrue(restrictedResults.isEmpty())
+
+        // Non-SVT terms must not match any glossary entry locally
+        assertTrue(
+            SvtLabLogic.filterGlossaryEntries(
+                entries = SvtKnowledgeCatalog.glossaryEntries,
+                rawQuery = "football",
+                language = AppLanguage.FR,
+                allowedDomains = allDomains,
+                selectedDomain = null
+            ).isEmpty()
+        )
+        assertTrue(
+            SvtLabLogic.filterGlossaryEntries(
+                entries = SvtKnowledgeCatalog.glossaryEntries,
+                rawQuery = "recette pizza",
+                language = AppLanguage.FR,
+                allowedDomains = allDomains,
+                selectedDomain = null
+            ).isEmpty()
+        )
+    }
+
+    @Test
+    fun `every SvtDomain has glossary entries, flashcards, and fact of the day`() {
+        assertTrue(SvtDomain.entries.contains(SvtDomain.IMMUNITY))
+        assertTrue(SvtDomain.entries.contains(SvtDomain.REPRODUCTION))
+        assertTrue(SvtDomain.entries.contains(SvtDomain.NERVOUS_MUSCULAR))
+        assertEquals(7, SvtDomain.entries.size)
+
+        SvtDomain.entries.forEach { domain ->
+            assertTrue(
+                "Missing glossary entry for $domain",
+                SvtKnowledgeCatalog.glossaryEntries.any { it.domain == domain }
+            )
+            assertTrue(
+                "Missing flashcard for $domain",
+                SvtKnowledgeCatalog.flashcards.any { it.domain == domain }
+            )
+            assertTrue(
+                "Missing fact of the day for $domain",
+                SvtKnowledgeCatalog.factsOfTheDay.any { it.domain == domain }
+            )
+        }
+    }
 }

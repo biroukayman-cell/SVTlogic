@@ -1,6 +1,8 @@
 package com.example.core
 
 import com.example.data.svt.SvtDomain
+import com.example.data.svt.SvtGlossaryEntry
+import java.text.Normalizer
 import java.util.Locale
 
 data class DnaSynthesisResult(
@@ -34,6 +36,10 @@ data class MicroscopeResult(
 )
 
 object SvtLabLogic {
+
+    private val combiningMarksRegex = Regex("\\p{Mn}+")
+    private val nonWordRegex = Regex("[^\\p{L}\\p{Nd}\\s]+")
+    private val multiSpaceRegex = Regex("\\s+")
 
     private val codonTable: Map<String, String> = mapOf(
         "UUU" to "Phe", "UUC" to "Phe",
@@ -166,5 +172,81 @@ object SvtLabLogic {
             SvtDomain.entries.firstOrNull { it.name == key }
         }.toSet()
         return parsed.ifEmpty { SvtDomain.entries.toSet() }
+    }
+
+    fun normalizeSearchText(raw: String): String {
+        if (raw.isBlank()) return ""
+        val expanded = raw.trim()
+            .lowercase(Locale.ROOT)
+            .replace("œ", "oe")
+            .replace("æ", "ae")
+            .replace("أ", "ا")
+            .replace("إ", "ا")
+            .replace("آ", "ا")
+            .replace("ى", "ي")
+            .replace("ة", "ه")
+            .replace("ـ", "")
+        val decomposed = Normalizer.normalize(expanded, Normalizer.Form.NFD)
+        val stripped = combiningMarksRegex.replace(decomposed, "")
+        val cleaned = nonWordRegex.replace(stripped, " ")
+        return multiSpaceRegex.replace(cleaned, " ").trim()
+    }
+
+    fun isSearchableSvtQuery(rawQuery: String): Boolean {
+        val norm = normalizeSearchText(rawQuery)
+        if (norm.length < 2) return false
+        return norm.any { it.isLetter() }
+    }
+
+    fun filterGlossaryEntries(
+        entries: List<SvtGlossaryEntry>,
+        rawQuery: String,
+        language: AppLanguage,
+        allowedDomains: Set<SvtDomain>,
+        selectedDomain: SvtDomain?
+    ): List<SvtGlossaryEntry> {
+        val allowed = entries.filter { it.domain in allowedDomains }
+        val normQuery = normalizeSearchText(rawQuery)
+        if (normQuery.isEmpty()) {
+            return if (selectedDomain == null) allowed
+            else allowed.filter { it.domain == selectedDomain }
+        }
+
+        val queryTokens = normQuery.split(' ').filter { it.length >= 3 }
+        val scored = allowed.mapNotNull { entry ->
+            val primaryTerm = normalizeSearchText(entry.term.get(language))
+            val allTerms = listOf(
+                primaryTerm,
+                normalizeSearchText(entry.term.fr),
+                normalizeSearchText(entry.term.en),
+                normalizeSearchText(entry.term.ar)
+            )
+            val normKeywords = entry.keywords.map { normalizeSearchText(it) }
+            val searchableCandidates = (allTerms + normKeywords).filter { it.isNotEmpty() }
+
+            val directExact = searchableCandidates.any { it == normQuery }
+            val prefixMatch = searchableCandidates.any { it.startsWith(normQuery) }
+            val containsMatch = searchableCandidates.any { it.contains(normQuery) }
+            val tokenMatch = queryTokens.isNotEmpty() && searchableCandidates.any { cand ->
+                cand.length >= 3 && (queryTokens.any { token -> cand == token || (token.length >= 4 && cand.contains(token)) })
+            }
+
+            if (!directExact && !prefixMatch && !containsMatch && !tokenMatch) {
+                null
+            } else {
+                var score = when {
+                    directExact -> 100
+                    prefixMatch -> 80
+                    containsMatch -> 60
+                    else -> 40
+                }
+                if (selectedDomain != null && entry.domain == selectedDomain) {
+                    score += 10
+                }
+                entry to score
+            }
+        }
+
+        return scored.sortedByDescending { it.second }.map { it.first }
     }
 }
