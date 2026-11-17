@@ -239,6 +239,8 @@ fun AuthScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showStudentForgotDialog by rememberSaveable { mutableStateOf(false) }
+    var showTeacherForgotDialog by rememberSaveable { mutableStateOf(false) }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -506,6 +508,18 @@ fun AuthScreen(
                                 .fillMaxWidth()
                                 .testTag("student_password_input")
                         )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = { showStudentForgotDialog = true },
+                                modifier = Modifier.testTag("student_forgot_password_button")
+                            ) {
+                                Text(stringResource(id = R.string.password_forgot_button))
+                            }
+                        }
 
                         AuthErrorCard(errorMessage = errorMessage)
 
@@ -902,6 +916,14 @@ fun AuthScreen(
                                 onValueChange = { teacherConfirmPassword = it },
                                 label = { Text(stringResource(id = R.string.field_password_confirm)) },
                                 leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                                trailingIcon = {
+                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                        Icon(
+                                            imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                            contentDescription = stringResource(id = R.string.field_password_confirm)
+                                        )
+                                    }
+                                },
                                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                                 singleLine = true,
@@ -909,6 +931,18 @@ fun AuthScreen(
                                     .fillMaxWidth()
                                     .testTag("teacher_confirm_password_input")
                             )
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(
+                                    onClick = { showTeacherForgotDialog = true },
+                                    modifier = Modifier.testTag("teacher_forgot_password_button")
+                                ) {
+                                    Text(stringResource(id = R.string.password_forgot_button))
+                                }
+                            }
                         }
 
                         AuthErrorCard(errorMessage = errorMessage)
@@ -1067,6 +1101,20 @@ fun AuthScreen(
 
     if (showTermsDialog) {
         TermsOfUseDialog(onDismiss = { showTermsDialog = false })
+    }
+
+    if (showStudentForgotDialog) {
+        StudentForgotPasswordDialog(
+            initialMassar = massarInput,
+            onDismiss = { showStudentForgotDialog = false }
+        )
+    }
+
+    if (showTeacherForgotDialog) {
+        TeacherForgotPasswordDialog(
+            initialEmail = teacherEmail,
+            onDismiss = { showTeacherForgotDialog = false }
+        )
     }
 }
 
@@ -2545,4 +2593,149 @@ fun TeacherPendingApprovalScreen(
         }
     }
 }
+
+@Composable
+private fun StudentForgotPasswordDialog(
+    initialMassar: String,
+    onDismiss: () -> Unit
+) {
+    val cleanMassar = AuthSessionDraft.normalizeMassar(initialMassar)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(id = R.string.password_forgot_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = stringResource(id = R.string.password_forgot_student_desc),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (cleanMassar.isNotBlank()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.password_forgot_student_massar_tip, cleanMassar),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("student_forgot_close_button")
+            ) {
+                Text(stringResource(id = R.string.close))
+            }
+        }
+    )
+}
+
+@Composable
+private fun TeacherForgotPasswordDialog(
+    initialEmail: String,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var emailInput by remember { mutableStateOf(initialEmail.trim()) }
+    var isSending by remember { mutableStateOf(false) }
+    var sentToEmail by remember { mutableStateOf<String?>(null) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    val invalidEmailErr = stringResource(id = R.string.auth_error_email_invalid)
+
+    AlertDialog(
+        onDismissRequest = { if (!isSending) onDismiss() },
+        title = { Text(stringResource(id = R.string.password_forgot_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = stringResource(id = R.string.password_forgot_teacher_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = emailInput,
+                    onValueChange = { emailInput = it },
+                    label = { Text(stringResource(id = R.string.field_email_pro)) },
+                    placeholder = { Text(stringResource(id = R.string.field_email_pro_hint)) },
+                    leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("teacher_forgot_email_input")
+                )
+                if (!sentToEmail.isNullOrBlank()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.password_forgot_email_sent, sentToEmail!!),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+                if (!errorMsg.isNullOrBlank()) {
+                    Text(
+                        text = errorMsg!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val clean = emailInput.trim()
+                    if (clean.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(clean).matches()) {
+                        errorMsg = invalidEmailErr
+                        return@Button
+                    }
+                    errorMsg = null
+                    isSending = true
+                    scope.launch {
+                        try {
+                            Firebase.auth.sendPasswordResetEmail(clean).await()
+                            sentToEmail = clean
+                            isSending = false
+                        } catch (e: Exception) {
+                            isSending = false
+                            errorMsg = mapFirebaseAuthError(context, e)
+                        }
+                    }
+                },
+                enabled = !isSending,
+                modifier = Modifier.testTag("teacher_forgot_send_button")
+            ) {
+                if (isSending) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(stringResource(id = R.string.password_forgot_send_link))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isSending) {
+                Text(stringResource(id = R.string.close))
+            }
+        }
+    )
+}
+
 

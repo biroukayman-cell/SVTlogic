@@ -119,8 +119,13 @@ import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.input.VisualTransformation
 import com.example.BuildConfig
 import com.example.R
 import com.example.core.AppThemePalette
@@ -194,6 +199,11 @@ fun ProfileAndBadgesTab(
     onRejectTeacher: (UserProfile) -> Unit = {},
     onSendAdminVerification: () -> Unit = {},
     onRefreshAdminStatus: () -> Unit = {},
+    onForgotPassword: ((ok: Boolean, provisional: String?, sentEmail: String?, err: String?) -> Unit) -> Unit = { cb ->
+        cb(false, null, null, null)
+    },
+    onResetStudentPassword: (RosterStudent, Enrollment?) -> Unit = { _, _ -> },
+    onResetTeacherPassword: (UserProfile) -> Unit = {},
     onGuestBlocked: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -207,6 +217,7 @@ fun ProfileAndBadgesTab(
     var classToDelete by remember { mutableStateOf<SvtClass?>(null) }
     var studentToDelete by remember { mutableStateOf<Enrollment?>(null) }
     var studentToResetDevice by remember { mutableStateOf<Enrollment?>(null) }
+    var studentToResetPassword by remember { mutableStateOf<Pair<RosterStudent, Enrollment?>?>(null) }
     var updateToDelete by remember { mutableStateOf<AppUpdateRelease?>(null) }
     var selectedBadgeCategory by remember { mutableStateOf<BadgeCategory?>(null) }
 
@@ -529,7 +540,8 @@ fun ProfileAndBadgesTab(
                         onSendVerification = onSendAdminVerification,
                         onRefreshStatus = onRefreshAdminStatus,
                         onApproveTeacher = onApproveTeacher,
-                        onRejectTeacher = onRejectTeacher
+                        onRejectTeacher = onRejectTeacher,
+                        onResetTeacherPassword = onResetTeacherPassword
                     )
                 }
             }
@@ -869,6 +881,10 @@ fun ProfileAndBadgesTab(
                                     )
                                 } else if (rosterExpanded) {
                                     classRoster.forEach { roster ->
+                                        val linkedEnrollment = classEnrollments.firstOrNull {
+                                            it.studentId == roster.studentUid ||
+                                                it.massarNumber.equals(roster.massarNumber, ignoreCase = true)
+                                        }
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -888,16 +904,29 @@ fun ProfileAndBadgesTab(
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
-                                            IconButton(
-                                                onClick = { onDeleteRosterStudent(roster) },
-                                                modifier = Modifier.testTag("delete_roster_${roster.massarNumber}")
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Filled.Delete,
-                                                    contentDescription = stringResource(id = R.string.delete),
-                                                    tint = MaterialTheme.colorScheme.error,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                IconButton(
+                                                    onClick = { studentToResetPassword = roster to linkedEnrollment },
+                                                    modifier = Modifier.testTag("reset_roster_password_${roster.massarNumber}")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Key,
+                                                        contentDescription = stringResource(id = R.string.teacher_reset_student_password_btn),
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = { onDeleteRosterStudent(roster) },
+                                                    modifier = Modifier.testTag("delete_roster_${roster.massarNumber}")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Delete,
+                                                        contentDescription = stringResource(id = R.string.delete),
+                                                        tint = MaterialTheme.colorScheme.error,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -983,6 +1012,11 @@ fun ProfileAndBadgesTab(
                             color = MaterialTheme.colorScheme.primary
                         )
                         approved.forEach { enrollment ->
+                            val matchingRoster = classRoster.firstOrNull {
+                                it.studentUid == enrollment.studentId ||
+                                    (enrollment.massarNumber.isNotBlank() &&
+                                        it.massarNumber.equals(enrollment.massarNumber, ignoreCase = true))
+                            }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1005,6 +1039,18 @@ fun ProfileAndBadgesTab(
                                     }
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (matchingRoster != null) {
+                                        IconButton(
+                                            onClick = { studentToResetPassword = matchingRoster to enrollment },
+                                            modifier = Modifier.testTag("reset_student_password_${enrollment.studentId}")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Key,
+                                                contentDescription = stringResource(id = R.string.teacher_reset_student_password_btn),
+                                                tint = MaterialTheme.colorScheme.tertiary
+                                            )
+                                        }
+                                    }
                                     IconButton(
                                         onClick = { studentToResetDevice = enrollment },
                                         modifier = Modifier.testTag("reset_device_${enrollment.studentId}")
@@ -1193,9 +1239,13 @@ fun ProfileAndBadgesTab(
 
     if (showChangePasswordDialog) {
         ChangePasswordDialog(
+            fullName = profile.fullName,
+            identifier = profile.massarNumber.ifBlank { profile.email },
+            registeredPhone = profile.phoneNumber,
             onSubmit = { currentPass, newPass, onDone ->
                 onChangePassword(currentPass, newPass, onDone)
             },
+            onForgotPassword = onForgotPassword,
             onDismiss = { showChangePasswordDialog = false }
         )
     }
@@ -1308,6 +1358,39 @@ fun ProfileAndBadgesTab(
             },
             dismissButton = {
                 TextButton(onClick = { studentToResetDevice = null }) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
+        )
+    }
+
+    studentToResetPassword?.let { (roster, enrollment) ->
+        val phone = enrollment?.studentPhone?.trim().orEmpty()
+        AlertDialog(
+            onDismissRequest = { studentToResetPassword = null },
+            title = { Text(stringResource(id = R.string.teacher_reset_student_password_btn)) },
+            text = {
+                Text(
+                    if (phone.isNotBlank()) {
+                        stringResource(id = R.string.teacher_reset_student_password_confirm, roster.fullName, phone)
+                    } else {
+                        stringResource(id = R.string.teacher_reset_student_no_phone, roster.fullName)
+                    }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onResetStudentPassword(roster, enrollment)
+                        studentToResetPassword = null
+                    },
+                    modifier = Modifier.testTag("confirm_reset_student_pw_${roster.massarNumber}")
+                ) {
+                    Text(stringResource(id = R.string.teacher_reset_student_password_btn))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { studentToResetPassword = null }) {
                     Text(stringResource(id = R.string.cancel))
                 }
             }
@@ -1508,7 +1591,8 @@ private fun AdminTeacherApprovalsCard(
     onSendVerification: () -> Unit,
     onRefreshStatus: () -> Unit,
     onApproveTeacher: (UserProfile) -> Unit,
-    onRejectTeacher: (UserProfile) -> Unit
+    onRejectTeacher: (UserProfile) -> Unit,
+    onResetTeacherPassword: (UserProfile) -> Unit = {}
 ) {
     val visibleTeachers = remember(teachers, currentUserId) {
         teachers.filter { it.userId != currentUserId }
@@ -1695,6 +1779,18 @@ private fun AdminTeacherApprovalsCard(
                                         Spacer(Modifier.width(4.dp))
                                         Text(stringResource(id = R.string.teacher_reject))
                                     }
+                                }
+                            }
+                            if (teacher.email.isNotBlank()) {
+                                OutlinedButton(
+                                    onClick = { onResetTeacherPassword(teacher) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("admin_reset_teacher_pw_${teacher.userId}")
+                                ) {
+                                    Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(stringResource(id = R.string.admin_reset_teacher_password_btn))
                                 }
                             }
                         }
@@ -2332,83 +2428,298 @@ private fun EditProfileDialog(
 
 @Composable
 private fun ChangePasswordDialog(
+    fullName: String,
+    identifier: String,
+    registeredPhone: String,
     onSubmit: (currentPassword: String?, newPassword: String, onDone: (Boolean, String?) -> Unit) -> Unit,
+    onForgotPassword: ((ok: Boolean, provisional: String?, sentEmail: String?, err: String?) -> Unit) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     var currentPass by remember { mutableStateOf("") }
     var newPass by remember { mutableStateOf("") }
     var confirmPass by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var isSaving by remember { mutableStateOf(false) }
+    var generatedProvisional by remember { mutableStateOf<String?>(null) }
+    var sentResetEmail by remember { mutableStateOf<String?>(null) }
 
     val weakErr = stringResource(id = R.string.auth_error_weak_password)
     val mismatchErr = stringResource(id = R.string.auth_error_password_mismatch)
 
     AlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
-        title = { Text(stringResource(id = R.string.password_change_dialog_title)) },
+        title = {
+            Text(
+                stringResource(
+                    id = if (generatedProvisional != null || sentResetEmail != null) {
+                        R.string.password_forgot_provisional_generated_title
+                    } else {
+                        R.string.password_change_dialog_title
+                    }
+                )
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = currentPass,
-                    onValueChange = { currentPass = it },
-                    label = { Text(stringResource(id = R.string.password_current_label)) },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = newPass,
-                    onValueChange = { newPass = it },
-                    label = { Text(stringResource(id = R.string.password_new_label)) },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = confirmPass,
-                    onValueChange = { confirmPass = it },
-                    label = { Text(stringResource(id = R.string.field_password_confirm)) },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    singleLine = true
-                )
-                if (!errorMsg.isNullOrBlank()) {
-                    Text(
-                        text = errorMsg!!,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (generatedProvisional != null) {
+                    val prov = generatedProvisional!!
+                    val phoneClean = registeredPhone.trim()
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = if (phoneClean.isNotBlank()) {
+                                    stringResource(id = R.string.password_forgot_provisional_phone_body, phoneClean, prov)
+                                } else {
+                                    stringResource(id = R.string.password_forgot_provisional_no_phone_body, prov)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    if (phoneClean.isNotBlank()) {
+                        Button(
+                            onClick = {
+                                val smsBody = context.getString(
+                                    R.string.password_forgot_sms_body,
+                                    fullName.ifBlank { "-" },
+                                    prov,
+                                    identifier.ifBlank { "-" }
+                                )
+                                launchSmsComposerOrShare(context, phoneClean, smsBody)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("dialog_send_provisional_sms_button")
+                        ) {
+                            Icon(Icons.Filled.Sms, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(id = R.string.password_forgot_send_sms_btn))
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            QrCodeUtils.copyTextToClipboard(context, "ProvisionalPassword", prov)
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.password_forgot_copied_msg),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dialog_copy_provisional_button")
+                    ) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(id = R.string.password_forgot_copy_btn))
+                    }
+                } else if (sentResetEmail != null) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.password_forgot_email_sent, sentResetEmail!!),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = currentPass,
+                        onValueChange = { currentPass = it },
+                        label = { Text(stringResource(id = R.string.password_current_label)) },
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = stringResource(id = R.string.password_current_label)
+                                )
+                            }
+                        },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dialog_current_password_input")
                     )
+                    Text(
+                        text = stringResource(id = R.string.password_current_hint_optional),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = newPass,
+                        onValueChange = { newPass = it },
+                        label = { Text(stringResource(id = R.string.password_new_label)) },
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = stringResource(id = R.string.password_new_label)
+                                )
+                            }
+                        },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dialog_new_password_input")
+                    )
+                    OutlinedTextField(
+                        value = confirmPass,
+                        onValueChange = { confirmPass = it },
+                        label = { Text(stringResource(id = R.string.field_password_confirm)) },
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = stringResource(id = R.string.field_password_confirm)
+                                )
+                            }
+                        },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dialog_confirm_password_input")
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = {
+                                errorMsg = null
+                                isSaving = true
+                                onForgotPassword { ok, provisional, sentEmail, err ->
+                                    isSaving = false
+                                    if (ok) {
+                                        generatedProvisional = provisional
+                                        sentResetEmail = sentEmail
+                                    } else {
+                                        errorMsg = err
+                                    }
+                                }
+                            },
+                            enabled = !isSaving,
+                            modifier = Modifier.testTag("dialog_forgot_password_button")
+                        ) {
+                            Text(stringResource(id = R.string.password_forgot_button))
+                        }
+                    }
+
+                    if (!errorMsg.isNullOrBlank()) {
+                        Text(
+                            text = errorMsg!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    when {
-                        newPass.length < 6 -> errorMsg = weakErr
-                        newPass != confirmPass -> errorMsg = mismatchErr
-                        else -> {
-                            errorMsg = null
-                            isSaving = true
-                            onSubmit(currentPass.takeIf { it.isNotBlank() }, newPass) { ok, err ->
-                                isSaving = false
-                                if (ok) onDismiss() else errorMsg = err
+            if (generatedProvisional != null || sentResetEmail != null) {
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.testTag("dialog_forgot_done_button")
+                ) {
+                    Text(stringResource(id = R.string.close))
+                }
+            } else {
+                Button(
+                    onClick = {
+                        when {
+                            newPass.length < 6 -> errorMsg = weakErr
+                            newPass != confirmPass -> errorMsg = mismatchErr
+                            else -> {
+                                errorMsg = null
+                                isSaving = true
+                                onSubmit(currentPass.takeIf { it.isNotBlank() }, newPass) { ok, err ->
+                                    isSaving = false
+                                    if (ok) onDismiss() else errorMsg = err
+                                }
                             }
                         }
+                    },
+                    enabled = !isSaving,
+                    modifier = Modifier.testTag("dialog_save_password_button")
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(stringResource(id = R.string.profile_save))
                     }
-                },
-                enabled = !isSaving
-            ) {
-                Text(stringResource(id = R.string.profile_save))
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isSaving) {
-                Text(stringResource(id = R.string.cancel))
+            if (generatedProvisional == null && sentResetEmail == null) {
+                TextButton(onClick = onDismiss, enabled = !isSaving) {
+                    Text(stringResource(id = R.string.cancel))
+                }
             }
         }
     )
+}
+
+internal fun launchSmsComposerOrShare(context: Context, phone: String, body: String) {
+    val cleanPhone = phone.trim()
+    QrCodeUtils.copyTextToClipboard(context, "SMS", body)
+    if (cleanPhone.isNotBlank()) {
+        try {
+            val smsIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${Uri.encode(cleanPhone)}")).apply {
+                putExtra("sms_body", body)
+            }
+            context.startActivity(smsIntent)
+            return
+        } catch (_: Exception) {
+            // Fall through to generic share sheet
+        }
+    }
+    try {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, body)
+        }
+        context.startActivity(
+            Intent.createChooser(shareIntent, context.getString(R.string.password_forgot_send_sms_btn))
+        )
+    } catch (_: Exception) {
+        Toast.makeText(
+            context,
+            context.getString(R.string.password_forgot_copied_msg),
+            Toast.LENGTH_LONG
+        ).show()
+    }
 }
 
 @Composable

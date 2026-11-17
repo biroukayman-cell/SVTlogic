@@ -614,7 +614,49 @@ fun MainDashboardScreen(
                                 onApproveTeacher = { teacher -> viewModel.approveTeacher(context, teacher) },
                                 onRejectTeacher = { teacher -> viewModel.rejectTeacher(context, teacher) },
                                 onSendAdminVerification = { viewModel.sendOwnerAdminVerificationEmail(context) },
-                                onRefreshAdminStatus = { viewModel.refreshAuthAndProfile(context) }
+                                onRefreshAdminStatus = { viewModel.refreshAuthAndProfile(context) },
+                                onForgotPassword = { cb ->
+                                    viewModel.forgotPasswordWhileSignedIn(context, profile.phoneNumber, cb)
+                                },
+                                onResetStudentPassword = { roster, enrollment ->
+                                    viewModel.resetStudentProvisionalPassword(context, roster) { ok, newProvisional, err ->
+                                        if (ok && !newProvisional.isNullOrBlank()) {
+                                            val phone = enrollment?.studentPhone?.trim().orEmpty()
+                                            val smsBody = context.getString(
+                                                R.string.password_forgot_sms_body,
+                                                roster.fullName,
+                                                newProvisional,
+                                                roster.massarNumber
+                                            )
+                                            launchSmsComposerOrShare(context, phone, smsBody)
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar(
+                                                    if (phone.isNotBlank()) {
+                                                        context.getString(
+                                                            R.string.password_forgot_provisional_phone_body,
+                                                            phone,
+                                                            newProvisional
+                                                        )
+                                                    } else {
+                                                        context.getString(
+                                                            R.string.password_forgot_provisional_no_phone_body,
+                                                            newProvisional
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                        } else if (!err.isNullOrBlank()) {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar(err)
+                                            }
+                                        }
+                                    }
+                                },
+                                onResetTeacherPassword = { teacher ->
+                                    viewModel.sendAdminTeacherPasswordReset(context, teacher) { phone, smsBody ->
+                                        launchSmsComposerOrShare(context, phone, smsBody)
+                                    }
+                                }
                             )
                         }
                     }

@@ -592,4 +592,32 @@
     <string name="admin_teacher_status_approved">مقبول</string>
     <string name="admin_teacher_status_rejected">مرفوض</string>
     <string name="admin_verify_banner_desc">قم بتأكيد بريد المسؤول ثم حدّث الصفحة لإدارة موافقات الأساتذة.</string>
+
+    <!-- نسيت كلمة المرور، كلمة مرور مؤقتة عبر الهاتف وخطأ كلمة المرور -->
+    <string name="password_forgot_button">نسيت كلمة المرور؟</string>
+    <string name="password_current_incorrect">كلمة المرور الحالية غير صحيحة أو انتهت صلاحيتها. تحقق منها أو استخدم «نسيت كلمة المرور؟».</string>
+    <string name="password_current_hint_optional">اتركه فارغاً إذا سجلت الدخول للتو؛ مطلوب إذا طلب النظام ذلك.</string>
+    <string name="password_forgot_title">نسيت كلمة المرور</string>
+    <string name="password_forgot_teacher_desc">أدخل بريدك الإلكتروني المهني لتلقي رابط إعادة تعيين آمن. يمكنك أيضاً التواصل مع المسؤول للمساعدة عبر رقم هاتفك المسجل.</string>
+    <string name="password_forgot_send_link">إرسال رابط الاستعادة بالبريد</string>
+    <string name="password_forgot_email_sent">تم إرسال رابط إعادة تعيين كلمة المرور إلى %1$s. يرجى التحقق من بريدك الوارد.</string>
+    <string name="password_forgot_student_desc">حسابات التلاميذ برمز مسار لا تستخدم بريداً شخصياً. اطلب من أستاذ علوم الحياة والأرض إنشاء كلمة مرور مؤقتة جديدة لإرسالها عبر رسالة SMS إلى رقم هاتفك المسجل.</string>
+    <string name="password_forgot_student_massar_tip">رمز مسار: %1$s — قدّم هذا الرمز لأستاذك أو امسح رمز QR للقسم.</string>
+    <string name="password_forgot_provisional_generated_title">تم تجهيز كلمة المرور المؤقتة الجديدة</string>
+    <string name="password_forgot_provisional_notif_title">كلمة مرور مؤقتة جديدة BioTerre</string>
+    <string name="password_forgot_provisional_notif_body">كلمة المرور المؤقتة (%1$s): %2$s. سجّل الدخول ثم غيّرها من ملفك الشخصي.</string>
+    <string name="password_forgot_provisional_phone_body">تم إنشاء كلمة مرور مؤقتة جديدة للرقم المسجل (%1$s): %2$s</string>
+    <string name="password_forgot_provisional_no_phone_body">كلمة المرور المؤقتة الجديدة: %1$s. أضف رقم هاتف في ملفك الشخصي لاستلامها عبر SMS.</string>
+    <string name="password_forgot_send_sms_btn">إرسال عبر SMS للرقم المسجل</string>
+    <string name="password_forgot_copy_btn">نسخ كلمة المرور</string>
+    <string name="password_forgot_copied_msg">تم نسخ كلمة المرور المؤقتة.</string>
+    <string name="password_forgot_reauth_student">لأسباب أمنية، سجّل الخروج واطلب من أستاذك كلمة مرور مؤقتة جديدة تُرسل إلى رقم هاتفك المسجل.</string>
+    <string name="password_forgot_sms_body">BioTerre SVT — مرحباً %1$s، كلمة مرورك المؤقتة الجديدة هي: %2$s (المعرّف: %3$s). يرجى تغييرها بعد تسجيل الدخول.</string>
+    <string name="teacher_reset_student_password_btn">إرسال كلمة مرور مؤقتة</string>
+    <string name="teacher_reset_student_password_confirm">هل تريد إنشاء كلمة مرور مؤقتة جديدة للتلميذ %1$s وإرسالها إلى رقمه المسجل (%2$s)؟</string>
+    <string name="teacher_reset_student_no_phone">لا يوجد رقم هاتف مسجل للتلميذ %1$s. سيتم نسخ/عرض كلمة المرور المؤقتة للمشاركة.</string>
+    <string name="teacher_reset_student_already_changed">قام هذا التلميذ بتغيير كلمة مروره مسبقاً. اطلب منه إعادة التعيين من ملفه الشخصي أو استخدام رمز QR.</string>
+    <string name="admin_reset_teacher_password_btn">إعادة تعيين كلمة المرور</string>
+    <string name="admin_reset_teacher_password_sent">تم إرسال بريد إعادة التعيين إلى %1$s وتجهيز رسالة SMS للرقم %2$s.</string>
+    <string name="admin_reset_teacher_sms_body">BioTerre SVT — مرحباً %1$s، تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك %2$s.</string>
 </resources>

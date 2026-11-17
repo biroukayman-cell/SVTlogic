@@ -45,6 +45,8 @@ import com.example.data.svt.SvtDomain
 import com.google.firebase.Firebase
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.auth
@@ -650,7 +652,7 @@ class SvtMainViewModel(
             _isSavingAvatar.value = true
             try {
                 val dataUri = AvatarStorageHelper.saveAndEncodeAvatar(
-                    context = uiContext.applicationContext,
+                    context = uiContext,
                     userId = currentUserId,
                     sourceUri = uri
                 ).getOrThrow()
@@ -768,7 +770,7 @@ class SvtMainViewModel(
                     user.reauthenticate(cred).await()
                 }
                 user.updatePassword(newPassword).await()
-                repository.markPasswordChanged()
+                repository.markPasswordChanged(mustChange = false)
                 val okMsg = uiContext.getString(R.string.password_changed_success)
                 _statusMessage.value = okMsg
                 onResult(true, null)
@@ -778,10 +780,161 @@ class SvtMainViewModel(
                 val msg = uiContext.getString(R.string.password_reauth_required)
                 _actionError.value = msg
                 onResult(false, msg)
-            } catch (e: Exception) {
-                val msg = e.localizedMessage ?: uiContext.getString(R.string.password_change_error)
-                _actionError.value = msg
+            } catch (_: FirebaseAuthInvalidCredentialsException) {
+                val msg = uiContext.getString(R.string.password_current_incorrect)
                 onResult(false, msg)
+            } catch (_: FirebaseAuthInvalidUserException) {
+                val msg = uiContext.getString(R.string.password_current_incorrect)
+                onResult(false, msg)
+            } catch (e: Exception) {
+                val raw = e.localizedMessage.orEmpty()
+                val msg = if (raw.contains("credential", ignoreCase = true) ||
+                    raw.contains("INVALID_LOGIN_CREDENTIALS", ignoreCase = true)
+                ) {
+                    uiContext.getString(R.string.password_current_incorrect)
+                } else {
+                    raw.ifBlank { uiContext.getString(R.string.password_change_error) }
+                }
+                onResult(false, msg)
+            }
+        }
+    }
+
+    fun forgotPasswordWhileSignedIn(
+        uiContext: Context,
+        registeredPhone: String,
+        onResult: (ok: Boolean, provisionalPassword: String?, sentResetEmail: String?, error: String?) -> Unit
+    ) {
+        val user = Firebase.auth.currentUser
+        if (user == null) {
+            onResult(false, null, null, uiContext.getString(R.string.auth_error_generic))
+            return
+        }
+        viewModelScope.launch {
+            val newProvisional = AuthSessionDraft.generateProvisionalPassword()
+            try {
+                user.updatePassword(newProvisional).await()
+                repository.markPasswordChanged(mustChange = true)
+                val phoneLabel = registeredPhone.trim().ifBlank { "-" }
+                NotificationHelper.showBadgeOrAlertNotification(
+                    context = uiContext,
+                    title = uiContext.getString(R.string.password_forgot_provisional_notif_title),
+                    body = uiContext.getString(
+                        R.string.password_forgot_provisional_notif_body,
+                        phoneLabel,
+                        newProvisional
+                    ),
+                    notificationId = 90501
+                )
+                onResult(true, newProvisional, null, null)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: FirebaseAuthRecentLoginRequiredException) {
+                val email = user.email.orEmpty()
+                if (email.isNotBlank() && !email.endsWith("@student.bioterre.svt", ignoreCase = true)) {
+                    try {
+                        Firebase.auth.sendPasswordResetEmail(email).await()
+                        onResult(true, null, email, null)
+                    } catch (mailEx: Exception) {
+                        onResult(
+                            false,
+                            null,
+                            null,
+                            mailEx.localizedMessage ?: uiContext.getString(R.string.password_change_error)
+                        )
+                    }
+                } else {
+                    onResult(false, null, null, uiContext.getString(R.string.password_forgot_reauth_student))
+                }
+            } catch (e: Exception) {
+                onResult(
+                    false,
+                    null,
+                    null,
+                    e.localizedMessage ?: uiContext.getString(R.string.password_change_error)
+                )
+            }
+        }
+    }
+
+    fun resetStudentProvisionalPassword(
+        uiContext: Context,
+        rosterStudent: RosterStudent,
+        onResult: (ok: Boolean, newProvisional: String?, error: String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            val newProvisional = AuthSessionDraft.generateProvisionalPassword()
+            val provisionerAuth = try {
+                AuthSessionDraft.getProvisionerAuth(uiContext)
+            } catch (e: Exception) {
+                onResult(false, null, e.localizedMessage)
+                return@launch
+            }
+            try {
+                val cleanMassar = AuthSessionDraft.normalizeMassar(rosterStudent.massarNumber)
+                val authEmail = AuthSessionDraft.massarToAuthEmail(cleanMassar)
+                val oldPassword = rosterStudent.provisionalPassword
+                if (oldPassword.length < 6) {
+                    onResult(false, null, uiContext.getString(R.string.teacher_reset_student_already_changed))
+                    return@launch
+                }
+                val signInRes = provisionerAuth.signInWithEmailAndPassword(authEmail, oldPassword).await()
+                val studentUser = signInRes.user
+                if (studentUser == null) {
+                    onResult(false, null, uiContext.getString(R.string.auth_error_generic))
+                    return@launch
+                }
+                studentUser.updatePassword(newProvisional).await()
+                repository.updateRosterProvisionalPassword(rosterStudent.id, newProvisional)
+                onResult(true, newProvisional, null)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: FirebaseAuthInvalidCredentialsException) {
+                onResult(false, null, uiContext.getString(R.string.teacher_reset_student_already_changed))
+            } catch (e: Exception) {
+                onResult(false, null, e.localizedMessage ?: uiContext.getString(R.string.password_change_error))
+            } finally {
+                runCatching { provisionerAuth.signOut() }
+            }
+        }
+    }
+
+    fun sendAdminTeacherPasswordReset(
+        uiContext: Context,
+        teacher: UserProfile,
+        onPreparedSms: (phone: String, smsBody: String) -> Unit
+    ) {
+        val cleanEmail = teacher.email.trim()
+        if (cleanEmail.isBlank()) {
+            _actionError.value = uiContext.getString(R.string.auth_error_email_invalid)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                Firebase.auth.sendPasswordResetEmail(cleanEmail).await()
+                val phone = teacher.phoneNumber.trim()
+                if (phone.isNotBlank()) {
+                    val smsBody = uiContext.getString(
+                        R.string.admin_reset_teacher_sms_body,
+                        teacher.fullName,
+                        cleanEmail
+                    )
+                    _statusMessage.value = uiContext.getString(
+                        R.string.admin_reset_teacher_password_sent,
+                        cleanEmail,
+                        phone
+                    )
+                    onPreparedSms(phone, smsBody)
+                } else {
+                    _statusMessage.value = uiContext.getString(
+                        R.string.password_forgot_email_sent,
+                        cleanEmail
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage ?: uiContext.getString(R.string.auth_error_generic)
             }
         }
     }

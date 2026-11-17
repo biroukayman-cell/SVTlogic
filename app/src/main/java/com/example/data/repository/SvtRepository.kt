@@ -355,13 +355,13 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    suspend fun markPasswordChanged() {
+    suspend fun markPasswordChanged(mustChange: Boolean = false) {
         val uid = requireUserId()
         val docRef = db.collection("users").document(uid)
         try {
             docRef.update(
                 mapOf(
-                    "mustChangePassword" to false,
+                    "mustChangePassword" to mustChange,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
@@ -1884,6 +1884,26 @@ class SvtRepository(private val db: FirebaseFirestore) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.DELETE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun updateRosterProvisionalPassword(rosterId: String, newPassword: String) {
+        requireUserId()
+        require(rosterId.isNotBlank()) { "Roster ID cannot be blank" }
+        require(newPassword.length >= 6) { "Password must be at least 6 characters" }
+        val docRef = db.collection("class_rosters").document(rosterId)
+        try {
+            docRef.update(
+                mapOf(
+                    "provisionalPassword" to newPassword,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
             throw e
         }
     }

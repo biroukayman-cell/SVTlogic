@@ -592,4 +592,32 @@
     <string name="admin_teacher_status_approved">Approuvé</string>
     <string name="admin_teacher_status_rejected">Refusé</string>
     <string name="admin_verify_banner_desc">Vérifiez votre e-mail administrateur puis actualisez pour gérer les inscriptions des professeurs.</string>
+
+    <!-- Mot de passe oublié, réinitialisation provisoire par téléphone & erreur mot de passe -->
+    <string name="password_forgot_button">Mot de passe oublié ?</string>
+    <string name="password_current_incorrect">Le mot de passe actuel saisi est incorrect ou expiré. Vérifiez votre saisie ou utilisez « Mot de passe oublié ? ».</string>
+    <string name="password_current_hint_optional">Laissez vide si vous venez de vous connecter ; requis si l\'application le demande.</string>
+    <string name="password_forgot_title">Mot de passe oublié</string>
+    <string name="password_forgot_teacher_desc">Saisissez votre e-mail professionnel pour recevoir un lien de réinitialisation sécurisé. Vous pouvez aussi contacter l\'administrateur pour une assistance sur votre numéro enregistré.</string>
+    <string name="password_forgot_send_link">Envoyer le lien par e-mail</string>
+    <string name="password_forgot_email_sent">Un e-mail de réinitialisation a été envoyé à %1$s. Vérifiez votre boîte de réception (et les spams).</string>
+    <string name="password_forgot_student_desc">Les comptes élèves Massar n\'utilisent pas d\'adresse e-mail personnelle. Demandez à votre professeur de SVT de générer un nouveau mot de passe provisoire : il sera envoyé par SMS directement sur votre numéro de téléphone enregistré.</string>
+    <string name="password_forgot_student_massar_tip">Code Massar : %1$s — Présentez ce code à votre professeur ou scannez le QR de la classe.</string>
+    <string name="password_forgot_provisional_generated_title">Nouveau mot de passe provisoire prêt</string>
+    <string name="password_forgot_provisional_notif_title">Nouveau mot de passe provisoire BioTerre</string>
+    <string name="password_forgot_provisional_notif_body">Mot de passe provisoire (%1$s) : %2$s. Connectez-vous puis modifiez-le dans votre profil.</string>
+    <string name="password_forgot_provisional_phone_body">Un nouveau mot de passe provisoire a été créé et préparé pour le numéro enregistré (%1$s) : %2$s</string>
+    <string name="password_forgot_provisional_no_phone_body">Nouveau mot de passe provisoire : %1$s. Ajoutez un numéro de téléphone dans votre profil pour le recevoir par SMS.</string>
+    <string name="password_forgot_send_sms_btn">Envoyer par SMS au numéro enregistré</string>
+    <string name="password_forgot_copy_btn">Copier le mot de passe</string>
+    <string name="password_forgot_copied_msg">Mot de passe provisoire copié.</string>
+    <string name="password_forgot_reauth_student">Pour des raisons de sécurité, déconnectez-vous puis demandez à votre professeur un nouveau mot de passe provisoire envoyé sur votre numéro enregistré.</string>
+    <string name="password_forgot_sms_body">BioTerre SVT — Bonjour %1$s, votre nouveau mot de passe provisoire est : %2$s (Identifiant : %3$s). Veuillez le modifier après connexion.</string>
+    <string name="teacher_reset_student_password_btn">Envoyer mot de passe provisoire</string>
+    <string name="teacher_reset_student_password_confirm">Générer un nouveau mot de passe provisoire pour %1$s et l\'envoyer au numéro enregistré (%2$s) ?</string>
+    <string name="teacher_reset_student_no_phone">Aucun numéro de téléphone enregistré pour %1$s. Le mot de passe provisoire sera copié/affiché pour partage.</string>
+    <string name="teacher_reset_student_already_changed">Cet élève a déjà personnalisé son mot de passe. Demandez-lui de réessayer depuis son profil ou scannez un nouveau compte QR.</string>
+    <string name="admin_reset_teacher_password_btn">Réinitialiser le mot de passe</string>
+    <string name="admin_reset_teacher_password_sent">E-mail de réinitialisation envoyé à %1$s et SMS préparé pour %2$s.</string>
+    <string name="admin_reset_teacher_sms_body">BioTerre SVT — Bonjour %1$s, un e-mail de réinitialisation de mot de passe vient d\'être envoyé à %2$s.</string>
 </resources>

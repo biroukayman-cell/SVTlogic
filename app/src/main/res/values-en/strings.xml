@@ -592,4 +592,32 @@
     <string name="admin_teacher_status_approved">Approved</string>
     <string name="admin_teacher_status_rejected">Rejected</string>
     <string name="admin_verify_banner_desc">Verify your administrator email then refresh to manage teacher registrations.</string>
+
+    <!-- Forgot password, provisional reset by phone & password error -->
+    <string name="password_forgot_button">Forgot password?</string>
+    <string name="password_current_incorrect">The current password entered is incorrect or expired. Double-check it or use \"Forgot password?\".</string>
+    <string name="password_current_hint_optional">Leave blank if you signed in recently; required if prompted by Firebase.</string>
+    <string name="password_forgot_title">Forgot password</string>
+    <string name="password_forgot_teacher_desc">Enter your professional email address to receive a secure password reset link. You can also ask the administrator for assistance on your registered phone number.</string>
+    <string name="password_forgot_send_link">Send reset link by email</string>
+    <string name="password_forgot_email_sent">A password reset email was sent to %1$s. Check your inbox (and spam folder).</string>
+    <string name="password_forgot_student_desc">Massar student accounts do not use a personal email inbox. Ask your SVT teacher to generate a new provisional password: it will be sent via SMS to your registered phone number.</string>
+    <string name="password_forgot_student_massar_tip">Massar Code: %1$s — Share this code with your teacher or scan the class QR code.</string>
+    <string name="password_forgot_provisional_generated_title">New provisional password ready</string>
+    <string name="password_forgot_provisional_notif_title">New BioTerre provisional password</string>
+    <string name="password_forgot_provisional_notif_body">Provisional password (%1$s): %2$s. Sign in and update it from your profile.</string>
+    <string name="password_forgot_provisional_phone_body">A new provisional password was generated for your registered phone (%1$s): %2$s</string>
+    <string name="password_forgot_provisional_no_phone_body">New provisional password: %1$s. Add a phone number in your profile to receive it by SMS.</string>
+    <string name="password_forgot_send_sms_btn">Send by SMS to registered number</string>
+    <string name="password_forgot_copy_btn">Copy password</string>
+    <string name="password_forgot_copied_msg">Provisional password copied.</string>
+    <string name="password_forgot_reauth_student">For security, sign out and ask your teacher for a new provisional password sent to your registered phone number.</string>
+    <string name="password_forgot_sms_body">BioTerre SVT — Hello %1$s, your new provisional password is: %2$s (ID: %3$s). Please change it after signing in.</string>
+    <string name="teacher_reset_student_password_btn">Send provisional password</string>
+    <string name="teacher_reset_student_password_confirm">Generate a new provisional password for %1$s and send it to the registered phone (%2$s)?</string>
+    <string name="teacher_reset_student_no_phone">No registered phone number for %1$s. The provisional password will be copied/shown for sharing.</string>
+    <string name="teacher_reset_student_already_changed">This student already changed their password. Ask them to reset it from their profile or scan a new QR account.</string>
+    <string name="admin_reset_teacher_password_btn">Reset password</string>
+    <string name="admin_reset_teacher_password_sent">Reset email sent to %1$s and SMS prepared for %2$s.</string>
+    <string name="admin_reset_teacher_sms_body">BioTerre SVT — Hello %1$s, a password reset link has been sent to %2$s.</string>
 </resources>
