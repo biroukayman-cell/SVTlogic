@@ -180,7 +180,9 @@ fun ResourcesTab(
         durationSec: Long,
         watchedPercentOverride: Double?
     ) -> Unit,
-    onRecordFileOpened: (CourseResource) -> Unit = {}
+    onRecordFileOpened: (CourseResource) -> Unit = {},
+    isGuestMode: Boolean = false,
+    onGuestBlocked: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -293,7 +295,9 @@ fun ResourcesTab(
 
         item {
             OutlinedButton(
-                onClick = { showDownloadsManagerDialog = true },
+                onClick = {
+                    if (isGuestMode) onGuestBlocked() else showDownloadsManagerDialog = true
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("downloads_manager_button")
@@ -626,8 +630,14 @@ fun ResourcesTab(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Button(
-                                onClick = { pendingChoiceResourceId = resource.id },
-                                enabled = canOpenNow && downloadFraction == null,
+                                onClick = {
+                                    if (isGuestMode) {
+                                        onGuestBlocked()
+                                    } else {
+                                        pendingChoiceResourceId = resource.id
+                                    }
+                                },
+                                enabled = isGuestMode || (canOpenNow && downloadFraction == null),
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("open_resource_${resource.id}")
@@ -652,7 +662,9 @@ fun ResourcesTab(
 
                             if (downloaded != null) {
                                 IconButton(
-                                    onClick = { onRemoveOfflineResource(resource.id) },
+                                    onClick = {
+                                        if (isGuestMode) onGuestBlocked() else onRemoveOfflineResource(resource.id)
+                                    },
                                     modifier = Modifier.testTag("remove_offline_resource_${resource.id}")
                                 ) {
                                     Icon(
@@ -663,8 +675,10 @@ fun ResourcesTab(
                                 }
                             } else if ((isTeacher || resource.isDownloadable) && downloadFraction == null) {
                                 OutlinedButton(
-                                    onClick = { onDownloadResourceOffline(resource) },
-                                    enabled = isOnline || isLocalUri,
+                                    onClick = {
+                                        if (isGuestMode) onGuestBlocked() else onDownloadResourceOffline(resource)
+                                    },
+                                    enabled = isGuestMode || isOnline || isLocalUri,
                                     modifier = Modifier.testTag("download_resource_${resource.id}")
                                 ) {
                                     Icon(

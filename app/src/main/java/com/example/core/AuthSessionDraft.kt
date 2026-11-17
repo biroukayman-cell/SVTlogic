@@ -11,6 +11,8 @@ data class PendingAuthDraft(
     val massarNumber: String = "",
     val email: String = "",
     val fullName: String = "",
+    val phoneNumber: String = "",
+    val establishment: String = "",
     val pendingClassQrToken: String = ""
 )
 
@@ -20,6 +22,8 @@ object AuthSessionDraft {
     private const val KEY_MASSAR = "massar"
     private const val KEY_EMAIL = "email"
     private const val KEY_FULL_NAME = "full_name"
+    private const val KEY_PHONE = "phone_number"
+    private const val KEY_ESTABLISHMENT = "establishment"
     private const val KEY_QR_TOKEN = "pending_qr_token"
 
     private const val PASS_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
@@ -31,6 +35,8 @@ object AuthSessionDraft {
         massarNumber: String = "",
         email: String = "",
         fullName: String = "",
+        phoneNumber: String = "",
+        establishment: String = "",
         pendingClassQrToken: String = ""
     ) {
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -39,6 +45,8 @@ object AuthSessionDraft {
             .putString(KEY_MASSAR, normalizeMassar(massarNumber))
             .putString(KEY_EMAIL, email.trim())
             .putString(KEY_FULL_NAME, fullName.trim())
+            .putString(KEY_PHONE, phoneNumber.trim())
+            .putString(KEY_ESTABLISHMENT, establishment.trim())
             .putString(KEY_QR_TOKEN, pendingClassQrToken.trim())
             .apply()
     }
@@ -57,6 +65,8 @@ object AuthSessionDraft {
             massarNumber = prefs.getString(KEY_MASSAR, "") ?: "",
             email = prefs.getString(KEY_EMAIL, "") ?: "",
             fullName = prefs.getString(KEY_FULL_NAME, "") ?: "",
+            phoneNumber = prefs.getString(KEY_PHONE, "") ?: "",
+            establishment = prefs.getString(KEY_ESTABLISHMENT, "") ?: "",
             pendingClassQrToken = prefs.getString(KEY_QR_TOKEN, "") ?: ""
         )
     }

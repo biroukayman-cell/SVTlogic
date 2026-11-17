@@ -41,6 +41,28 @@ beforeEach(async () => {
 
 const serverNow = () => new Date();
 
+async function seedApprovedTeacher(uid = TEACHER_UID) {
+  const now = serverNow();
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().collection("users").doc(uid).set({
+      userId: uid,
+      fullName: "Prof. Karim",
+      phoneNumber: "+212600998877",
+      role: "teacher",
+      email: "karim.svt@school.ma",
+      establishment: "Lycée Al Khawarizmi",
+      teacherStatus: "approved",
+      acceptedTerms: true,
+      xp: 0,
+      loginStreak: 1,
+      lastLoginDate: "2026-11-16",
+      unlockedBadgeIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+}
+
 test("Unauthenticated caller cannot read users, classes, quizzes, or private_messages", async () => {
   const unauthDb = testEnv.unauthenticatedContext().firestore();
   await assertFails(unauthDb.collection("users").doc(STUDENT_A_UID).get());
@@ -112,7 +134,8 @@ test("Enrollment workflow: student cannot self-approve, teacher approves, studen
   const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
   const now = serverNow();
 
-  // Teacher creates class and class_code
+  // Teacher creates class and class_code (must be approved teacher)
+  await seedApprovedTeacher(TEACHER_UID);
   await assertSucceeds(
     teacherDb.collection("classes").doc("class_1").set({
       teacherId: TEACHER_UID,
@@ -401,6 +424,7 @@ test("Class rosters: teacher creates/reads roster, student only sees own entry, 
   const studentADb = testEnv.authenticatedContext(STUDENT_A_UID).firestore();
   const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
   const now = serverNow();
+  await seedApprovedTeacher(TEACHER_UID);
 
   await assertSucceeds(
     teacherDb.collection("classes").doc("class_1").set({
@@ -589,6 +613,7 @@ test("Auto-approved QR enrollment and first-time video_tracking + PDF open track
   const studentADb = testEnv.authenticatedContext(STUDENT_A_UID).firestore();
   const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
   const now = serverNow();
+  await seedApprovedTeacher(TEACHER_UID);
 
   await teacherDb.collection("classes").doc("class_qr").set({
     teacherId: TEACHER_UID,
@@ -847,6 +872,7 @@ test("Class visibleLabDomains: teacher updates valid themes, approved student re
   const studentADb = testEnv.authenticatedContext(STUDENT_A_UID).firestore();
   const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
   const now = serverNow();
+  await seedApprovedTeacher(TEACHER_UID);
 
   await assertSucceeds(
     teacherDb.collection("classes").doc("class_themes").set({
@@ -920,6 +946,144 @@ test("Class visibleLabDomains: teacher updates valid themes, approved student re
 
   // Unapproved student B cannot read class_themes doc
   await assertFails(studentBDb.collection("classes").doc("class_themes").get());
+});
+
+test("Teacher registration requires fields + pending approval, admin biroukayman approves, and persistent base64 avatar succeeds", async () => {
+  const PENDING_TEACHER = "pending_teacher_1";
+  const ADMIN_UID = "admin_owner_1";
+  const pendingDb = testEnv.authenticatedContext(PENDING_TEACHER, {
+    email: "nouveau.prof@lycee.ma",
+    email_verified: true,
+  }).firestore();
+  const unverifiedAdminDb = testEnv.authenticatedContext("fake_admin_1", {
+    email: "biroukayman@gmail.com",
+    email_verified: false,
+  }).firestore();
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID, {
+    email: "biroukayman@gmail.com",
+    email_verified: true,
+  }).firestore();
+  const now = serverNow();
+
+  // Teacher registration without establishment or phone fails
+  await assertFails(
+    pendingDb.collection("users").doc(PENDING_TEACHER).set({
+      userId: PENDING_TEACHER,
+      fullName: "Prof. Nadia",
+      phoneNumber: "",
+      role: "teacher",
+      establishment: "",
+      teacherStatus: "pending",
+      acceptedTerms: true,
+      xp: 0,
+      loginStreak: 1,
+      lastLoginDate: "2026-11-16",
+      unlockedBadgeIds: [],
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Teacher cannot self-register directly as approved
+  await assertFails(
+    pendingDb.collection("users").doc(PENDING_TEACHER).set({
+      userId: PENDING_TEACHER,
+      fullName: "Prof. Nadia",
+      phoneNumber: "+212611223344",
+      role: "teacher",
+      email: "nouveau.prof@lycee.ma",
+      establishment: "Lycée Ibn Sina",
+      teacherStatus: "approved",
+      acceptedTerms: true,
+      xp: 0,
+      loginStreak: 1,
+      lastLoginDate: "2026-11-16",
+      unlockedBadgeIds: [],
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Valid teacher registration with pending status succeeds
+  await assertSucceeds(
+    pendingDb.collection("users").doc(PENDING_TEACHER).set({
+      userId: PENDING_TEACHER,
+      fullName: "Prof. Nadia",
+      phoneNumber: "+212611223344",
+      role: "teacher",
+      email: "nouveau.prof@lycee.ma",
+      establishment: "Lycée Ibn Sina",
+      teacherStatus: "pending",
+      acceptedTerms: true,
+      xp: 0,
+      loginStreak: 1,
+      lastLoginDate: "2026-11-16",
+      unlockedBadgeIds: [],
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Pending teacher cannot self-approve nor create classes yet
+  await assertFails(
+    pendingDb.collection("users").doc(PENDING_TEACHER).update({
+      teacherStatus: "approved",
+      updatedAt: now,
+    })
+  );
+  await assertFails(
+    pendingDb.collection("classes").doc("class_blocked").set({
+      teacherId: PENDING_TEACHER,
+      teacherName: "Prof. Nadia",
+      name: "1Bac SVT",
+      academicYear: "2026-2027",
+      level: "1Bac",
+      qrToken: "SVT_BLK_1",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Unverified email claim cannot act as admin
+  await assertFails(unverifiedAdminDb.collection("users").where("role", "==", "teacher").get());
+  await assertFails(
+    unverifiedAdminDb.collection("users").doc(PENDING_TEACHER).update({
+      teacherStatus: "approved",
+      updatedAt: now,
+    })
+  );
+
+  // Verified admin lists teachers and approves pending teacher
+  await assertSucceeds(adminDb.collection("users").where("role", "==", "teacher").get());
+  await assertSucceeds(
+    adminDb.collection("users").doc(PENDING_TEACHER).update({
+      teacherStatus: "approved",
+      updatedAt: now,
+    })
+  );
+
+  // Approved teacher can now create class
+  await assertSucceeds(
+    pendingDb.collection("classes").doc("class_ok").set({
+      teacherId: PENDING_TEACHER,
+      teacherName: "Prof. Nadia",
+      name: "1Bac SVT",
+      academicYear: "2026-2027",
+      level: "1Bac",
+      qrToken: "SVT_OK_1",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Teacher can save persistent compressed Base64 data URI avatar (> 500 chars, <= 250000 chars)
+  const bigBase64Avatar = "data:image/jpeg;base64," + "A".repeat(12000);
+  await assertSucceeds(
+    pendingDb.collection("users").doc(PENDING_TEACHER).update({
+      avatarUrl: bigBase64Avatar,
+      updatedAt: now,
+    })
+  );
 });
 
 

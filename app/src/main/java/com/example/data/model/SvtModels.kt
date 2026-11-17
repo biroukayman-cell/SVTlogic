@@ -16,6 +16,8 @@ data class UserProfile(
     val massarNumber: String = "",
     val birthDate: String = "",
     val email: String = "",
+    val establishment: String = "",
+    val teacherStatus: String = "approved", // "pending", "approved", "rejected"
     val mustChangePassword: Boolean = false,
     val acceptedTerms: Boolean = false,
     val avatarUrl: String? = null,

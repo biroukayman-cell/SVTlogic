@@ -81,13 +81,18 @@ import com.example.R
 import com.example.core.AppLanguage
 import com.example.core.StudentCredentialsPdfExporter
 import com.example.core.ThemeConfig
+import com.example.data.demo.GuestDemoData
 import com.example.data.model.AppUpdateRelease
 import com.example.data.model.UserProfile
+import com.example.data.svt.SvtDomain
 import com.example.ui.components.BadgeCelebrationDialog
+import com.example.ui.components.GuestReadOnlyBanner
 import com.example.ui.components.LanguageSwitcherRow
 import com.example.ui.components.NotificationsSheet
 import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtWarning
+import com.example.ui.viewmodel.AiQuizState
+import com.example.ui.viewmodel.LabSvtSearchState
 import com.example.ui.viewmodel.SvtMainViewModel
 import kotlinx.coroutines.launch
 
@@ -161,11 +166,15 @@ fun MainDashboardScreen(
     val unlockedBadges by viewModel.newlyUnlockedBadges.collectAsStateWithLifecycle()
     val isUploadingResource by viewModel.isUploadingResource.collectAsStateWithLifecycle()
     val appUpdates by viewModel.appUpdates.collectAsStateWithLifecycle()
+    val isSavingAvatar by viewModel.isSavingAvatar.collectAsStateWithLifecycle()
+    val isOwnerAdminEmail by viewModel.isOwnerAdminEmail.collectAsStateWithLifecycle()
+    val isAdminVerified by viewModel.isVerifiedOwnerAdmin.collectAsStateWithLifecycle()
+    val allTeachersForAdmin by viewModel.allTeachersForAdmin.collectAsStateWithLifecycle()
     val actionError by viewModel.actionError.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
     var dismissedUpdateId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // Request POST_NOTIFICATIONS politely on Android 13+ for badge unlock alerts
+    // Request POST_NOTIFICATIONS politely on Android 13+ for all signed-in users (students & teachers)
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { }
@@ -173,14 +182,14 @@ fun MainDashboardScreen(
     LaunchedEffect(profile.userId) {
         if (!isTeacher) {
             viewModel.syncStreakAndBadgesIfNeeded(context)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val granted = ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
-                if (!granted) {
-                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }
@@ -527,6 +536,9 @@ fun MainDashboardScreen(
                                 onUpdateProfile = { name, phone, avatar, birthDate ->
                                     viewModel.updateProfile(name, phone, avatar, birthDate)
                                 },
+                                onUpdateAvatarUri = { uri ->
+                                    viewModel.updateProfileAvatar(context, uri)
+                                },
                                 onChangePassword = { currentPass, newPass, onDone ->
                                     viewModel.changeUserPassword(context, currentPass, newPass, onDone)
                                 },
@@ -593,7 +605,16 @@ fun MainDashboardScreen(
                                         snackbarHostState.showSnackbar(msg)
                                     }
                                 },
-                                onSignOut = onSignOut
+                                onSignOut = onSignOut,
+                                isGuestMode = false,
+                                isSavingAvatar = isSavingAvatar,
+                                isOwnerAdminEmail = isOwnerAdminEmail,
+                                isAdminVerified = isAdminVerified,
+                                allTeachersForAdmin = allTeachersForAdmin,
+                                onApproveTeacher = { teacher -> viewModel.approveTeacher(context, teacher) },
+                                onRejectTeacher = { teacher -> viewModel.rejectTeacher(context, teacher) },
+                                onSendAdminVerification = { viewModel.sendOwnerAdminVerificationEmail(context) },
+                                onRefreshAdminStatus = { viewModel.refreshAuthAndProfile(context) }
                             )
                         }
                     }
@@ -615,6 +636,259 @@ fun MainDashboardScreen(
             badges = unlockedBadges,
             onDismiss = { viewModel.dismissUnlockedBadges() }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GuestMainDashboardScreen(
+    currentLanguage: AppLanguage,
+    onLanguageSelected: (AppLanguage) -> Unit,
+    currentTheme: ThemeConfig,
+    onThemeChanged: (ThemeConfig) -> Unit,
+    onExitGuest: () -> Unit
+) {
+    val context = LocalContext.current
+    var currentTab by rememberSaveable { mutableStateOf(SvtTab.EXERCISES) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    val onGuestBlocked: () -> Unit = {
+        coroutineScope.launch {
+            snackbarHostState.showSnackbar(context.getString(R.string.guest_readonly_blocked_msg))
+        }
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val useNavigationRail = maxWidth >= 680.dp
+
+        Scaffold(
+            contentWindowInsets = WindowInsets.safeDrawing,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    title = {
+                        Column {
+                            Text(
+                                text = stringResource(id = R.string.app_name),
+                                style = MaterialTheme.typography.titleLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = GuestDemoData.enrollment.className,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    },
+                    actions = {
+                        LanguageSwitcherRow(
+                            currentLanguage = currentLanguage,
+                            onLanguageSelected = onLanguageSelected,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                    }
+                )
+            },
+            bottomBar = {
+                if (!useNavigationRail) {
+                    NavigationBar {
+                        SvtTab.entries.forEach { tab ->
+                            val selected = tab == currentTab
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = { currentTab = tab },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                        contentDescription = stringResource(id = tab.labelRes)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = stringResource(id = tab.labelRes),
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                modifier = Modifier.testTag("guest_${tab.testTag}")
+                            )
+                        }
+                    }
+                }
+            }
+        ) { innerPadding ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                if (useNavigationRail) {
+                    NavigationRail {
+                        SvtTab.entries.forEach { tab ->
+                            val selected = tab == currentTab
+                            NavigationRailItem(
+                                selected = selected,
+                                onClick = { currentTab = tab },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                        contentDescription = stringResource(id = tab.labelRes)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = stringResource(id = tab.labelRes),
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                modifier = Modifier.testTag("guest_${tab.testTag}")
+                            )
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                ) {
+                    GuestReadOnlyBanner(onExitGuest = onExitGuest)
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        when (currentTab) {
+                            SvtTab.EXERCISES -> ExercisesTab(
+                                isTeacher = false,
+                                isOnline = false,
+                                selectedClassId = GuestDemoData.GUEST_CLASS_ID,
+                                teacherClasses = emptyList(),
+                                quizzes = GuestDemoData.quizzes,
+                                attempts = emptyList(),
+                                downloadedQuizIds = emptySet(),
+                                pendingAttemptQuizIds = emptySet(),
+                                aiQuizState = AiQuizState.Idle,
+                                onGenerateWithAi = { _, _, _ -> onGuestBlocked() },
+                                onResetAiState = {},
+                                onPublishQuiz = { _, _, _, _, _, _ -> onGuestBlocked() },
+                                onToggleQuizDownloadable = { onGuestBlocked() },
+                                onDownloadQuizOffline = { onGuestBlocked() },
+                                onRemoveOfflineQuiz = { onGuestBlocked() },
+                                onSubmitAttempt = { _, _, _, _, _ -> onGuestBlocked() },
+                                currentLanguage = currentLanguage,
+                                isGuestMode = true,
+                                onGuestBlocked = onGuestBlocked
+                            )
+
+                            SvtTab.SVT_LAB -> SvtLabTabScreen(
+                                isTeacher = false,
+                                isOnline = false,
+                                currentLanguage = currentLanguage,
+                                selectedTeacherClass = null,
+                                studentAllowedDomains = SvtDomain.entries.toSet(),
+                                labSvtSearchState = LabSvtSearchState.Idle,
+                                onSearchLabSvtTerm = { onGuestBlocked() },
+                                onClearLabSvtSearch = {},
+                                onUpdateClassLabDomains = { _, _ -> onGuestBlocked() },
+                                isGuestMode = true,
+                                onGuestBlocked = onGuestBlocked
+                            )
+
+                            SvtTab.RESOURCES -> ResourcesTab(
+                                isTeacher = false,
+                                isOnline = false,
+                                selectedClassId = GuestDemoData.GUEST_CLASS_ID,
+                                resources = GuestDemoData.resources,
+                                videoTrackings = emptyList(),
+                                classEnrollments = emptyList(),
+                                downloadedResources = emptyMap(),
+                                downloadingProgress = emptyMap(),
+                                isUploadingResource = false,
+                                onAddResource = { _, _, _, _, _, _, _ -> onGuestBlocked() },
+                                onDeleteResource = { onGuestBlocked() },
+                                onPrepareResourceForOpen = { _, _, _ -> onGuestBlocked() },
+                                onToggleResourceDownloadable = { onGuestBlocked() },
+                                onDownloadResourceOffline = { onGuestBlocked() },
+                                onRemoveOfflineResource = { onGuestBlocked() },
+                                onRecordVideoProgress = { _, _, _, _ -> onGuestBlocked() },
+                                onRecordFileOpened = { onGuestBlocked() },
+                                isGuestMode = true,
+                                onGuestBlocked = onGuestBlocked
+                            )
+
+                            SvtTab.ANNOUNCEMENTS -> AnnouncementsTab(
+                                isTeacher = false,
+                                selectedClassId = GuestDemoData.GUEST_CLASS_ID,
+                                announcements = GuestDemoData.announcements,
+                                onPublishAnnouncement = { _, _, _ -> onGuestBlocked() },
+                                isGuestMode = true,
+                                onGuestBlocked = onGuestBlocked
+                            )
+
+                            SvtTab.MESSAGING -> MessagingTab(
+                                isTeacher = false,
+                                currentUserId = GuestDemoData.GUEST_USER_ID,
+                                selectedClassId = GuestDemoData.GUEST_CLASS_ID,
+                                teacherEnrollments = emptyList(),
+                                messages = GuestDemoData.messages,
+                                onSendAsStudent = { onGuestBlocked() },
+                                onSendAsTeacher = { _, _, _, _ -> onGuestBlocked() },
+                                onMarkThreadRead = {},
+                                isGuestMode = true,
+                                onGuestBlocked = onGuestBlocked
+                            )
+
+                            SvtTab.PROFILE -> ProfileAndBadgesTab(
+                                profile = GuestDemoData.profile,
+                                selectedClassId = GuestDemoData.GUEST_CLASS_ID,
+                                currentTheme = currentTheme,
+                                onThemeChanged = onThemeChanged,
+                                studentEnrollment = GuestDemoData.enrollment,
+                                studentAttempts = emptyList(),
+                                studentVideoTrackings = emptyList(),
+                                teacherClasses = emptyList(),
+                                teacherEnrollments = emptyList(),
+                                teacherRoster = emptyList(),
+                                appUpdates = emptyList(),
+                                isImportingRoster = false,
+                                onUpdateProfile = { _, _, _, _ -> onGuestBlocked() },
+                                onChangePassword = { _, _, onDone ->
+                                    onDone(false, context.getString(R.string.guest_readonly_blocked_msg))
+                                },
+                                onCreateClass = { _, _, _ -> onGuestBlocked() },
+                                onDeleteClass = { onGuestBlocked() },
+                                onApproveStudent = { onGuestBlocked() },
+                                onApproveAllPending = { onGuestBlocked() },
+                                onRejectStudent = { onGuestBlocked() },
+                                onDeleteStudent = { onGuestBlocked() },
+                                onImportRoster = { _, _ -> onGuestBlocked() },
+                                onAddManualStudent = { _, _, _ -> onGuestBlocked() },
+                                onDeleteRosterStudent = { onGuestBlocked() },
+                                onExportRosterPdf = { _, _ -> onGuestBlocked() },
+                                onPublishAppUpdate = { _, _, _, _, _ -> onGuestBlocked() },
+                                onDeleteAppUpdate = { onGuestBlocked() },
+                                onUpdateClassLabDomains = { _, _ -> onGuestBlocked() },
+                                onResetStudentDevice = { onGuestBlocked() },
+                                onShowError = { onGuestBlocked() },
+                                onSignOut = onExitGuest,
+                                isGuestMode = true,
+                                onGuestBlocked = onGuestBlocked
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -126,6 +126,7 @@ dependencies {
   implementation(libs.zxing.core)
   implementation(libs.media3.exoplayer)
   implementation(libs.media3.ui)
+  implementation(libs.androidx.work.runtime.ktx)
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)

@@ -8,10 +8,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.R
 import com.example.core.AppLanguage
 import com.example.core.AuthSessionDraft
+import com.example.core.AvatarStorageHelper
 import com.example.core.ConnectivityObserver
 import com.example.core.DeviceSessionManager
 import com.example.core.ImportedStudentRow
 import com.example.core.NotificationHelper
+import com.example.core.SvtBackgroundNotificationWorker
 import com.example.core.SvtLabLogic
 import com.example.data.ai.AiAppCheckException
 import com.example.data.ai.GeneratedQuizDraft
@@ -117,9 +119,13 @@ class SvtMainViewModel(
     val isSyncingOffline: StateFlow<Boolean> = _isSyncingOffline.asStateFlow()
 
     private val _optimisticProfile = MutableStateFlow<UserProfile?>(null)
+    private val _optimisticAvatarUrl = MutableStateFlow<String?>(null)
     private val _optimisticEnrollment = MutableStateFlow<Enrollment?>(null)
     private val _isSettingUpProfile = MutableStateFlow(false)
     val isSettingUpProfile: StateFlow<Boolean> = _isSettingUpProfile.asStateFlow()
+
+    private val _isSavingAvatar = MutableStateFlow(false)
+    val isSavingAvatar: StateFlow<Boolean> = _isSavingAvatar.asStateFlow()
 
     private val _isJoiningClass = MutableStateFlow(false)
     val isJoiningClass: StateFlow<Boolean> = _isJoiningClass.asStateFlow()
@@ -128,6 +134,35 @@ class SvtMainViewModel(
     val isAcceptingTerms: StateFlow<Boolean> = _isAcceptingTerms.asStateFlow()
 
     private val _profileRetryTrigger = MutableStateFlow(0)
+    private val _authReloadTick = MutableStateFlow(0)
+
+    val isOwnerAdminEmail: StateFlow<Boolean> = _authReloadTick.map {
+        Firebase.auth.currentUser?.email.equals(
+            SvtBackgroundNotificationWorker.OWNER_ADMIN_EMAIL,
+            ignoreCase = true
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000L),
+        initialValue = Firebase.auth.currentUser?.email.equals(
+            SvtBackgroundNotificationWorker.OWNER_ADMIN_EMAIL,
+            ignoreCase = true
+        )
+    )
+
+    val isVerifiedOwnerAdmin: StateFlow<Boolean> = _authReloadTick.map {
+        val u = Firebase.auth.currentUser
+        u != null &&
+            u.email.equals(SvtBackgroundNotificationWorker.OWNER_ADMIN_EMAIL, ignoreCase = true) &&
+            u.isEmailVerified
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000L),
+        initialValue = Firebase.auth.currentUser?.let { u ->
+            u.email.equals(SvtBackgroundNotificationWorker.OWNER_ADMIN_EMAIL, ignoreCase = true) &&
+                u.isEmailVerified
+        } == true
+    )
 
     val profileState: StateFlow<ProfileGateState> = combine(
         _profileRetryTrigger.flatMapLatest {
@@ -142,22 +177,36 @@ class SvtMainViewModel(
                     emit(Result.failure(fsErr ?: error))
                 }
         },
-        _optimisticProfile
-    ) { remoteResult, optimistic ->
+        _optimisticProfile,
+        _optimisticAvatarUrl
+    ) { remoteResult, optimistic, optimisticAvatar ->
         remoteResult.fold(
             onSuccess = { remote ->
                 val base = remote ?: optimistic
-                val resolved = if (base != null && optimistic?.acceptedTerms == true && !base.acceptedTerms) {
+                val withTerms = if (base != null && optimistic?.acceptedTerms == true && !base.acceptedTerms) {
                     base.copy(acceptedTerms = true)
                 } else {
                     base
+                }
+                val resolved = if (withTerms != null && !optimisticAvatar.isNullOrBlank()) {
+                    if (withTerms.avatarUrl == optimisticAvatar) {
+                        _optimisticAvatarUrl.value = null
+                        withTerms
+                    } else {
+                        withTerms.copy(avatarUrl = optimisticAvatar)
+                    }
+                } else {
+                    withTerms
                 }
                 if (resolved == null) ProfileGateState.NeedsSetup
                 else ProfileGateState.Ready(resolved)
             },
             onFailure = { err ->
                 if (optimistic != null) {
-                    ProfileGateState.Ready(optimistic)
+                    val withAvatar = if (!optimisticAvatar.isNullOrBlank()) {
+                        optimistic.copy(avatarUrl = optimisticAvatar)
+                    } else optimistic
+                    ProfileGateState.Ready(withAvatar)
                 } else {
                     ProfileGateState.Error(err.message ?: "Error loading profile")
                 }
@@ -172,6 +221,16 @@ class SvtMainViewModel(
     private val roleFlow = profileState.map { state ->
         (state as? ProfileGateState.Ready)?.profile?.role
     }
+
+    val allTeachersForAdmin: StateFlow<List<UserProfile>> = combine(
+        roleFlow,
+        isVerifiedOwnerAdmin
+    ) { role, isVerifiedAdmin ->
+        role == "teacher" && isVerifiedAdmin
+    }.flatMapLatest { eligible ->
+        if (eligible) repository.observeAllTeachers().catch { emit(emptyList()) }
+        else flowOf(emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     // Teacher streams
     val teacherClasses: StateFlow<List<SvtClass>> = roleFlow.flatMapLatest { role ->
@@ -512,6 +571,7 @@ class SvtMainViewModel(
         massarNumber: String = "",
         birthDate: String = "",
         email: String = "",
+        establishment: String = "",
         mustChangePassword: Boolean = false,
         pendingQrToken: String = "",
         onComplete: (Boolean) -> Unit = {}
@@ -528,6 +588,7 @@ class SvtMainViewModel(
                     massarNumber = massarNumber,
                     birthDate = birthDate,
                     email = email,
+                    establishment = establishment,
                     mustChangePassword = mustChangePassword,
                     boundDeviceId = if (role == "student") currentDeviceId else "",
                     boundDeviceModel = if (role == "student") currentDeviceModel else ""
@@ -579,6 +640,89 @@ class SvtMainViewModel(
                 throw e
             } catch (e: Exception) {
                 _actionError.value = e.localizedMessage ?: "Failed to update profile"
+            }
+        }
+    }
+
+    fun updateProfileAvatar(uiContext: Context, uri: Uri) {
+        if (_isSavingAvatar.value) return
+        viewModelScope.launch {
+            _isSavingAvatar.value = true
+            try {
+                val dataUri = AvatarStorageHelper.saveAndEncodeAvatar(
+                    context = uiContext.applicationContext,
+                    userId = currentUserId,
+                    sourceUri = uri
+                ).getOrThrow()
+                _optimisticAvatarUrl.value = dataUri
+                repository.updateProfileAvatar(dataUri)
+                _statusMessage.value = uiContext.getString(R.string.avatar_updated_success)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = uiContext.getString(
+                    R.string.avatar_update_error,
+                    e.localizedMessage ?: "Error"
+                )
+            } finally {
+                _isSavingAvatar.value = false
+            }
+        }
+    }
+
+    fun approveTeacher(uiContext: Context, teacher: UserProfile) {
+        viewModelScope.launch {
+            try {
+                repository.updateTeacherApprovalStatus(teacher.userId, "approved")
+                _statusMessage.value = uiContext.getString(R.string.admin_teacher_approved_msg, teacher.fullName)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun rejectTeacher(uiContext: Context, teacher: UserProfile) {
+        viewModelScope.launch {
+            try {
+                repository.updateTeacherApprovalStatus(teacher.userId, "rejected")
+                _statusMessage.value = uiContext.getString(R.string.admin_teacher_rejected_msg, teacher.fullName)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun sendOwnerAdminVerificationEmail(uiContext: Context) {
+        val user = Firebase.auth.currentUser ?: return
+        viewModelScope.launch {
+            try {
+                user.sendEmailVerification().await()
+                _statusMessage.value = uiContext.getString(R.string.admin_verification_email_sent)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun refreshAuthAndProfile(uiContext: Context) {
+        val user = Firebase.auth.currentUser ?: return
+        viewModelScope.launch {
+            try {
+                user.reload().await()
+                user.getIdToken(true).await()
+                _authReloadTick.value += 1
+                _profileRetryTrigger.value += 1
+                _statusMessage.value = uiContext.getString(R.string.teacher_status_refreshed)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
             }
         }
     }

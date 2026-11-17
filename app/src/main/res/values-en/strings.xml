@@ -519,4 +519,77 @@
     <string name="confirm_delete_announcement_msg">Delete announcement \"%1$s\" for the entire class?</string>
     <string name="quiz_deleted_success">Quiz deleted.</string>
     <string name="announcement_deleted_success">Announcement deleted.</string>
+
+    <!-- Teacher Approval, Background Notifications, 2nd Security Layer, Guest Mode & Avatar -->
+    <string name="avatar_updated_success">Profile photo saved.</string>
+    <string name="avatar_update_error">Could not save photo: %1$s</string>
+    <string name="admin_teacher_approved_msg">Teacher %1$s approved successfully.</string>
+    <string name="admin_teacher_rejected_msg">Request from %1$s rejected.</string>
+    <string name="admin_verification_email_sent">Verification email sent. Open the link then refresh your status.</string>
+    <string name="teacher_status_refreshed">Account status refreshed.</string>
+
+    <string name="bg_notif_more_alerts">+ %1$d more SVT alert(s)</string>
+    <string name="bg_notif_teacher_messages_count">%1$d new student messages</string>
+    <string name="bg_notif_teacher_message_title">Message from %1$s</string>
+    <string name="bg_notif_pending_enrollments">%1$d student enrollment request(s) awaiting review</string>
+    <string name="admin_teacher_approvals_title">Teacher Account Approvals</string>
+    <string name="bg_notif_pending_teachers">%1$d teacher(s) awaiting approval</string>
+
+    <string name="auth_guest_mode_btn">Guest Mode (Demo Preview)</string>
+    <string name="auth_guest_mode_sub">Explore SVT features only • Read-only (no receiving or replying)</string>
+    <string name="teacher_approval_register_notice">Teacher access requires administrator approval before creating classes.</string>
+    <string name="field_full_name_required">Full name *</string>
+    <string name="field_phone_required">Phone *</string>
+    <string name="field_establishment_required">School / Institution *</string>
+    <string name="field_establishment_hint">e.g. Ibn Sina High School</string>
+    <string name="field_establishment_label">Institution</string>
+    <string name="error_establishment_required">Please enter your school or institution name.</string>
+    <string name="admin_verify_email_title">Administrator verification required</string>
+    <string name="admin_verify_email_body">Verify your administrator email address to unlock the dashboard and approve teacher accounts.</string>
+    <string name="teacher_approval_rejected_title">Teacher registration not approved</string>
+    <string name="teacher_approval_rejected_body">Your teacher registration request was declined by the administrator.</string>
+    <string name="teacher_approval_pending_title">Teacher account awaiting approval</string>
+    <string name="teacher_approval_pending_body">Thank you %1$s (%2$s). Your request is waiting for administrator permission before you can access the teacher space.</string>
+    <string name="admin_send_verification_btn">Send verification email</string>
+    <string name="teacher_refresh_status_btn">Refresh status</string>
+
+    <string name="guest_mode_banner_title">Guest Mode • Sample Preview</string>
+    <string name="guest_mode_banner_desc">Read-only: cannot receive live updates or reply.</string>
+    <string name="guest_exit_button">Exit</string>
+    <string name="guest_readonly_blocked_msg">Guest Mode: sample preview only — you cannot receive data or reply to items.</string>
+    <string name="guest_readonly_messaging_hint">Guest Mode (read-only) — replying disabled</string>
+
+    <string name="security_pin_wrong_attempts">Incorrect PIN (%1$d attempt(s) left)</string>
+    <string name="security_pin_locked_seconds">Too many attempts. Try again in %1$d s.</string>
+    <string name="security_lock_screen_title">BioTerre Security Lock</string>
+    <string name="security_lock_screen_subtitle_user">Enter your PIN to unlock %1$s\'s session</string>
+    <string name="security_lock_screen_subtitle">Enter your security PIN</string>
+    <string name="security_pin_unlock">Unlock</string>
+    <string name="security_pin_manage_title">Manage Security PIN</string>
+    <string name="security_pin_setup_title">Enable 2nd Security Layer (PIN)</string>
+    <string name="security_pin_dialog_desc">Protect access to your account on this phone with a 4 to 6 digit PIN.</string>
+    <string name="security_pin_current_label">Current PIN</string>
+    <string name="security_pin_new_label">New PIN (4 to 6 digits)</string>
+    <string name="security_pin_confirm_label">Confirm PIN</string>
+    <string name="security_pin_disable_btn">Disable PIN</string>
+    <string name="security_pin_format_error">PIN must be 4 to 6 digits.</string>
+    <string name="security_pin_mismatch_error">The two PINs do not match.</string>
+    <string name="security_pin_card_title">2nd Security Layer (PIN Lock)</string>
+    <string name="security_pin_card_enabled">Enabled — PIN required when opening the app.</string>
+    <string name="security_pin_card_disabled">Disabled — Add a PIN to protect your account.</string>
+    <string name="security_pin_configure_btn">Set Security PIN</string>
+    <string name="security_pin_manage_btn">Change / Disable</string>
+    <string name="security_pin_saved_msg">Security PIN saved.</string>
+    <string name="security_pin_removed_msg">Security PIN disabled.</string>
+
+    <string name="bg_notif_card_title">Background Notifications</string>
+    <string name="bg_notif_enabled_desc">Enabled — Receive alerts even when the app is closed.</string>
+    <string name="bg_notif_disabled_desc">Disabled — Allow notifications to get background alerts.</string>
+    <string name="bg_notif_enable_btn">Enable Notifications</string>
+
+    <string name="admin_teacher_approvals_empty">No teacher registration requests yet.</string>
+    <string name="admin_teacher_status_pending">Pending</string>
+    <string name="admin_teacher_status_approved">Approved</string>
+    <string name="admin_teacher_status_rejected">Rejected</string>
+    <string name="admin_verify_banner_desc">Verify your administrator email then refresh to manage teacher registrations.</string>
 </resources>

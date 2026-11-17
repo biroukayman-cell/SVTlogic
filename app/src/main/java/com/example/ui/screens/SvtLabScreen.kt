@@ -213,7 +213,9 @@ fun SvtLabTabScreen(
     labSvtSearchState: LabSvtSearchState,
     onSearchLabSvtTerm: (String) -> Unit,
     onClearLabSvtSearch: () -> Unit,
-    onUpdateClassLabDomains: (classId: String, domains: List<String>) -> Unit
+    onUpdateClassLabDomains: (classId: String, domains: List<String>) -> Unit,
+    isGuestMode: Boolean = false,
+    onGuestBlocked: () -> Unit = {}
 ) {
     val effectiveDomains = remember(isTeacher, selectedTeacherClass?.visibleLabDomains, studentAllowedDomains) {
         if (isTeacher) {
@@ -344,6 +346,8 @@ fun SvtLabTabScreen(
                 when (selectedTab) {
                     SvtLabTab.GLOSSARY -> GlossaryLabSection(
                         isOnline = isOnline,
+                        isGuestMode = isGuestMode,
+                        onGuestBlocked = onGuestBlocked,
                         currentLanguage = currentLanguage,
                         allowedDomains = effectiveDomains,
                         labSvtSearchState = labSvtSearchState,
@@ -397,6 +401,8 @@ private fun SvtDomainFilterRow(
 @Composable
 private fun GlossaryLabSection(
     isOnline: Boolean,
+    isGuestMode: Boolean = false,
+    onGuestBlocked: () -> Unit = {},
     currentLanguage: AppLanguage,
     allowedDomains: Set<SvtDomain>,
     labSvtSearchState: LabSvtSearchState,
@@ -431,8 +437,8 @@ private fun GlossaryLabSection(
     }
     val isSearchableQuery = remember(query) { SvtLabLogic.isSearchableSvtQuery(query) }
 
-    LaunchedEffect(query, currentLanguage, filtered.size) {
-        if (query.isBlank() || filtered.isNotEmpty()) {
+    LaunchedEffect(query, currentLanguage, filtered.size, isGuestMode) {
+        if (isGuestMode || query.isBlank() || filtered.isNotEmpty()) {
             onClearLabSvtSearch()
         } else if (SvtLabLogic.isSearchableSvtQuery(query)) {
             delay(650L)
@@ -475,7 +481,7 @@ private fun GlossaryLabSection(
                                 IconButton(
                                     onClick = {
                                         keyboardController?.hide()
-                                        onSearchLabSvtTerm(query.trim())
+                                        if (isGuestMode) onGuestBlocked() else onSearchLabSvtTerm(query.trim())
                                     },
                                     modifier = Modifier
                                         .minimumInteractiveComponentSize()
@@ -510,7 +516,7 @@ private fun GlossaryLabSection(
                     onSearch = {
                         keyboardController?.hide()
                         if (filtered.isEmpty() && query.isNotBlank()) {
-                            onSearchLabSvtTerm(query.trim())
+                            if (isGuestMode) onGuestBlocked() else onSearchLabSvtTerm(query.trim())
                         }
                     }
                 ),

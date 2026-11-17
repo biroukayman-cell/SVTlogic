@@ -139,6 +139,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
         massarNumber: String = "",
         birthDate: String = "",
         email: String = "",
+        establishment: String = "",
         mustChangePassword: Boolean = false,
         boundDeviceId: String = "",
         boundDeviceModel: String = ""
@@ -149,6 +150,15 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val cleanMassar = massarNumber.trim()
         val cleanBirthDate = birthDate.trim()
         val cleanEmail = email.trim()
+        val cleanEstablishment = establishment.trim()
+        val currentAuthUser = auth.currentUser
+        val isVerifiedOwnerAdmin = currentAuthUser?.email.equals("biroukayman@gmail.com", ignoreCase = true) &&
+            currentAuthUser?.isEmailVerified == true
+        val teacherStatus = if (role == "teacher") {
+            if (isVerifiedOwnerAdmin) "approved" else "pending"
+        } else {
+            "approved"
+        }
         val acceptedTerms = role != "student"
         val cleanDeviceId = if (role == "student") boundDeviceId.trim() else ""
         val cleanDeviceModel = if (role == "student") boundDeviceModel.trim().take(96) else ""
@@ -160,6 +170,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
             "massarNumber" to cleanMassar,
             "birthDate" to cleanBirthDate,
             "email" to cleanEmail,
+            "establishment" to cleanEstablishment,
+            "teacherStatus" to teacherStatus,
             "mustChangePassword" to mustChangePassword,
             "acceptedTerms" to acceptedTerms,
             "xp" to 0L,
@@ -187,6 +199,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 massarNumber = cleanMassar,
                 birthDate = cleanBirthDate,
                 email = cleanEmail,
+                establishment = cleanEstablishment,
+                teacherStatus = teacherStatus,
                 mustChangePassword = mustChangePassword,
                 acceptedTerms = acceptedTerms,
                 avatarUrl = avatarUrl,
@@ -278,6 +292,61 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
         try {
             docRef.update(updates).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun updateProfileAvatar(avatarUrl: String) {
+        val uid = requireUserId()
+        val docRef = db.collection("users").document(uid)
+        try {
+            docRef.update(
+                mapOf(
+                    "avatarUrl" to avatarUrl,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            throw e
+        }
+    }
+
+    fun observeAllTeachers(): Flow<List<UserProfile>> = flow {
+        val uid = requireUserId()
+        db.collection("users")
+            .whereEqualTo("role", "teacher")
+            .snapshots()
+            .map { snapshot ->
+                snapshot.toObjects(UserProfile::class.java, ServerTimestampBehavior.ESTIMATE)
+                    .sortedWith(
+                        compareBy<UserProfile>(
+                            { when (it.teacherStatus) { "pending" -> 0; "rejected" -> 1; else -> 2 } },
+                            { -(it.createdAt?.seconds ?: 0L) }
+                        )
+                    )
+            }
+            .logFirestoreErrors(OperationType.LIST, "users", uid)
+            .collect { emit(it) }
+    }
+
+    suspend fun updateTeacherApprovalStatus(teacherUserId: String, status: String) {
+        requireUserId()
+        require(status in setOf("pending", "approved", "rejected")) { "Invalid teacher status" }
+        val docRef = db.collection("users").document(teacherUserId)
+        try {
+            docRef.update(
+                mapOf(
+                    "teacherStatus" to status,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

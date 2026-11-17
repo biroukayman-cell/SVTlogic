@@ -68,7 +68,9 @@ fun AnnouncementsTab(
     selectedClassId: String?,
     announcements: List<Announcement>,
     onPublishAnnouncement: (classId: String, title: String, content: String) -> Unit,
-    onDeleteAnnouncement: (Announcement) -> Unit = {}
+    onDeleteAnnouncement: (Announcement) -> Unit = {},
+    isGuestMode: Boolean = false,
+    onGuestBlocked: () -> Unit = {}
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
     var announcementToDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -253,19 +255,25 @@ fun MessagingTab(
     messages: List<PrivateMessage>,
     onSendAsStudent: (String) -> Unit,
     onSendAsTeacher: (classId: String, studentId: String, studentName: String, content: String) -> Unit,
-    onMarkThreadRead: (List<PrivateMessage>) -> Unit
+    onMarkThreadRead: (List<PrivateMessage>) -> Unit,
+    isGuestMode: Boolean = false,
+    onGuestBlocked: () -> Unit = {}
 ) {
     if (!isTeacher) {
         // Student strictly isolated private channel with their Teacher ONLY
-        LaunchedEffect(messages) {
-            val unreadFromTeacher = messages.filter { it.senderRole == "teacher" && !it.isRead }
-            if (unreadFromTeacher.isNotEmpty()) onMarkThreadRead(unreadFromTeacher)
+        LaunchedEffect(messages, isGuestMode) {
+            if (!isGuestMode) {
+                val unreadFromTeacher = messages.filter { it.senderRole == "teacher" && !it.isRead }
+                if (unreadFromTeacher.isNotEmpty()) onMarkThreadRead(unreadFromTeacher)
+            }
         }
         PrivateChatThread(
             headerTitle = stringResource(id = R.string.messaging_student_header),
             notice = stringResource(id = R.string.messaging_student_notice),
             messages = messages,
             currentUserId = currentUserId,
+            isGuestMode = isGuestMode,
+            onGuestBlocked = onGuestBlocked,
             onSend = onSendAsStudent
         )
     } else {
@@ -369,6 +377,8 @@ private fun PrivateChatThread(
     notice: String,
     messages: List<PrivateMessage>,
     currentUserId: String,
+    isGuestMode: Boolean = false,
+    onGuestBlocked: () -> Unit = {},
     onBack: (() -> Unit)? = null,
     onSend: (String) -> Unit
 ) {
@@ -458,8 +468,16 @@ private fun PrivateChatThread(
             ) {
                 OutlinedTextField(
                     value = draft,
-                    onValueChange = { draft = it },
-                    placeholder = { Text(stringResource(id = R.string.messaging_input_hint)) },
+                    onValueChange = { if (!isGuestMode) draft = it },
+                    enabled = !isGuestMode,
+                    placeholder = {
+                        Text(
+                            stringResource(
+                                id = if (isGuestMode) R.string.guest_readonly_messaging_hint
+                                else R.string.messaging_input_hint
+                            )
+                        )
+                    },
                     modifier = Modifier
                         .weight(1f)
                         .testTag("message_input"),
@@ -467,19 +485,23 @@ private fun PrivateChatThread(
                 )
                 IconButton(
                     onClick = {
-                        val trimmed = draft.trim()
-                        if (trimmed.isNotEmpty()) {
-                            onSend(trimmed)
-                            draft = ""
+                        if (isGuestMode) {
+                            onGuestBlocked()
+                        } else {
+                            val trimmed = draft.trim()
+                            if (trimmed.isNotEmpty()) {
+                                onSend(trimmed)
+                                draft = ""
+                            }
                         }
                     },
-                    enabled = draft.isNotBlank(),
+                    enabled = isGuestMode || draft.isNotBlank(),
                     modifier = Modifier.testTag("send_message_button")
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = stringResource(id = R.string.messaging_send),
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = if (isGuestMode) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
                     )
                 }
             }

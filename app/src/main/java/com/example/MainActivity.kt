@@ -3,10 +3,12 @@ package com.example
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +29,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +49,8 @@ import com.example.core.DeviceSessionManager
 import com.example.core.LanguagePreferences
 import com.example.core.NetworkConnectivityObserver
 import com.example.core.NotificationHelper
+import com.example.core.NotificationSyncScheduler
+import com.example.core.SecurityLockManager
 import com.example.core.ThemeConfig
 import com.example.core.ThemePreferences
 import com.example.core.configureAppCheck
@@ -53,12 +58,15 @@ import com.example.core.rememberLocalizedContext
 import com.example.data.ai.SvtAiRepository
 import com.example.data.offline.OfflineStorageManager
 import com.example.data.repository.SvtRepository
+import com.example.ui.components.SecurityPinLockScreen
 import com.example.ui.screens.AccountSetupScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.DeviceLockedBlockedScreen
+import com.example.ui.screens.GuestMainDashboardScreen
 import com.example.ui.screens.MainDashboardScreen
 import com.example.ui.screens.PendingApprovalScreen
 import com.example.ui.screens.QrJoinClassScreen
+import com.example.ui.screens.TeacherPendingApprovalScreen
 import com.example.ui.screens.TermsAcceptanceScreen
 import com.example.ui.screens.signOutUser
 import com.example.ui.theme.BioTerreTheme
@@ -142,6 +150,13 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStop() {
+        super.onStop()
+        if (FirebaseApp.getApps(this).isNotEmpty() && Firebase.auth.currentUser != null) {
+            NotificationSyncScheduler.scheduleBackgroundCheckOnLeave(this)
+        }
+    }
 }
 
 @Composable
@@ -191,14 +206,36 @@ fun AppNavigation(
 ) {
     val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
     val user = currentUser
+    var isGuestMode by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(user?.uid) {
+        if (user == null) {
+            NotificationSyncScheduler.cancelAll(activityContext)
+        } else {
+            isGuestMode = false
+            NotificationSyncScheduler.schedulePeriodicSync(activityContext)
+        }
+    }
 
     if (user == null) {
-        AuthScreen(
-            activityContext = activityContext,
-            currentLanguage = currentLanguage,
-            onLanguageSelected = onLanguageSelected,
-            onAuthSuccess = {}
-        )
+        if (isGuestMode) {
+            BackHandler { isGuestMode = false }
+            GuestMainDashboardScreen(
+                currentLanguage = currentLanguage,
+                onLanguageSelected = onLanguageSelected,
+                currentTheme = currentTheme,
+                onThemeChanged = onThemeChanged,
+                onExitGuest = { isGuestMode = false }
+            )
+        } else {
+            AuthScreen(
+                activityContext = activityContext,
+                currentLanguage = currentLanguage,
+                onLanguageSelected = onLanguageSelected,
+                onAuthSuccess = {},
+                onEnterGuestMode = { isGuestMode = true }
+            )
+        }
     } else {
         key(user.uid) {
             AuthenticatedSvtFlow(
@@ -257,15 +294,34 @@ private fun AuthenticatedSvtFlow(
     val isSettingUpProfile by viewModel.isSettingUpProfile.collectAsStateWithLifecycle()
     val isJoiningClass by viewModel.isJoiningClass.collectAsStateWithLifecycle()
     val isAcceptingTerms by viewModel.isAcceptingTerms.collectAsStateWithLifecycle()
+    val isOwnerAdminEmail by viewModel.isOwnerAdminEmail.collectAsStateWithLifecycle()
+    val isVerifiedOwnerAdmin by viewModel.isVerifiedOwnerAdmin.collectAsStateWithLifecycle()
     val actionError by viewModel.actionError.collectAsStateWithLifecycle()
-    val invalidCodeMessage = LocalContext.current.getString(R.string.qr_invalid_code)
+    val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
+    val localizedUiContext = LocalContext.current
+    val invalidCodeMessage = localizedUiContext.getString(R.string.qr_invalid_code)
     var authDraft by remember(currentUser.uid) { mutableStateOf(AuthSessionDraft.load(activityContext)) }
     var onboardingLocalError by remember(currentUser.uid) { mutableStateOf<String?>(null) }
     var autoSetupAttempted by remember(currentUser.uid) { mutableStateOf(false) }
     var autoJoinAttempted by remember(currentUser.uid) { mutableStateOf(false) }
+    var isSecurityUnlocked by rememberSaveable(currentUser.uid) {
+        mutableStateOf(!SecurityLockManager.isPinEnabled(activityContext, currentUser.uid))
+    }
 
     val onSignOut: () -> Unit = {
         signOutUser(activityContext, scope)
+    }
+
+    if (SecurityLockManager.isPinEnabled(activityContext, currentUser.uid) && !isSecurityUnlocked) {
+        val unlockedProfileName = (profileState as? ProfileGateState.Ready)?.profile?.fullName
+            ?: authDraft.fullName.ifBlank { currentUser.displayName.orEmpty() }
+        SecurityPinLockScreen(
+            userId = currentUser.uid,
+            userName = unlockedProfileName,
+            onUnlocked = { isSecurityUnlocked = true },
+            onSignOut = onSignOut
+        )
+        return
     }
 
     val handleAccountSetupSubmit: (
@@ -275,8 +331,9 @@ private fun AuthenticatedSvtFlow(
         String,
         String,
         String,
+        String,
         String?
-    ) -> Unit = { fullName, phone, role, massar, birthDate, email, newPassword ->
+    ) -> Unit = { fullName, phone, role, massar, birthDate, email, establishment, newPassword ->
         viewModel.clearError()
         onboardingLocalError = null
         scope.launch {
@@ -297,6 +354,7 @@ private fun AuthenticatedSvtFlow(
                 massarNumber = massar,
                 birthDate = birthDate,
                 email = email,
+                establishment = establishment,
                 mustChangePassword = mustChange,
                 pendingQrToken = authDraft.pendingClassQrToken,
                 onComplete = { ok ->
@@ -321,9 +379,14 @@ private fun AuthenticatedSvtFlow(
                 authDraft.pendingClassQrToken.isNotBlank() &&
                 authDraft.fullName.trim().length >= 2 &&
                 !autoSetupAttempted
+            val canAutoSetupTeacher = authDraft.role == "teacher" &&
+                authDraft.fullName.trim().length >= 2 &&
+                authDraft.phoneNumber.trim().length >= 6 &&
+                authDraft.establishment.trim().length >= 2 &&
+                !autoSetupAttempted
 
-            if (canAutoEnrollByQr || isSettingUpProfile) {
-                LaunchedEffect(currentUser.uid, canAutoEnrollByQr) {
+            if (canAutoEnrollByQr || canAutoSetupTeacher || isSettingUpProfile) {
+                LaunchedEffect(currentUser.uid, canAutoEnrollByQr, canAutoSetupTeacher) {
                     if (canAutoEnrollByQr) {
                         autoSetupAttempted = true
                         viewModel.setupProfile(
@@ -333,8 +396,28 @@ private fun AuthenticatedSvtFlow(
                             massarNumber = authDraft.massarNumber,
                             birthDate = "",
                             email = "",
+                            establishment = "",
                             mustChangePassword = false,
                             pendingQrToken = authDraft.pendingClassQrToken,
+                            onComplete = { ok ->
+                                if (ok) {
+                                    AuthSessionDraft.clear(activityContext)
+                                    authDraft = AuthSessionDraft.load(activityContext)
+                                }
+                            }
+                        )
+                    } else if (canAutoSetupTeacher) {
+                        autoSetupAttempted = true
+                        viewModel.setupProfile(
+                            fullName = authDraft.fullName.trim(),
+                            phone = authDraft.phoneNumber.trim(),
+                            role = "teacher",
+                            massarNumber = "",
+                            birthDate = "",
+                            email = authDraft.email.ifBlank { currentUser.email.orEmpty() },
+                            establishment = authDraft.establishment.trim(),
+                            mustChangePassword = false,
+                            pendingQrToken = "",
                             onComplete = { ok ->
                                 if (ok) {
                                     AuthSessionDraft.clear(activityContext)
@@ -355,11 +438,13 @@ private fun AuthenticatedSvtFlow(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         CircularProgressIndicator()
-                        Text(
-                            text = stringResource(id = R.string.qr_joining_progress),
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center
-                        )
+                        if (canAutoEnrollByQr) {
+                            Text(
+                                text = stringResource(id = R.string.qr_joining_progress),
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             } else {
@@ -370,6 +455,8 @@ private fun AuthenticatedSvtFlow(
                     defaultEmail = authDraft.email.ifBlank {
                         currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
                     },
+                    defaultPhone = authDraft.phoneNumber,
+                    defaultEstablishment = authDraft.establishment,
                     studentRoster = studentRoster,
                     currentLanguage = currentLanguage,
                     onLanguageSelected = onLanguageSelected,
@@ -389,6 +476,8 @@ private fun AuthenticatedSvtFlow(
                 defaultEmail = authDraft.email.ifBlank {
                     currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
                 },
+                defaultPhone = authDraft.phoneNumber,
+                defaultEstablishment = authDraft.establishment,
                 studentRoster = studentRoster,
                 currentLanguage = currentLanguage,
                 onLanguageSelected = onLanguageSelected,
@@ -515,16 +604,47 @@ private fun AuthenticatedSvtFlow(
                 }
                 }
             } else {
-                MainDashboardScreen(
-                    profile = profile,
-                    currentUserId = currentUser.uid,
-                    viewModel = viewModel,
-                    currentLanguage = currentLanguage,
-                    onLanguageSelected = onLanguageSelected,
-                    currentTheme = currentTheme,
-                    onThemeChanged = onThemeChanged,
-                    onSignOut = onSignOut
-                )
+                val canAccessTeacherDashboard =
+                    profile.teacherStatus == "approved" || isVerifiedOwnerAdmin
+                if (!canAccessTeacherDashboard) {
+                    LaunchedEffect(statusMessage) {
+                        if (!statusMessage.isNullOrBlank()) {
+                            Toast.makeText(localizedUiContext, statusMessage, Toast.LENGTH_LONG).show()
+                            viewModel.clearStatusMessage()
+                        }
+                    }
+                    LaunchedEffect(actionError) {
+                        if (!actionError.isNullOrBlank()) {
+                            Toast.makeText(localizedUiContext, actionError, Toast.LENGTH_LONG).show()
+                            viewModel.clearError()
+                        }
+                    }
+                    TeacherPendingApprovalScreen(
+                        profile = profile,
+                        isOwnerAdminEmail = isOwnerAdminEmail,
+                        isEmailVerified = currentUser.isEmailVerified,
+                        currentLanguage = currentLanguage,
+                        onLanguageSelected = onLanguageSelected,
+                        onSendAdminVerification = {
+                            viewModel.sendOwnerAdminVerificationEmail(localizedUiContext)
+                        },
+                        onRefreshStatus = {
+                            viewModel.refreshAuthAndProfile(localizedUiContext)
+                        },
+                        onSignOut = onSignOut
+                    )
+                } else {
+                    MainDashboardScreen(
+                        profile = profile,
+                        currentUserId = currentUser.uid,
+                        viewModel = viewModel,
+                        currentLanguage = currentLanguage,
+                        onLanguageSelected = onLanguageSelected,
+                        currentTheme = currentTheme,
+                        onThemeChanged = onThemeChanged,
+                        onSignOut = onSignOut
+                    )
+                }
             }
         }
     }

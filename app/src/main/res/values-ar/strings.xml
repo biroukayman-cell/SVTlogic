@@ -519,4 +519,77 @@
     <string name="confirm_delete_announcement_msg">هل تريد حذف الإعلان «%1$s» من القسم بأكمله؟</string>
     <string name="quiz_deleted_success">تم حذف التمرين.</string>
     <string name="announcement_deleted_success">تم حذف الإعلان.</string>
+
+    <!-- التحقق من الأستاذ، إشعارات الخلفية، الأمان الإضافي، وضع الضيف والصورة الشخصية -->
+    <string name="avatar_updated_success">تم حفظ الصورة الشخصية.</string>
+    <string name="avatar_update_error">تعذر حفظ الصورة: %1$s</string>
+    <string name="admin_teacher_approved_msg">تمت الموافقة على الأستاذ %1$s بنجاح.</string>
+    <string name="admin_teacher_rejected_msg">تم رفض طلب %1$s.</string>
+    <string name="admin_verification_email_sent">تم إرسال بريد التحقق. افتح الرابط ثم حدّث الحالة.</string>
+    <string name="teacher_status_refreshed">تم تحديث حالة الحساب.</string>
+
+    <string name="bg_notif_more_alerts">+ %1$d تنبيه(ات) أخرى في SVT</string>
+    <string name="bg_notif_teacher_messages_count">%1$d رسائل جديدة من التلاميذ</string>
+    <string name="bg_notif_teacher_message_title">رسالة من %1$s</string>
+    <string name="bg_notif_pending_enrollments">%1$d طلب(ات) تسجيل للتلاميذ في انتظار الموافقة</string>
+    <string name="admin_teacher_approvals_title">الموافقة على حسابات الأساتذة</string>
+    <string name="bg_notif_pending_teachers">%1$d أستاذ(ة) في انتظار الموافقة</string>
+
+    <string name="auth_guest_mode_btn">وضع الضيف (معاينة تجريبية)</string>
+    <string name="auth_guest_mode_sub">استكشاف واجهة التطبيق فقط • قراءة فقط دون استقبال أو رد</string>
+    <string name="teacher_approval_register_notice">يتطلب حساب الأستاذ موافقة المسؤول قبل إنشاء الأقسام.</string>
+    <string name="field_full_name_required">الاسم الكامل *</string>
+    <string name="field_phone_required">رقم الهاتف *</string>
+    <string name="field_establishment_required">المؤسسة التعليمية *</string>
+    <string name="field_establishment_hint">مثال: ثانوية ابن سيناء التأهيلية</string>
+    <string name="field_establishment_label">المؤسسة</string>
+    <string name="error_establishment_required">يرجى إدخال اسم المؤسسة التعليمية.</string>
+    <string name="admin_verify_email_title">مطلوب تأكيد بريد المسؤول</string>
+    <string name="admin_verify_email_body">يرجى تأكيد البريد الإلكتروني للمسؤول للوصول إلى لوحة التحكم والموافقة على طلبات الأساتذة.</string>
+    <string name="teacher_approval_rejected_title">لم يتم قبول طلب تسجيل الأستاذ</string>
+    <string name="teacher_approval_rejected_body">تم رفض طلب تسجيلك كأستاذ من طرف المسؤول.</string>
+    <string name="teacher_approval_pending_title">حساب الأستاذ في انتظار الموافقة</string>
+    <string name="teacher_approval_pending_body">شكراً %1$s (%2$s). طلبك في انتظار موافقة المسؤول لتفعيل مساحة الأستاذ.</string>
+    <string name="admin_send_verification_btn">إرسال بريد التحقق</string>
+    <string name="teacher_refresh_status_btn">تحديث الحالة</string>
+
+    <string name="guest_mode_banner_title">وضع الضيف • مثال استخدام</string>
+    <string name="guest_mode_banner_desc">للقراءة فقط: لا يمكن الاستقبال ولا الرد على أي عنصر.</string>
+    <string name="guest_exit_button">خروج</string>
+    <string name="guest_readonly_blocked_msg">وضع الضيف: هذا مجرد مثال للاستخدام — لا يمكنك الاستقبال أو الرد على أي عنصر.</string>
+    <string name="guest_readonly_messaging_hint">وضع الضيف (للقراءة فقط) — الرد معطّل</string>
+
+    <string name="security_pin_wrong_attempts">رمز PIN غير صحيح (المتبقي %1$d محاولة)</string>
+    <string name="security_pin_locked_seconds">محاولات كثيرة. أعد المحاولة بعد %1$d ث.</string>
+    <string name="security_lock_screen_title">قفل الأمان الإضافي BioTerre</string>
+    <string name="security_lock_screen_subtitle_user">أدخل رمز PIN لفتح جلسة %1$s</string>
+    <string name="security_lock_screen_subtitle">أدخل رمز الحماية PIN</string>
+    <string name="security_pin_unlock">فتح القفل</string>
+    <string name="security_pin_manage_title">إدارة رمز الحماية PIN</string>
+    <string name="security_pin_setup_title">تفعيل طبقة الأمان الثانية (PIN)</string>
+    <string name="security_pin_dialog_desc">احمِ الوصول إلى حسابك على هذا الهاتف برمز PIN مكوّن من 4 إلى 6 أرقام.</string>
+    <string name="security_pin_current_label">رمز PIN الحالي</string>
+    <string name="security_pin_new_label">رمز PIN جديد (4 إلى 6 أرقام)</string>
+    <string name="security_pin_confirm_label">تأكيد رمز PIN</string>
+    <string name="security_pin_disable_btn">تعطيل رمز PIN</string>
+    <string name="security_pin_format_error">يجب أن يتكون رمز PIN من 4 إلى 6 أرقام.</string>
+    <string name="security_pin_mismatch_error">رمزا PIN غير متطابقين.</string>
+    <string name="security_pin_card_title">طبقة الأمان الثانية (رمز PIN)</string>
+    <string name="security_pin_card_enabled">مفعّلة — يُطلب رمز PIN عند فتح التطبيق.</string>
+    <string name="security_pin_card_disabled">معطّلة — أضف رمز PIN لتعزيز حماية حسابك.</string>
+    <string name="security_pin_configure_btn">إعداد رمز PIN</string>
+    <string name="security_pin_manage_btn">تعديل / تعطيل</string>
+    <string name="security_pin_saved_msg">تم تفعيل رمز الحماية PIN.</string>
+    <string name="security_pin_removed_msg">تم تعطيل رمز الحماية PIN.</string>
+
+    <string name="bg_notif_card_title">الإشعارات في الخلفية</string>
+    <string name="bg_notif_enabled_desc">مفعّلة — ستصلك التنبيهات حتى عند عدم استخدام التطبيق.</string>
+    <string name="bg_notif_disabled_desc">معطّلة — اسمح بالإشعارات لاستلام التنبيهات خارج التطبيق.</string>
+    <string name="bg_notif_enable_btn">تفعيل الإشعارات</string>
+
+    <string name="admin_teacher_approvals_empty">لا توجد طلبات تسجيل أساتذة حالياً.</string>
+    <string name="admin_teacher_status_pending">قيد الانتظار</string>
+    <string name="admin_teacher_status_approved">مقبول</string>
+    <string name="admin_teacher_status_rejected">مرفوض</string>
+    <string name="admin_verify_banner_desc">قم بتأكيد بريد المسؤول ثم حدّث الصفحة لإدارة موافقات الأساتذة.</string>
 </resources>

@@ -519,4 +519,77 @@
     <string name="confirm_delete_announcement_msg">Supprimer l\'annonce « %1$s » pour toute la classe ?</string>
     <string name="quiz_deleted_success">Exercice supprimé.</string>
     <string name="announcement_deleted_success">Annonce supprimée.</string>
+
+    <!-- Validation professeur, Notifications arrière-plan, 2e couche sécurité, Mode Invité & Photo profil -->
+    <string name="avatar_updated_success">Photo de profil enregistrée.</string>
+    <string name="avatar_update_error">Impossible d\'enregistrer la photo : %1$s</string>
+    <string name="admin_teacher_approved_msg">Professeur %1$s approuvé avec succès.</string>
+    <string name="admin_teacher_rejected_msg">Demande de %1$s refusée.</string>
+    <string name="admin_verification_email_sent">E-mail de vérification envoyé. Cliquez sur le lien puis actualisez votre statut.</string>
+    <string name="teacher_status_refreshed">Statut du compte actualisé.</string>
+
+    <string name="bg_notif_more_alerts">+ %1$d autre(s) alerte(s) SVT</string>
+    <string name="bg_notif_teacher_messages_count">%1$d nouveaux messages d\'élèves</string>
+    <string name="bg_notif_teacher_message_title">Message de %1$s</string>
+    <string name="bg_notif_pending_enrollments">%1$d demande(s) d\'élèves en attente de validation</string>
+    <string name="admin_teacher_approvals_title">Validation des comptes professeurs</string>
+    <string name="bg_notif_pending_teachers">%1$d professeur(s) en attente d\'approbation</string>
+
+    <string name="auth_guest_mode_btn">Mode Invité (Aperçu Démo)</string>
+    <string name="auth_guest_mode_sub">Découvrir l\'interface SVT uniquement • Lecture seule (ni réception ni réponse)</string>
+    <string name="teacher_approval_register_notice">L\'accès professeur nécessite la validation de l\'administrateur avant la création de classes.</string>
+    <string name="field_full_name_required">Nom complet *</string>
+    <string name="field_phone_required">Téléphone *</string>
+    <string name="field_establishment_required">Établissement scolaire *</string>
+    <string name="field_establishment_hint">Ex : Lycée Qualifiant Ibn Sina</string>
+    <string name="field_establishment_label">Établissement</string>
+    <string name="error_establishment_required">Veuillez saisir le nom de votre établissement.</string>
+    <string name="admin_verify_email_title">Vérification administrateur requise</string>
+    <string name="admin_verify_email_body">Vérifiez votre adresse e-mail administrateur pour accéder au tableau de bord et valider les comptes professeurs.</string>
+    <string name="teacher_approval_rejected_title">Inscription professeur non retenue</string>
+    <string name="teacher_approval_rejected_body">Votre demande d\'inscription professeur a été refusée par l\'administrateur.</string>
+    <string name="teacher_approval_pending_title">Compte professeur en attente de validation</string>
+    <string name="teacher_approval_pending_body">Merci %1$s (%2$s). Votre demande est en attente de l\'autorisation de l\'administrateur pour accéder à votre espace professeur.</string>
+    <string name="admin_send_verification_btn">Envoyer l\'e-mail de vérification</string>
+    <string name="teacher_refresh_status_btn">Actualiser mon statut</string>
+
+    <string name="guest_mode_banner_title">Mode Invité • Exemple d\'utilisation</string>
+    <string name="guest_mode_banner_desc">Lecture seule : aucune réception ni réponse possible.</string>
+    <string name="guest_exit_button">Quitter</string>
+    <string name="guest_readonly_blocked_msg">Mode Invité : vous pouvez uniquement consulter l\'exemple d\'utilisation, sans recevoir ni répondre.</string>
+    <string name="guest_readonly_messaging_hint">Mode Invité (lecture seule) — réponse désactivée</string>
+
+    <string name="security_pin_wrong_attempts">Code PIN incorrect (%1$d essai(s) restant(s))</string>
+    <string name="security_pin_locked_seconds">Trop d\'essais. Réessayez dans %1$d s.</string>
+    <string name="security_lock_screen_title">Sécurité renforcée BioTerre</string>
+    <string name="security_lock_screen_subtitle_user">Saisissez votre code PIN pour déverrouiller la session de %1$s</string>
+    <string name="security_lock_screen_subtitle">Saisissez votre code PIN de sécurité</string>
+    <string name="security_pin_unlock">Déverrouiller</string>
+    <string name="security_pin_manage_title">Gérer le code PIN de sécurité</string>
+    <string name="security_pin_setup_title">Activer la 2e couche (Code PIN)</string>
+    <string name="security_pin_dialog_desc">Protégez l\'accès à votre compte sur ce téléphone avec un code PIN à 4 à 6 chiffres.</string>
+    <string name="security_pin_current_label">Code PIN actuel</string>
+    <string name="security_pin_new_label">Nouveau code PIN (4 à 6 chiffres)</string>
+    <string name="security_pin_confirm_label">Confirmer le code PIN</string>
+    <string name="security_pin_disable_btn">Désactiver le code PIN</string>
+    <string name="security_pin_format_error">Le code PIN doit contenir entre 4 et 6 chiffres.</string>
+    <string name="security_pin_mismatch_error">Les deux codes PIN ne correspondent pas.</string>
+    <string name="security_pin_card_title">2e couche de sécurité (Code PIN)</string>
+    <string name="security_pin_card_enabled">Activée — Code PIN requis au démarrage de l\'application.</string>
+    <string name="security_pin_card_disabled">Désactivée — Ajoutez un code PIN pour renforcer la sécurité du compte.</string>
+    <string name="security_pin_configure_btn">Configurer le code PIN</string>
+    <string name="security_pin_manage_btn">Modifier / Désactiver</string>
+    <string name="security_pin_saved_msg">Code PIN de sécurité activé.</string>
+    <string name="security_pin_removed_msg">Code PIN de sécurité désactivé.</string>
+
+    <string name="bg_notif_card_title">Notifications hors application</string>
+    <string name="bg_notif_enabled_desc">Activées — Alertes reçues même lorsque l\'application est fermée.</string>
+    <string name="bg_notif_disabled_desc">Désactivées — Autorisez les notifications pour être alerté en arrière-plan.</string>
+    <string name="bg_notif_enable_btn">Activer les notifications</string>
+
+    <string name="admin_teacher_approvals_empty">Aucune demande d\'inscription professeur pour le moment.</string>
+    <string name="admin_teacher_status_pending">En attente</string>
+    <string name="admin_teacher_status_approved">Approuvé</string>
+    <string name="admin_teacher_status_rejected">Refusé</string>
+    <string name="admin_verify_banner_desc">Vérifiez votre e-mail administrateur puis actualisez pour gérer les inscriptions des professeurs.</string>
 </resources>

@@ -1,12 +1,16 @@
 package com.example.ui.screens
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -107,21 +111,29 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import com.example.BuildConfig
-import com.example.R
 import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.MarkEmailRead
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.CircularProgressIndicator
+import com.example.BuildConfig
+import com.example.R
 import com.example.core.AppThemePalette
 import com.example.core.ExcelParseErrorReason
 import com.example.core.ExcelParseResult
 import com.example.core.ExcelRosterParser
 import com.example.core.ImportedStudentRow
 import com.example.core.QrCodeUtils
+import com.example.core.SecurityLockManager
 import com.example.core.ThemeConfig
 import com.example.core.ThemeMode
+import com.example.ui.components.ProfileAvatarImage
+import com.example.ui.components.SetupSecurityPinDialog
 import com.example.data.badges.BadgeCategory
 import com.example.data.badges.BadgeEngine
 import com.example.data.badges.BadgeProgressItem
@@ -155,6 +167,7 @@ fun ProfileAndBadgesTab(
     appUpdates: List<AppUpdateRelease>,
     isImportingRoster: Boolean,
     onUpdateProfile: (fullName: String, phone: String, avatarUrl: String?, birthDate: String?) -> Unit,
+    onUpdateAvatarUri: (Uri) -> Unit = {},
     onChangePassword: (currentPassword: String?, newPassword: String, onResult: (Boolean, String?) -> Unit) -> Unit,
     onCreateClass: (name: String, level: String, year: String) -> Unit,
     onDeleteClass: (SvtClass) -> Unit,
@@ -171,7 +184,17 @@ fun ProfileAndBadgesTab(
     onUpdateClassLabDomains: (classId: String, domains: List<String>) -> Unit,
     onResetStudentDevice: (studentId: String) -> Unit,
     onShowError: (String) -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    isGuestMode: Boolean = false,
+    isSavingAvatar: Boolean = false,
+    isOwnerAdminEmail: Boolean = false,
+    isAdminVerified: Boolean = false,
+    allTeachersForAdmin: List<UserProfile> = emptyList(),
+    onApproveTeacher: (UserProfile) -> Unit = {},
+    onRejectTeacher: (UserProfile) -> Unit = {},
+    onSendAdminVerification: () -> Unit = {},
+    onRefreshAdminStatus: () -> Unit = {},
+    onGuestBlocked: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var showEditDialog by remember { mutableStateOf(false) }
@@ -192,6 +215,25 @@ fun ProfileAndBadgesTab(
     var manualStudentTargetClass by remember { mutableStateOf<SvtClass?>(null) }
     var expandedRosterClassIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
+    var showPinSetupDialog by remember { mutableStateOf(false) }
+    var isPinEnabled by remember(profile.userId, isGuestMode) {
+        mutableStateOf(!isGuestMode && SecurityLockManager.isPinEnabled(context, profile.userId))
+    }
+    var hasNotifPermission by remember(isGuestMode) {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasNotifPermission = granted
+    }
+
     val badgeItems = remember(profile, studentAttempts, studentVideoTrackings) {
         BadgeEngine.computeProgressItems(profile, studentAttempts, studentVideoTrackings)
     }
@@ -205,7 +247,9 @@ fun ProfileAndBadgesTab(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         uri?.let {
-            onUpdateProfile(profile.fullName, profile.phoneNumber, it.toString(), profile.birthDate)
+            if (!isGuestMode) {
+                onUpdateAvatarUri(it)
+            }
         }
     }
 
@@ -256,27 +300,36 @@ fun ProfileAndBadgesTab(
                                 .size(68.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer)
-                                .clickable {
-                                    photoPickerLauncher.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                    )
+                                .clickable(enabled = !isSavingAvatar) {
+                                    if (isGuestMode) {
+                                        onGuestBlocked()
+                                    } else {
+                                        photoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            if (!profile.avatarUrl.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = profile.avatarUrl,
-                                    contentDescription = profile.fullName,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Filled.Person,
-                                    contentDescription = profile.fullName,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(34.dp)
-                                )
+                            ProfileAvatarImage(
+                                userId = profile.userId,
+                                avatarUrl = profile.avatarUrl,
+                                fullName = profile.fullName,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            if (isSavingAvatar) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = 0.35f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                }
                             }
                         }
 
@@ -322,6 +375,13 @@ fun ProfileAndBadgesTab(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            if (profile.establishment.isNotBlank()) {
+                                Text(
+                                    text = "${stringResource(id = R.string.field_establishment_label)} : ${profile.establishment}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             if (studentEnrollment != null) {
                                 Text(
                                     text = "${stringResource(id = R.string.profile_class_label)} : ${studentEnrollment.className}",
@@ -333,7 +393,9 @@ fun ProfileAndBadgesTab(
                         }
 
                         IconButton(
-                            onClick = { showEditDialog = true },
+                            onClick = {
+                                if (isGuestMode) onGuestBlocked() else showEditDialog = true
+                            },
                             modifier = Modifier.testTag("edit_profile_button")
                         ) {
                             Icon(
@@ -377,16 +439,23 @@ fun ProfileAndBadgesTab(
                     ) {
                         OutlinedButton(
                             onClick = {
-                                photoPickerLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
+                                if (isGuestMode) {
+                                    onGuestBlocked()
+                                } else if (!isSavingAvatar) {
+                                    photoPickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                }
                             },
+                            enabled = !isSavingAvatar,
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(stringResource(id = R.string.profile_change_photo))
                         }
                         OutlinedButton(
-                            onClick = { showChangePasswordDialog = true },
+                            onClick = {
+                                if (isGuestMode) onGuestBlocked() else showChangePasswordDialog = true
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("change_password_button")
@@ -413,7 +482,11 @@ fun ProfileAndBadgesTab(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text(stringResource(id = R.string.auth_sign_out))
+                        Text(
+                            stringResource(
+                                id = if (isGuestMode) R.string.guest_exit_button else R.string.auth_sign_out
+                            )
+                        )
                     }
                 }
             }
@@ -425,6 +498,41 @@ fun ProfileAndBadgesTab(
                 currentTheme = currentTheme,
                 onThemeChanged = onThemeChanged
             )
+        }
+
+        // 1a-bis. 2nd Security Layer (PIN Lock) & Background Notifications Cards
+        if (!isGuestMode) {
+            item {
+                SecurityPinSettingsCard(
+                    isPinEnabled = isPinEnabled,
+                    onConfigureClick = { showPinSetupDialog = true }
+                )
+            }
+
+            item {
+                BackgroundNotificationsSettingsCard(
+                    hasPermission = hasNotifPermission,
+                    onRequestPermission = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+                )
+            }
+
+            if (isOwnerAdminEmail) {
+                item {
+                    AdminTeacherApprovalsCard(
+                        currentUserId = profile.userId,
+                        isAdminVerified = isAdminVerified,
+                        teachers = allTeachersForAdmin,
+                        onSendVerification = onSendAdminVerification,
+                        onRefreshStatus = onRefreshAdminStatus,
+                        onApproveTeacher = onApproveTeacher,
+                        onRejectTeacher = onRejectTeacher
+                    )
+                }
+            }
         }
 
         // 1b. App Updates Card (Play-policy compliant HTTPS update link + Teacher publisher)
@@ -1249,6 +1357,351 @@ fun ProfileAndBadgesTab(
 
     if (showTermsDialog) {
         TermsOfUseDialog(onDismiss = { showTermsDialog = false })
+    }
+
+    if (showPinSetupDialog && !isGuestMode) {
+        SetupSecurityPinDialog(
+            hasExistingPin = isPinEnabled,
+            userId = profile.userId,
+            onSaved = { enabled ->
+                isPinEnabled = enabled
+                showPinSetupDialog = false
+                Toast.makeText(
+                    context,
+                    context.getString(
+                        if (enabled) R.string.security_pin_saved_msg else R.string.security_pin_removed_msg
+                    ),
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onDismiss = { showPinSetupDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun SecurityPinSettingsCard(
+    isPinEnabled: Boolean,
+    onConfigureClick: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("security_pin_settings_card")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Security,
+                    contentDescription = null,
+                    tint = if (isPinEnabled) SvtSuccess else MaterialTheme.colorScheme.primary
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(id = R.string.security_pin_card_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = stringResource(
+                            id = if (isPinEnabled) R.string.security_pin_card_enabled
+                            else R.string.security_pin_card_disabled
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isPinEnabled) SvtSuccess else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = onConfigureClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("configure_security_pin_button")
+            ) {
+                Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    stringResource(
+                        id = if (isPinEnabled) R.string.security_pin_manage_btn
+                        else R.string.security_pin_configure_btn
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackgroundNotificationsSettingsCard(
+    hasPermission: Boolean,
+    onRequestPermission: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("bg_notifications_settings_card")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.NotificationsActive,
+                    contentDescription = null,
+                    tint = if (hasPermission) SvtSuccess else MaterialTheme.colorScheme.primary
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(id = R.string.bg_notif_card_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = stringResource(
+                            id = if (hasPermission) R.string.bg_notif_enabled_desc
+                            else R.string.bg_notif_disabled_desc
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (hasPermission) SvtSuccess else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (!hasPermission) {
+                Button(
+                    onClick = onRequestPermission,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("enable_bg_notifications_button")
+                ) {
+                    Icon(Icons.Filled.NotificationsActive, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(id = R.string.bg_notif_enable_btn))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminTeacherApprovalsCard(
+    currentUserId: String,
+    isAdminVerified: Boolean,
+    teachers: List<UserProfile>,
+    onSendVerification: () -> Unit,
+    onRefreshStatus: () -> Unit,
+    onApproveTeacher: (UserProfile) -> Unit,
+    onRejectTeacher: (UserProfile) -> Unit
+) {
+    val visibleTeachers = remember(teachers, currentUserId) {
+        teachers.filter { it.userId != currentUserId }
+            .sortedWith(
+                compareBy<UserProfile>(
+                    {
+                        when (it.teacherStatus) {
+                            "pending" -> 0
+                            "approved" -> 1
+                            else -> 2
+                        }
+                    },
+                    { it.fullName.lowercase(Locale.getDefault()) }
+                )
+            )
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("admin_teacher_approvals_card")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.VerifiedUser,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = stringResource(id = R.string.admin_teacher_approvals_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (!isAdminVerified) {
+                Text(
+                    text = stringResource(id = R.string.admin_verify_banner_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onSendVerification,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Filled.MarkEmailRead, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(id = R.string.admin_send_verification_btn), maxLines = 1)
+                    }
+                    OutlinedButton(
+                        onClick = onRefreshStatus,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(id = R.string.teacher_refresh_status_btn), maxLines = 1)
+                    }
+                }
+            } else if (visibleTeachers.isEmpty()) {
+                Text(
+                    text = stringResource(id = R.string.admin_teacher_approvals_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                visibleTeachers.forEach { teacher ->
+                    val statusLabel = when (teacher.teacherStatus) {
+                        "pending" -> stringResource(id = R.string.admin_teacher_status_pending)
+                        "approved" -> stringResource(id = R.string.admin_teacher_status_approved)
+                        else -> stringResource(id = R.string.admin_teacher_status_rejected)
+                    }
+                    val statusColor = when (teacher.teacherStatus) {
+                        "approved" -> SvtSuccess
+                        "pending" -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.error
+                    }
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = teacher.fullName,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    if (teacher.establishment.isNotBlank()) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Business,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = teacher.establishment,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    val contact = listOfNotNull(
+                                        teacher.email.takeIf { it.isNotBlank() },
+                                        teacher.phoneNumber.takeIf { it.isNotBlank() }
+                                    ).joinToString(" • ")
+                                    if (contact.isNotBlank()) {
+                                        Text(
+                                            text = contact,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    color = statusColor.copy(alpha = 0.14f),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text(
+                                        text = statusLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = statusColor,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (teacher.teacherStatus != "approved") {
+                                    Button(
+                                        onClick = { onApproveTeacher(teacher) },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("admin_approve_teacher_${teacher.userId}")
+                                    ) {
+                                        Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(stringResource(id = R.string.teacher_approve))
+                                    }
+                                }
+                                if (teacher.teacherStatus != "rejected") {
+                                    OutlinedButton(
+                                        onClick = { onRejectTeacher(teacher) },
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.error
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("admin_reject_teacher_${teacher.userId}")
+                                    ) {
+                                        Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(stringResource(id = R.string.teacher_reject))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

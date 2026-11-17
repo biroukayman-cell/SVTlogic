@@ -136,7 +136,9 @@ fun ExercisesTab(
         onDone: (QuizAttempt) -> Unit
     ) -> Unit,
     onDeleteQuiz: (Quiz) -> Unit = {},
-    currentLanguage: AppLanguage = AppLanguage.FR
+    currentLanguage: AppLanguage = AppLanguage.FR,
+    isGuestMode: Boolean = false,
+    onGuestBlocked: () -> Unit = {}
 ) {
     var activeQuizId by rememberSaveable { mutableStateOf<String?>(null) }
     var attemptQuizId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -455,7 +457,9 @@ fun ExercisesTab(
 
                                 if (isDownloaded) {
                                     IconButton(
-                                        onClick = { onRemoveOfflineQuiz(quiz.id) },
+                                        onClick = {
+                                            if (isGuestMode) onGuestBlocked() else onRemoveOfflineQuiz(quiz.id)
+                                        },
                                         modifier = Modifier.testTag("remove_offline_quiz_${quiz.id}")
                                     ) {
                                         Icon(
@@ -466,7 +470,9 @@ fun ExercisesTab(
                                     }
                                 } else if (quiz.isDownloadable) {
                                     OutlinedButton(
-                                        onClick = { onDownloadQuizOffline(quiz) },
+                                        onClick = {
+                                            if (isGuestMode) onGuestBlocked() else onDownloadQuizOffline(quiz)
+                                        },
                                         modifier = Modifier.testTag("download_quiz_${quiz.id}")
                                     ) {
                                         Icon(
@@ -480,7 +486,7 @@ fun ExercisesTab(
                                 }
 
                                 if (studentAttempt == null) {
-                                    val canPlay = isOnline || isDownloaded
+                                    val canPlay = isGuestMode || isOnline || isDownloaded
                                     Button(
                                         onClick = { activeQuizId = quiz.id },
                                         enabled = canPlay,
@@ -511,12 +517,18 @@ fun ExercisesTab(
     activeQuizToPlay?.let { quiz ->
         TimedQuizPlayerDialog(
             quiz = quiz,
+            isGuestMode = isGuestMode,
+            onGuestBlocked = onGuestBlocked,
             onDismiss = { activeQuizId = null },
             onComplete = { answers, perQuestionSecs, totalSecs ->
                 activeQuizId = null
-                onSubmitAttempt(quiz, answers, perQuestionSecs, totalSecs) { savedAttempt ->
-                    attemptQuizId = savedAttempt.quizId
-                    justSubmittedAttempt = savedAttempt
+                if (isGuestMode) {
+                    onGuestBlocked()
+                } else {
+                    onSubmitAttempt(quiz, answers, perQuestionSecs, totalSecs) { savedAttempt ->
+                        attemptQuizId = savedAttempt.quizId
+                        justSubmittedAttempt = savedAttempt
+                    }
                 }
             }
         )
@@ -638,6 +650,8 @@ fun ExercisesTab(
 @Composable
 private fun TimedQuizPlayerDialog(
     quiz: Quiz,
+    isGuestMode: Boolean = false,
+    onGuestBlocked: () -> Unit = {},
     onDismiss: () -> Unit,
     onComplete: (selectedAnswers: List<Int>, perQuestionSeconds: List<Long>, totalSeconds: Long) -> Unit
 ) {
@@ -747,9 +761,13 @@ private fun TimedQuizPlayerDialog(
                                 shape = MaterialTheme.shapes.medium
                             )
                             .clickable {
-                                val copy = selectedArray.copyOf()
-                                copy[currentIndex] = optIdx
-                                selectedArray = copy
+                                if (isGuestMode) {
+                                    onGuestBlocked()
+                                } else {
+                                    val copy = selectedArray.copyOf()
+                                    copy[currentIndex] = optIdx
+                                    selectedArray = copy
+                                }
                             }
                     ) {
                         Row(
@@ -760,9 +778,13 @@ private fun TimedQuizPlayerDialog(
                             RadioButton(
                                 selected = isSelected,
                                 onClick = {
-                                    val copy = selectedArray.copyOf()
-                                    copy[currentIndex] = optIdx
-                                    selectedArray = copy
+                                    if (isGuestMode) {
+                                        onGuestBlocked()
+                                    } else {
+                                        val copy = selectedArray.copyOf()
+                                        copy[currentIndex] = optIdx
+                                        selectedArray = copy
+                                    }
                                 }
                             )
                             Text(
@@ -779,20 +801,25 @@ private fun TimedQuizPlayerDialog(
             if (currentIndex < questions.lastIndex) {
                 Button(
                     onClick = { currentIndex += 1 },
-                    enabled = hasSelection
+                    enabled = isGuestMode || hasSelection
                 ) {
                     Text(stringResource(id = R.string.quiz_next))
                 }
             } else {
                 Button(
                     onClick = {
-                        onComplete(
-                            selectedArray.toList(),
-                            perQuestionArray.toList(),
-                            totalSeconds
-                        )
+                        if (isGuestMode) {
+                            onDismiss()
+                            onGuestBlocked()
+                        } else {
+                            onComplete(
+                                selectedArray.toList(),
+                                perQuestionArray.toList(),
+                                totalSeconds
+                            )
+                        }
                     },
-                    enabled = hasSelection
+                    enabled = isGuestMode || hasSelection
                 ) {
                     Text(stringResource(id = R.string.quiz_finish))
                 }

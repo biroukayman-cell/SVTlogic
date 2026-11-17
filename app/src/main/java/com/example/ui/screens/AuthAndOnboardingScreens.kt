@@ -56,6 +56,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
@@ -66,9 +67,11 @@ import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Security
@@ -134,6 +137,7 @@ import com.example.core.QrImageAnalyzer
 import com.example.core.QrScanResult
 import com.example.data.model.Enrollment
 import com.example.data.model.RosterStudent
+import com.example.data.model.UserProfile
 import com.example.ui.components.LanguageSwitcherRow
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuthException
@@ -204,7 +208,8 @@ fun AuthScreen(
     activityContext: Context,
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
-    onAuthSuccess: () -> Unit
+    onAuthSuccess: () -> Unit,
+    onEnterGuestMode: () -> Unit = {}
 ) {
     val localizedContext = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -225,6 +230,8 @@ fun AuthScreen(
     var showTermsDialog by rememberSaveable { mutableStateOf(false) }
 
     var teacherFullName by rememberSaveable { mutableStateOf("") }
+    var teacherPhone by rememberSaveable { mutableStateOf("") }
+    var teacherEstablishment by rememberSaveable { mutableStateOf("") }
     var teacherEmail by rememberSaveable { mutableStateOf("") }
     var teacherPassword by rememberSaveable { mutableStateOf("") }
     var teacherConfirmPassword by rememberSaveable { mutableStateOf("") }
@@ -426,6 +433,15 @@ fun AuthScreen(
                                 selectedAuthRole = "teacher"
                             },
                             modifier = Modifier.testTag("choose_role_teacher_button")
+                        )
+
+                        RoleGatewayCard(
+                            title = stringResource(id = R.string.auth_guest_mode_btn),
+                            subtitle = stringResource(id = R.string.auth_guest_mode_sub),
+                            icon = Icons.Filled.Visibility,
+                            accentColor = MaterialTheme.colorScheme.outline,
+                            onClick = onEnterGuestMode,
+                            modifier = Modifier.testTag("choose_guest_mode_button")
                         )
                     }
                 }
@@ -798,15 +814,51 @@ fun AuthScreen(
                         }
 
                         if (isTeacherRegister) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                                shape = MaterialTheme.shapes.medium
+                            ) {
+                                Text(
+                                    text = stringResource(id = R.string.teacher_approval_register_notice),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
+
                             OutlinedTextField(
                                 value = teacherFullName,
                                 onValueChange = { teacherFullName = it },
-                                label = { Text(stringResource(id = R.string.field_full_name)) },
+                                label = { Text(stringResource(id = R.string.field_full_name_required)) },
                                 leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("teacher_fullname_input")
+                            )
+
+                            OutlinedTextField(
+                                value = teacherPhone,
+                                onValueChange = { teacherPhone = it },
+                                label = { Text(stringResource(id = R.string.field_phone_required)) },
+                                leadingIcon = { Icon(Icons.Filled.Phone, contentDescription = null) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("teacher_phone_input")
+                            )
+
+                            OutlinedTextField(
+                                value = teacherEstablishment,
+                                onValueChange = { teacherEstablishment = it },
+                                label = { Text(stringResource(id = R.string.field_establishment_required)) },
+                                placeholder = { Text(stringResource(id = R.string.field_establishment_hint)) },
+                                leadingIcon = { Icon(Icons.Filled.Business, contentDescription = null) },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("teacher_establishment_input")
                             )
                         }
 
@@ -865,9 +917,17 @@ fun AuthScreen(
                             onClick = {
                                 val cleanEmail = teacherEmail.trim()
                                 val cleanName = teacherFullName.trim()
+                                val cleanPhone = teacherPhone.trim()
+                                val cleanEstablishment = teacherEstablishment.trim()
                                 when {
                                     isTeacherRegister && cleanName.length < 2 -> {
                                         errorMessage = localizedContext.getString(R.string.error_name_required)
+                                    }
+                                    isTeacherRegister && cleanPhone.length < 6 -> {
+                                        errorMessage = localizedContext.getString(R.string.error_phone_required)
+                                    }
+                                    isTeacherRegister && cleanEstablishment.length < 2 -> {
+                                        errorMessage = localizedContext.getString(R.string.error_establishment_required)
                                     }
                                     cleanEmail.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches() -> {
                                         errorMessage = localizedContext.getString(R.string.auth_error_email_invalid)
@@ -887,7 +947,9 @@ fun AuthScreen(
                                                     context = activityContext,
                                                     role = "teacher",
                                                     email = cleanEmail,
-                                                    fullName = cleanName
+                                                    fullName = cleanName,
+                                                    phoneNumber = cleanPhone,
+                                                    establishment = cleanEstablishment
                                                 )
                                                 if (isTeacherRegister) {
                                                     Firebase.auth.createUserWithEmailAndPassword(cleanEmail, teacherPassword).await()
@@ -1095,6 +1157,8 @@ fun AccountSetupScreen(
     defaultRole: String,
     defaultMassar: String,
     defaultEmail: String,
+    defaultPhone: String = "",
+    defaultEstablishment: String = "",
     studentRoster: RosterStudent?,
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
@@ -1105,6 +1169,7 @@ fun AccountSetupScreen(
         massarNumber: String,
         birthDate: String,
         email: String,
+        establishment: String,
         newPassword: String?
     ) -> Unit,
     onSignOut: () -> Unit,
@@ -1117,13 +1182,16 @@ fun AccountSetupScreen(
 
     var fullName by remember(initialName) { mutableStateOf(initialName) }
     var birthDate by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
+    var phone by remember(defaultPhone) { mutableStateOf(defaultPhone) }
+    var establishment by remember(defaultEstablishment) { mutableStateOf(defaultEstablishment) }
     var newPassword by remember { mutableStateOf("") }
     var confirmNewPassword by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
     val nameRequiredErr = stringResource(id = R.string.error_name_required)
+    val phoneRequiredErr = stringResource(id = R.string.error_phone_required)
+    val establishmentRequiredErr = stringResource(id = R.string.error_establishment_required)
     val birthDateRequiredErr = stringResource(id = R.string.error_birthdate_required)
     val weakPassErr = stringResource(id = R.string.auth_error_weak_password)
     val mismatchPassErr = stringResource(id = R.string.auth_error_password_mismatch)
@@ -1252,7 +1320,14 @@ fun AccountSetupScreen(
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text(stringResource(id = R.string.field_phone)) },
+                    label = {
+                        Text(
+                            stringResource(
+                                id = if (resolvedRole == "teacher") R.string.field_phone_required
+                                else R.string.field_phone
+                            )
+                        )
+                    },
                     leadingIcon = { Icon(Icons.Filled.Phone, contentDescription = null) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     singleLine = true,
@@ -1260,6 +1335,20 @@ fun AccountSetupScreen(
                         .fillMaxWidth()
                         .testTag("setup_phone_input")
                 )
+
+                if (resolvedRole == "teacher") {
+                    OutlinedTextField(
+                        value = establishment,
+                        onValueChange = { establishment = it },
+                        label = { Text(stringResource(id = R.string.field_establishment_required)) },
+                        placeholder = { Text(stringResource(id = R.string.field_establishment_hint)) },
+                        leadingIcon = { Icon(Icons.Filled.Business, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("setup_establishment_input")
+                    )
+                }
 
                 if (resolvedRole == "student") {
                     OutlinedTextField(
@@ -1305,6 +1394,12 @@ fun AccountSetupScreen(
                     onClick = {
                         when {
                             fullName.trim().length < 2 -> validationError = nameRequiredErr
+                            resolvedRole == "teacher" && phone.trim().length < 6 -> {
+                                validationError = phoneRequiredErr
+                            }
+                            resolvedRole == "teacher" && establishment.trim().length < 2 -> {
+                                validationError = establishmentRequiredErr
+                            }
                             resolvedRole == "student" && birthDate.trim().length < 6 -> {
                                 validationError = birthDateRequiredErr
                             }
@@ -1323,6 +1418,7 @@ fun AccountSetupScreen(
                                     resolvedMassar,
                                     birthDate.trim(),
                                     defaultEmail.trim(),
+                                    establishment.trim(),
                                     newPassword.takeIf { it.isNotBlank() }
                                 )
                             }
@@ -2269,3 +2365,184 @@ fun DeviceLockedBlockedScreen(
         }
     }
 }
+
+@Composable
+fun TeacherPendingApprovalScreen(
+    profile: UserProfile,
+    isOwnerAdminEmail: Boolean,
+    isEmailVerified: Boolean,
+    currentLanguage: AppLanguage,
+    onLanguageSelected: (AppLanguage) -> Unit,
+    onSendAdminVerification: () -> Unit,
+    onRefreshStatus: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    val isRejected = profile.teacherStatus == "rejected"
+
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("teacher_pending_approval_screen"),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LanguageSwitcherRow(
+                    currentLanguage = currentLanguage,
+                    onLanguageSelected = onLanguageSelected
+                )
+                IconButton(
+                    onClick = onSignOut,
+                    modifier = Modifier.testTag("teacher_pending_sign_out_icon")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = stringResource(id = R.string.auth_sign_out)
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 500.dp)
+                    .padding(vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(88.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isRejected) MaterialTheme.colorScheme.errorContainer
+                            else MaterialTheme.colorScheme.secondaryContainer
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isOwnerAdminEmail && !isEmailVerified) {
+                            Icons.Filled.MarkEmailRead
+                        } else {
+                            Icons.Filled.HourglassTop
+                        },
+                        contentDescription = null,
+                        tint = if (isRejected) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(44.dp)
+                    )
+                }
+
+                Text(
+                    text = stringResource(
+                        id = when {
+                            isOwnerAdminEmail && !isEmailVerified -> R.string.admin_verify_email_title
+                            isRejected -> R.string.teacher_approval_rejected_title
+                            else -> R.string.teacher_approval_pending_title
+                        }
+                    ),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = when {
+                        isOwnerAdminEmail && !isEmailVerified -> stringResource(id = R.string.admin_verify_email_body)
+                        isRejected -> stringResource(id = R.string.teacher_approval_rejected_body)
+                        else -> stringResource(
+                            id = R.string.teacher_approval_pending_body,
+                            profile.fullName,
+                            profile.establishment.ifBlank { "-" }
+                        )
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = profile.fullName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (profile.email.isNotBlank()) {
+                            Text(profile.email, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (profile.phoneNumber.isNotBlank()) {
+                            Text(profile.phoneNumber, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (profile.establishment.isNotBlank()) {
+                            Text(
+                                text = "${stringResource(id = R.string.field_establishment_label)} : ${profile.establishment}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+
+                if (isOwnerAdminEmail && !isEmailVerified) {
+                    Button(
+                        onClick = onSendAdminVerification,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("admin_send_verification_button")
+                    ) {
+                        Icon(Icons.Filled.MarkEmailRead, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(id = R.string.admin_send_verification_btn))
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = onRefreshStatus,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("teacher_refresh_approval_button")
+                ) {
+                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(id = R.string.teacher_refresh_status_btn))
+                }
+
+                TextButton(
+                    onClick = onSignOut,
+                    modifier = Modifier.testTag("teacher_pending_sign_out_button")
+                ) {
+                    Text(stringResource(id = R.string.auth_sign_out))
+                }
+            }
+
+            Text(
+                text = stringResource(id = R.string.legal_notice_footer),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
