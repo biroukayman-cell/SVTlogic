@@ -1,17 +1,20 @@
 package com.example.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -70,8 +73,40 @@ import com.example.data.badges.SvtBadgeDefinition
 import com.example.data.model.StudentNotification
 import com.example.data.svt.SvtDomain
 import com.example.data.svt.SvtKnowledgeCatalog
+import com.example.ui.theme.LocalIsDarkTheme
 import kotlin.math.PI
 import kotlin.math.sin
+
+@Composable
+fun SvtWallpaperContainer(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val isDark = LocalIsDarkTheme.current
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.img_bg_app),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            alpha = if (isDark) 0.16f else 0.94f,
+            modifier = Modifier.matchParentSize()
+        )
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    MaterialTheme.colorScheme.background.copy(
+                        alpha = if (isDark) 0.52f else 0.14f
+                    )
+                )
+        )
+        content()
+    }
+}
 
 @Composable
 fun LanguageSwitcherRow(
@@ -360,79 +395,43 @@ fun SvtHeroBannerCard(
     title: String,
     subtitle: String,
     modifier: Modifier = Modifier,
+    @DrawableRes backgroundResId: Int = R.drawable.img_tab_exercises,
+    heightDp: Int = 148,
     actionLabel: String? = null,
     onActionClick: (() -> Unit)? = null
 ) {
+    val isDark = LocalIsDarkTheme.current
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(152.dp)
+            .height(heightDp.dp)
             .clip(MaterialTheme.shapes.large)
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                shape = MaterialTheme.shapes.large
+            )
     ) {
         Image(
-            painter = painterResource(id = R.drawable.img_svt_hero),
+            painter = painterResource(id = backgroundResId),
             contentDescription = title,
             contentScale = ContentScale.Crop,
+            alpha = if (isDark) 0.38f else 1f,
             modifier = Modifier.matchParentSize()
         )
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .background(
-                    Brush.verticalGradient(
+                    Brush.horizontalGradient(
                         colors = listOf(
-                            Color(0x330B2E20),
-                            Color(0xD40B2E20)
+                            MaterialTheme.colorScheme.surface.copy(alpha = if (isDark) 0.90f else 0.90f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = if (isDark) 0.72f else 0.56f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = if (isDark) 0.35f else 0.08f)
                         )
                     )
                 )
         )
-        // Subtle DNA double-helix vector motif on the trailing edge
-        Canvas(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 14.dp)
-                .size(width = 76.dp, height = 112.dp)
-        ) {
-            val w = size.width
-            val h = size.height
-            val strand1 = Path()
-            val strand2 = Path()
-            val steps = 28
-            for (i in 0..steps) {
-                val t = i.toFloat() / steps.toFloat()
-                val y = t * h
-                val angle = t * 2.4f * PI.toFloat()
-                val x1 = w * 0.5f + sin(angle) * (w * 0.34f)
-                val x2 = w * 0.5f - sin(angle) * (w * 0.34f)
-                if (i == 0) {
-                    strand1.moveTo(x1, y)
-                    strand2.moveTo(x2, y)
-                } else {
-                    strand1.lineTo(x1, y)
-                    strand2.lineTo(x2, y)
-                }
-                if (i % 4 == 2) {
-                    drawLine(
-                        color = Color.White.copy(alpha = 0.28f),
-                        start = Offset(x1, y),
-                        end = Offset(x2, y),
-                        strokeWidth = 2.dp.toPx(),
-                        cap = StrokeCap.Round
-                    )
-                }
-            }
-            drawPath(
-                path = strand1,
-                color = Color.White.copy(alpha = 0.42f),
-                style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
-            )
-            drawPath(
-                path = strand2,
-                color = Color(0xFF9DF0C8).copy(alpha = 0.48f),
-                style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
-            )
-        }
 
         Row(
             modifier = Modifier
@@ -444,17 +443,18 @@ fun SvtHeroBannerCard(
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.headlineSmall,
-                    color = Color.White
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
             if (!actionLabel.isNullOrBlank() && onActionClick != null) {

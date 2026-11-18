@@ -456,7 +456,8 @@ private fun GlossaryLabSection(
         item {
             SvtHeroBannerCard(
                 title = stringResource(id = R.string.svt_lab_title),
-                subtitle = stringResource(id = R.string.svt_lab_subtitle)
+                subtitle = stringResource(id = R.string.svt_lab_subtitle),
+                backgroundResId = R.drawable.img_tab_lab
             )
         }
 

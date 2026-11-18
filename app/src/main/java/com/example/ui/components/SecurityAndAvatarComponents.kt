@@ -53,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -211,7 +212,7 @@ fun SecurityPinLockScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("security_pin_lock_screen"),
-        color = MaterialTheme.colorScheme.background
+        color = Color.Transparent
     ) {
         Column(
             modifier = Modifier

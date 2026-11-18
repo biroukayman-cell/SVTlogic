@@ -59,6 +59,7 @@ import com.example.data.model.Announcement
 import com.example.data.model.Enrollment
 import com.example.data.model.PrivateMessage
 import com.example.ui.components.SvtEmptyStateCard
+import com.example.ui.components.SvtHeroBannerCard
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -88,6 +89,13 @@ fun AnnouncementsTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            SvtHeroBannerCard(
+                title = stringResource(id = R.string.tab_announcements),
+                subtitle = stringResource(id = R.string.app_subtitle),
+                backgroundResId = R.drawable.img_tab_announcements
+            )
+        }
         if (isTeacher) {
             item {
                 if (selectedClassId == null) {
@@ -292,9 +300,10 @@ fun MessagingTab(
             ) {
                 item {
                     val unreadTotal = messages.count { it.senderRole == "student" && !it.isRead }
-                    Text(
-                        text = stringResource(id = R.string.messaging_teacher_inbox, unreadTotal),
-                        style = MaterialTheme.typography.titleLarge
+                    SvtHeroBannerCard(
+                        title = stringResource(id = R.string.tab_messaging),
+                        subtitle = stringResource(id = R.string.messaging_teacher_inbox, unreadTotal),
+                        backgroundResId = R.drawable.img_tab_messaging
                     )
                 }
 
@@ -420,6 +429,14 @@ private fun PrivateChatThread(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item {
+                SvtHeroBannerCard(
+                    title = stringResource(id = R.string.tab_messaging),
+                    subtitle = headerTitle,
+                    backgroundResId = R.drawable.img_tab_messaging,
+                    heightDp = 112
+                )
+            }
             if (messages.isEmpty()) {
                 item {
                     SvtEmptyStateCard(title = stringResource(id = R.string.messaging_empty))

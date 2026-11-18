@@ -134,6 +134,7 @@ import com.example.data.offline.OfflineStorageManager
 import com.example.data.offline.PickedFileTooLargeException
 import com.example.data.repository.SvtRepository
 import com.example.ui.components.SvtEmptyStateCard
+import com.example.ui.components.SvtHeroBannerCard
 import com.example.ui.theme.SvtCoralError
 import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtOceanSecondary
@@ -246,6 +247,13 @@ fun ResourcesTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            SvtHeroBannerCard(
+                title = stringResource(id = R.string.tab_resources),
+                subtitle = stringResource(id = R.string.app_subtitle),
+                backgroundResId = R.drawable.img_tab_resources
+            )
+        }
         if (isTeacher) {
             item {
                 if (selectedClassId == null) {

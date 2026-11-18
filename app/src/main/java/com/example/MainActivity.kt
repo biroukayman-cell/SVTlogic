@@ -33,11 +33,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.ui.components.SvtWallpaperContainer
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -120,30 +122,32 @@ class MainActivity : ComponentActivity() {
                 LocalOnBackPressedDispatcherOwner provides activityContext
             ) {
                 BioTerreTheme(themeConfig = currentTheme) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
-                    ) {
-                        val isFirebaseInitialized = remember {
-                            FirebaseApp.getApps(activityContext).isNotEmpty() ||
-                                FirebaseApp.initializeApp(activityContext) != null
-                        }
-                        if (!isFirebaseInitialized) {
-                            MissingFirebaseConfigScreen()
-                        } else {
-                            AppNavigation(
-                                activityContext = activityContext,
-                                currentLanguage = currentLanguage,
-                                onLanguageSelected = { lang ->
-                                    LanguagePreferences.saveLanguage(activityContext, lang)
-                                    currentLanguage = lang
-                                },
-                                currentTheme = currentTheme,
-                                onThemeChanged = { cfg ->
-                                    ThemePreferences.saveThemeConfig(activityContext, cfg)
-                                    currentTheme = cfg
-                                }
-                            )
+                    SvtWallpaperContainer(modifier = Modifier.fillMaxSize()) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = Color.Transparent
+                        ) {
+                            val isFirebaseInitialized = remember {
+                                FirebaseApp.getApps(activityContext).isNotEmpty() ||
+                                    FirebaseApp.initializeApp(activityContext) != null
+                            }
+                            if (!isFirebaseInitialized) {
+                                MissingFirebaseConfigScreen()
+                            } else {
+                                AppNavigation(
+                                    activityContext = activityContext,
+                                    currentLanguage = currentLanguage,
+                                    onLanguageSelected = { lang ->
+                                        LanguagePreferences.saveLanguage(activityContext, lang)
+                                        currentLanguage = lang
+                                    },
+                                    currentTheme = currentTheme,
+                                    onThemeChanged = { cfg ->
+                                        ThemePreferences.saveThemeConfig(activityContext, cfg)
+                                        currentTheme = cfg
+                                    }
+                                )
+                            }
                         }
                     }
                 }

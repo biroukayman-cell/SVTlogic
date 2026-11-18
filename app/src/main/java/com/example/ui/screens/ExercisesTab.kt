@@ -178,7 +178,8 @@ fun ExercisesTab(
         item {
             SvtHeroBannerCard(
                 title = stringResource(id = R.string.tab_exercises),
-                subtitle = stringResource(id = R.string.app_subtitle)
+                subtitle = stringResource(id = R.string.app_subtitle),
+                backgroundResId = R.drawable.img_tab_exercises
             )
         }
 

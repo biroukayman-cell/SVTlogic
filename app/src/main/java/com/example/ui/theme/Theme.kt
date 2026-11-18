@@ -11,12 +11,16 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.core.AppThemePalette
 import com.example.core.ThemeConfig
 import com.example.core.ThemeMode
+
+val LocalIsDarkTheme = compositionLocalOf { false }
 
 private val EmeraldLightColorScheme = lightColorScheme(
     primary = SvtEmeraldPrimary,
@@ -245,10 +249,12 @@ fun BioTerreTheme(
         resolveColorScheme(themeConfig.palette, darkTheme)
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        shapes = SvtShapes,
-        content = content
-    )
+    CompositionLocalProvider(LocalIsDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            shapes = SvtShapes,
+            content = content
+        )
+    }
 }

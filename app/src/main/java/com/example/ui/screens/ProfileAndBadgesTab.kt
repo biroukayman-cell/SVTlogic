@@ -139,6 +139,7 @@ import com.example.core.ThemeConfig
 import com.example.core.ThemeMode
 import com.example.ui.components.ProfileAvatarImage
 import com.example.ui.components.SetupSecurityPinDialog
+import com.example.ui.components.SvtHeroBannerCard
 import com.example.data.badges.BadgeCategory
 import com.example.data.badges.BadgeEngine
 import com.example.data.badges.BadgeProgressItem
@@ -290,6 +291,18 @@ fun ProfileAndBadgesTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item {
+            SvtHeroBannerCard(
+                title = stringResource(id = R.string.tab_profile),
+                subtitle = stringResource(
+                    id = if (profile.role == "teacher") R.string.profile_role_teacher
+                    else R.string.profile_role_student
+                ),
+                backgroundResId = R.drawable.img_tab_profile,
+                heightDp = 128
+            )
+        }
+
         // 1. Personal Info Card
         item {
             Card(

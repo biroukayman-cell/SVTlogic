@@ -303,7 +303,7 @@ fun AuthScreen(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = Color.Transparent
     ) {
         Column(
             modifier = Modifier
@@ -377,12 +377,17 @@ fun AuthScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Image(
-                            painter = painterResource(id = R.drawable.img_svt_hero),
+                            painter = painterResource(id = R.drawable.img_tab_lab),
                             contentDescription = stringResource(id = R.string.app_subtitle),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(150.dp)
-                                .clip(MaterialTheme.shapes.large),
+                                .height(148.dp)
+                                .clip(MaterialTheme.shapes.large)
+                                .border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                    shape = MaterialTheme.shapes.large
+                                ),
                             contentScale = ContentScale.Crop
                         )
 
@@ -1138,7 +1143,7 @@ private fun RoleGatewayCard(
             )
             .clickable { onClick() },
         colors = CardDefaults.cardColors(
-            containerColor = accentColor.copy(alpha = 0.08f)
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
         )
     ) {
         Row(
@@ -1246,7 +1251,7 @@ fun AccountSetupScreen(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = Color.Transparent
     ) {
         Column(
             modifier = Modifier
@@ -1578,7 +1583,7 @@ fun QrJoinClassScreen(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = Color.Transparent
     ) {
         if (showScanner && hasCameraPermission) {
             BackHandler { showScanner = false }
@@ -1979,7 +1984,7 @@ fun PendingApprovalScreen(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = Color.Transparent
     ) {
         Column(
             modifier = Modifier
@@ -2076,7 +2081,7 @@ fun TermsAcceptanceScreen(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = Color.Transparent
     ) {
         Column(
             modifier = Modifier
@@ -2289,7 +2294,7 @@ fun DeviceLockedBlockedScreen(
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = Color.Transparent
     ) {
         Column(
             modifier = Modifier
@@ -2431,7 +2436,7 @@ fun TeacherPendingApprovalScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("teacher_pending_approval_screen"),
-        color = MaterialTheme.colorScheme.background
+        color = Color.Transparent
     ) {
         Column(
             modifier = Modifier

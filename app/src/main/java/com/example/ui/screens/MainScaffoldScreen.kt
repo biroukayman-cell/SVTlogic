@@ -68,6 +68,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -220,12 +221,13 @@ fun MainDashboardScreen(
         val useNavigationRail = maxWidth >= 680.dp
 
         Scaffold(
+            containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets.safeDrawing,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
                     ),
                     title = {
                         Column {
@@ -300,7 +302,9 @@ fun MainDashboardScreen(
             },
             bottomBar = {
                 if (!useNavigationRail) {
-                    NavigationBar {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                    ) {
                         SvtTab.entries.forEach { tab ->
                             val selected = tab == currentTab
                             NavigationBarItem(
@@ -333,7 +337,9 @@ fun MainDashboardScreen(
                     .padding(innerPadding)
             ) {
                 if (useNavigationRail) {
-                    NavigationRail {
+                    NavigationRail(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                    ) {
                         SvtTab.entries.forEach { tab ->
                             val selected = tab == currentTab
                             NavigationRailItem(
@@ -705,12 +711,13 @@ fun GuestMainDashboardScreen(
         val useNavigationRail = maxWidth >= 680.dp
 
         Scaffold(
+            containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets.safeDrawing,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
                     ),
                     title = {
                         Column {
@@ -738,7 +745,9 @@ fun GuestMainDashboardScreen(
             },
             bottomBar = {
                 if (!useNavigationRail) {
-                    NavigationBar {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                    ) {
                         SvtTab.entries.forEach { tab ->
                             val selected = tab == currentTab
                             NavigationBarItem(
@@ -771,7 +780,9 @@ fun GuestMainDashboardScreen(
                     .padding(innerPadding)
             ) {
                 if (useNavigationRail) {
-                    NavigationRail {
+                    NavigationRail(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                    ) {
                         SvtTab.entries.forEach { tab ->
                             val selected = tab == currentTab
                             NavigationRailItem(
