@@ -607,8 +607,14 @@
     <string name="password_forgot_teacher_desc">Saisissez votre e-mail professionnel pour recevoir un lien de réinitialisation sécurisé. Vous pouvez aussi contacter l\'administrateur pour une assistance sur votre numéro enregistré.</string>
     <string name="password_forgot_send_link">Envoyer le lien par e-mail</string>
     <string name="password_forgot_email_sent">Un e-mail de réinitialisation a été envoyé à %1$s. Vérifiez votre boîte de réception (et les spams).</string>
-    <string name="password_forgot_student_desc">Les comptes élèves Massar n\'utilisent pas d\'adresse e-mail personnelle. Demandez à votre professeur de SVT de générer un nouveau mot de passe provisoire : il sera envoyé par SMS directement sur votre numéro de téléphone enregistré.</string>
+    <string name="password_forgot_student_desc">Saisissez l\'e-mail de récupération enregistré dans votre profil pour recevoir un lien de réinitialisation. Si vous n\'avez pas d\'e-mail vérifié, demandez à votre professeur un nouveau mot de passe provisoire.</string>
     <string name="password_forgot_student_massar_tip">Code Massar : %1$s — Présentez ce code à votre professeur ou scannez le QR de la classe.</string>
+    <string name="field_recovery_email">E-mail (mot de passe oublié)</string>
+    <string name="field_recovery_email_hint">eleve@exemple.com</string>
+    <string name="field_massar_or_email">Numéro Massar (ou e-mail vérifié)</string>
+    <string name="profile_add_recovery_email_hint">Ajoutez un e-mail via Modifier le profil pour recevoir un lien si vous oubliez votre mot de passe.</string>
+    <string name="recovery_email_verification_sent">E-mail enregistré. Cliquez sur le lien de confirmation envoyé à %1$s pour activer la réinitialisation par e-mail.</string>
+    <string name="recovery_email_reauth_hint">E-mail enregistré dans votre profil. Reconnectez-vous si nécessaire pour confirmer l\'e-mail.</string>
     <string name="password_forgot_provisional_generated_title">Nouveau mot de passe provisoire prêt</string>
     <string name="password_forgot_provisional_notif_title">Nouveau mot de passe provisoire BioTerre</string>
     <string name="password_forgot_provisional_notif_body">Mot de passe provisoire (%1$s) : %2$s. Connectez-vous puis modifiez-le dans votre profil.</string>

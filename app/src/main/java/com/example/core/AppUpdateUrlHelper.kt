@@ -50,7 +50,7 @@ object AppUpdateUrlHelper {
         val cleaned = cleanRawUrl(rawUrl)
         if (cleaned.isBlank()) return ""
         val driveFileId = extractGoogleDriveFileId(cleaned) ?: return cleaned
-        return "https://drive.google.com/uc?export=download&id=$driveFileId"
+        return "https://drive.google.com/uc?export=download&confirm=t&id=$driveFileId"
     }
 
     fun buildUpdateViewIntent(context: Context, rawUrl: String): Intent {
@@ -78,7 +78,6 @@ object AppUpdateUrlHelper {
             context.startActivity(intent)
             true
         } catch (_: Exception) {
-            // Fallback without explicit browser package if needed
             if (intent.`package` != null) {
                 try {
                     val fallback = Intent(Intent.ACTION_VIEW, Uri.parse(normalized)).apply {
@@ -102,11 +101,23 @@ object AppUpdateUrlHelper {
                 addCategory(Intent.CATEGORY_BROWSABLE)
             }
             val pm = context.packageManager
+            val defaultPkg = pm.resolveActivity(probe, PackageManager.MATCH_DEFAULT_ONLY)
+                ?.activityInfo?.packageName
+            if (!defaultPkg.isNullOrBlank() &&
+                defaultPkg != "android" &&
+                !defaultPkg.startsWith("com.android.internal") &&
+                defaultPkg != context.packageName &&
+                !defaultPkg.startsWith("com.google.android.apps.docs")
+            ) {
+                return@runCatching defaultPkg
+            }
             val resolved = pm.queryIntentActivities(probe, PackageManager.MATCH_DEFAULT_ONLY)
             val candidates = resolved
                 .mapNotNull { it.activityInfo?.packageName }
                 .filter { pkg ->
                     pkg != context.packageName &&
+                        pkg != "android" &&
+                        !pkg.startsWith("com.android.internal") &&
                         !pkg.startsWith("com.google.android.apps.docs")
                 }
             candidates.firstOrNull { it == "com.android.chrome" }

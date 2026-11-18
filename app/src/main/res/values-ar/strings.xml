@@ -607,8 +607,14 @@
     <string name="password_forgot_teacher_desc">أدخل بريدك الإلكتروني المهني لتلقي رابط إعادة تعيين آمن. يمكنك أيضاً التواصل مع المسؤول للمساعدة عبر رقم هاتفك المسجل.</string>
     <string name="password_forgot_send_link">إرسال رابط الاستعادة بالبريد</string>
     <string name="password_forgot_email_sent">تم إرسال رابط إعادة تعيين كلمة المرور إلى %1$s. يرجى التحقق من بريدك الوارد.</string>
-    <string name="password_forgot_student_desc">حسابات التلاميذ برمز مسار لا تستخدم بريداً شخصياً. اطلب من أستاذ علوم الحياة والأرض إنشاء كلمة مرور مؤقتة جديدة لإرسالها عبر رسالة SMS إلى رقم هاتفك المسجل.</string>
+    <string name="password_forgot_student_desc">أدخل البريد الإلكتروني المسجل في ملفك الشخصي لتلقي رابط إعادة تعيين كلمة المرور. إذا لم تؤكد بريداً بعد، اطلب من أستاذك كلمة مرور مؤقتة.</string>
     <string name="password_forgot_student_massar_tip">رمز مسار: %1$s — قدّم هذا الرمز لأستاذك أو امسح رمز QR للقسم.</string>
+    <string name="field_recovery_email">البريد الإلكتروني (استعادة كلمة المرور)</string>
+    <string name="field_recovery_email_hint">student@example.com</string>
+    <string name="field_massar_or_email">رقم مسار (أو البريد الإلكتروني المؤكد)</string>
+    <string name="profile_add_recovery_email_hint">أضف بريداً إلكترونياً عبر تعديل الملف لتلقي رابط الاستعادة عند نسيان كلمة المرور.</string>
+    <string name="recovery_email_verification_sent">تم حفظ البريد. اضغط على رابط التأكيد المرسل إلى %1$s لتفعيل الاستعادة عبر البريد.</string>
+    <string name="recovery_email_reauth_hint">تم حفظ البريد في ملفك. أعد تسجيل الدخول عند الحاجة لتأكيد العنوان.</string>
     <string name="password_forgot_provisional_generated_title">تم تجهيز كلمة المرور المؤقتة الجديدة</string>
     <string name="password_forgot_provisional_notif_title">كلمة مرور مؤقتة جديدة BioTerre</string>
     <string name="password_forgot_provisional_notif_body">كلمة المرور المؤقتة (%1$s): %2$s. سجّل الدخول ثم غيّرها من ملفك الشخصي.</string>

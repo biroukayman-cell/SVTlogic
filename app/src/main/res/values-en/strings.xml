@@ -607,8 +607,14 @@
     <string name="password_forgot_teacher_desc">Enter your professional email address to receive a secure password reset link. You can also ask the administrator for assistance on your registered phone number.</string>
     <string name="password_forgot_send_link">Send reset link by email</string>
     <string name="password_forgot_email_sent">A password reset email was sent to %1$s. Check your inbox (and spam folder).</string>
-    <string name="password_forgot_student_desc">Massar student accounts do not use a personal email inbox. Ask your SVT teacher to generate a new provisional password: it will be sent via SMS to your registered phone number.</string>
+    <string name="password_forgot_student_desc">Enter the recovery email saved in your profile to receive a password reset link. If you have not confirmed an email yet, ask your teacher for a provisional password.</string>
     <string name="password_forgot_student_massar_tip">Massar Code: %1$s — Share this code with your teacher or scan the class QR code.</string>
+    <string name="field_recovery_email">Email (password recovery)</string>
+    <string name="field_recovery_email_hint">student@example.com</string>
+    <string name="field_massar_or_email">Massar number (or verified email)</string>
+    <string name="profile_add_recovery_email_hint">Add an email via Edit profile to receive a reset link if you forget your password.</string>
+    <string name="recovery_email_verification_sent">Email saved. Click the confirmation link sent to %1$s to enable email password resets.</string>
+    <string name="recovery_email_reauth_hint">Email saved to your profile. Sign in again recently if needed to confirm the address.</string>
     <string name="password_forgot_provisional_generated_title">New provisional password ready</string>
     <string name="password_forgot_provisional_notif_title">New BioTerre provisional password</string>
     <string name="password_forgot_provisional_notif_body">Provisional password (%1$s): %2$s. Sign in and update it from your profile.</string>

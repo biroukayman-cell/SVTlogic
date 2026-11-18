@@ -173,7 +173,7 @@ fun ProfileAndBadgesTab(
     teacherRoster: List<RosterStudent>,
     appUpdates: List<AppUpdateRelease>,
     isImportingRoster: Boolean,
-    onUpdateProfile: (fullName: String, phone: String, avatarUrl: String?, birthDate: String?) -> Unit,
+    onUpdateProfile: (fullName: String, phone: String, avatarUrl: String?, birthDate: String?, email: String?) -> Unit,
     onUpdateAvatarUri: (Uri) -> Unit = {},
     onChangePassword: (currentPassword: String?, newPassword: String, onResult: (Boolean, String?) -> Unit) -> Unit,
     onCreateClass: (name: String, level: String, year: String) -> Unit,
@@ -391,9 +391,16 @@ fun ProfileAndBadgesTab(
                             }
                             if (profile.email.isNotBlank()) {
                                 Text(
-                                    text = profile.email,
+                                    text = "${stringResource(id = R.string.field_recovery_email)} : ${profile.email}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else if (profile.role == "student" && !isGuestMode) {
+                                Text(
+                                    text = stringResource(id = R.string.profile_add_recovery_email_hint),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.clickable { showEditDialog = true }
                                 )
                             }
                             if (profile.phoneNumber.isNotBlank()) {
@@ -1246,8 +1253,9 @@ fun ProfileAndBadgesTab(
             currentName = profile.fullName,
             currentPhone = profile.phoneNumber,
             currentBirthDate = profile.birthDate,
-            onSave = { name, phone, birthDate ->
-                onUpdateProfile(name, phone, profile.avatarUrl, birthDate)
+            currentEmail = profile.email,
+            onSave = { name, phone, birthDate, email ->
+                onUpdateProfile(name, phone, profile.avatarUrl, birthDate, email)
                 showEditDialog = false
             },
             onDismiss = { showEditDialog = false }
@@ -2450,12 +2458,16 @@ private fun EditProfileDialog(
     currentName: String,
     currentPhone: String,
     currentBirthDate: String,
-    onSave: (String, String, String?) -> Unit,
+    currentEmail: String,
+    onSave: (String, String, String?, String?) -> Unit,
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf(currentName) }
     var phone by remember { mutableStateOf(currentPhone) }
     var birthDate by remember { mutableStateOf(currentBirthDate) }
+    var email by remember { mutableStateOf(currentEmail) }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    val invalidEmailErr = stringResource(id = R.string.auth_error_email_invalid)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2476,6 +2488,26 @@ private fun EditProfileDialog(
                         placeholder = { Text(stringResource(id = R.string.field_birth_date_hint)) },
                         singleLine = true
                     )
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = {
+                            email = it
+                            emailError = null
+                        },
+                        label = { Text(stringResource(id = R.string.field_recovery_email)) },
+                        placeholder = { Text(stringResource(id = R.string.field_recovery_email_hint)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        singleLine = true,
+                        isError = emailError != null,
+                        modifier = Modifier.testTag("edit_profile_email_input")
+                    )
+                    if (emailError != null) {
+                        Text(
+                            text = emailError!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
                 OutlinedTextField(
                     value = phone,
@@ -2488,10 +2520,23 @@ private fun EditProfileDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (name.trim().length >= 2) {
-                        onSave(name.trim(), phone.trim(), if (isStudent) birthDate.trim() else null)
+                    val cleanEmail = email.trim()
+                    if (isStudent && cleanEmail.isNotBlank() &&
+                        !android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()
+                    ) {
+                        emailError = invalidEmailErr
+                        return@Button
                     }
-                }
+                    if (name.trim().length >= 2) {
+                        onSave(
+                            name.trim(),
+                            phone.trim(),
+                            if (isStudent) birthDate.trim() else null,
+                            if (isStudent) cleanEmail else null
+                        )
+                    }
+                },
+                modifier = Modifier.testTag("edit_profile_save_button")
             ) {
                 Text(stringResource(id = R.string.profile_save))
             }

@@ -613,6 +613,15 @@ class SvtMainViewModel(
                         _optimisticEnrollment.value = enrollment
                     }
                 }
+                val cleanRecoveryEmail = email.trim()
+                if (role == "student" &&
+                    cleanRecoveryEmail.isNotBlank() &&
+                    android.util.Patterns.EMAIL_ADDRESS.matcher(cleanRecoveryEmail).matches()
+                ) {
+                    runCatching {
+                        Firebase.auth.currentUser?.verifyBeforeUpdateEmail(cleanRecoveryEmail)?.await()
+                    }
+                }
                 onComplete(true)
             } catch (e: CancellationException) {
                 throw e
@@ -629,16 +638,42 @@ class SvtMainViewModel(
         fullName: String,
         phone: String,
         avatarUrl: String?,
-        birthDate: String? = null
+        birthDate: String? = null,
+        email: String? = null,
+        uiContext: Context? = null
     ) {
         viewModelScope.launch {
             try {
+                val cleanEmail = email?.trim()
                 repository.updateProfileInfo(
                     fullName = fullName,
                     phoneNumber = phone,
                     avatarUrl = avatarUrl,
-                    birthDate = birthDate
+                    birthDate = birthDate,
+                    email = cleanEmail
                 )
+                if (!cleanEmail.isNullOrBlank() &&
+                    android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()
+                ) {
+                    val user = Firebase.auth.currentUser
+                    if (user != null && !cleanEmail.equals(user.email, ignoreCase = true)) {
+                        try {
+                            user.verifyBeforeUpdateEmail(cleanEmail).await()
+                            uiContext?.let { ctx ->
+                                _statusMessage.value = ctx.getString(
+                                    R.string.recovery_email_verification_sent,
+                                    cleanEmail
+                                )
+                            }
+                        } catch (_: FirebaseAuthRecentLoginRequiredException) {
+                            uiContext?.let { ctx ->
+                                _statusMessage.value = ctx.getString(R.string.recovery_email_reauth_hint)
+                            }
+                        } catch (_: Exception) {
+                            // Profile email already saved in Firestore; ignore transient auth verification errors
+                        }
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -804,6 +839,7 @@ class SvtMainViewModel(
     fun forgotPasswordWhileSignedIn(
         uiContext: Context,
         registeredPhone: String,
+        recoveryEmail: String = "",
         onResult: (ok: Boolean, provisionalPassword: String?, sentResetEmail: String?, error: String?) -> Unit
     ) {
         val user = Firebase.auth.currentUser
@@ -831,11 +867,17 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: FirebaseAuthRecentLoginRequiredException) {
-                val email = user.email.orEmpty()
-                if (email.isNotBlank() && !email.endsWith("@student.bioterre.svt", ignoreCase = true)) {
+                val authEmail = user.email.orEmpty()
+                val targetEmail = when {
+                    authEmail.isNotBlank() && !authEmail.endsWith("@student.bioterre.svt", ignoreCase = true) -> authEmail
+                    recoveryEmail.trim().isNotBlank() &&
+                        android.util.Patterns.EMAIL_ADDRESS.matcher(recoveryEmail.trim()).matches() -> recoveryEmail.trim()
+                    else -> ""
+                }
+                if (targetEmail.isNotBlank()) {
                     try {
-                        Firebase.auth.sendPasswordResetEmail(email).await()
-                        onResult(true, null, email, null)
+                        Firebase.auth.sendPasswordResetEmail(targetEmail).await()
+                        onResult(true, null, targetEmail, null)
                     } catch (mailEx: Exception) {
                         onResult(
                             false,

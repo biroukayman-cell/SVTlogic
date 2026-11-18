@@ -399,7 +399,7 @@ private fun AuthenticatedSvtFlow(
                             role = "student",
                             massarNumber = authDraft.massarNumber,
                             birthDate = "",
-                            email = "",
+                            email = authDraft.email,
                             establishment = "",
                             mustChangePassword = false,
                             pendingQrToken = authDraft.pendingClassQrToken,

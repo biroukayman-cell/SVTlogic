@@ -17,7 +17,7 @@ class AppUpdateUrlHelperTest {
         val raw = "  https://drive.google.com/file/d/1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm/view?usp=drivesdk  "
         val normalized = AppUpdateUrlHelper.normalizeDownloadUrl(raw)
         assertEquals(
-            "https://drive.google.com/uc?export=download&id=1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm",
+            "https://drive.google.com/uc?export=download&confirm=t&id=1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm",
             normalized
         )
     }
@@ -26,13 +26,13 @@ class AppUpdateUrlHelperTest {
     fun normalizeDownloadUrl_handlesOpenIdAndUsercontentLinks() {
         val openLink = "https://drive.google.com/open?id=1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm"
         assertEquals(
-            "https://drive.google.com/uc?export=download&id=1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm",
+            "https://drive.google.com/uc?export=download&confirm=t&id=1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm",
             AppUpdateUrlHelper.normalizeDownloadUrl(openLink)
         )
 
         val ucLink = "https://drive.google.com/uc?id=1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm&export=download"
         assertEquals(
-            "https://drive.google.com/uc?export=download&id=1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm",
+            "https://drive.google.com/uc?export=download&confirm=t&id=1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm",
             AppUpdateUrlHelper.normalizeDownloadUrl(ucLink)
         )
     }
@@ -56,7 +56,7 @@ class AppUpdateUrlHelperTest {
             "https://drive.google.com/file/d/1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm/view?usp=drivesdk"
         )
         assertEquals(
-            "https://drive.google.com/uc?export=download&id=1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm",
+            "https://drive.google.com/uc?export=download&confirm=t&id=1P_Vlha3fkyyATrCb9uT4JNZF2je1j9bm",
             driveIntent.data.toString()
         )
     }

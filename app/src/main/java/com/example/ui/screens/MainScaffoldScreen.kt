@@ -539,8 +539,8 @@ fun MainDashboardScreen(
                                 teacherRoster = teacherRoster,
                                 appUpdates = appUpdates,
                                 isImportingRoster = isImportingRoster,
-                                onUpdateProfile = { name, phone, avatar, birthDate ->
-                                    viewModel.updateProfile(name, phone, avatar, birthDate)
+                                onUpdateProfile = { name, phone, avatar, birthDate, email ->
+                                    viewModel.updateProfile(name, phone, avatar, birthDate, email, context)
                                 },
                                 onUpdateAvatarUri = { uri ->
                                     viewModel.updateProfileAvatar(context, uri)
@@ -633,7 +633,7 @@ fun MainDashboardScreen(
                                 onSendAdminVerification = { viewModel.sendOwnerAdminVerificationEmail(context) },
                                 onRefreshAdminStatus = { viewModel.refreshAuthAndProfile(context) },
                                 onForgotPassword = { cb ->
-                                    viewModel.forgotPasswordWhileSignedIn(context, profile.phoneNumber, cb)
+                                    viewModel.forgotPasswordWhileSignedIn(context, profile.phoneNumber, profile.email, cb)
                                 },
                                 onResetStudentPassword = { roster, enrollment ->
                                     viewModel.resetStudentProvisionalPassword(context, roster) { ok, newProvisional, err ->
@@ -925,7 +925,7 @@ fun GuestMainDashboardScreen(
                                 teacherRoster = emptyList(),
                                 appUpdates = emptyList(),
                                 isImportingRoster = false,
-                                onUpdateProfile = { _, _, _, _ -> onGuestBlocked() },
+                                onUpdateProfile = { _, _, _, _, _ -> onGuestBlocked() },
                                 onChangePassword = { _, _, onDone ->
                                     onDone(false, context.getString(R.string.guest_readonly_blocked_msg))
                                 },

@@ -273,7 +273,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
         phoneNumber: String,
         avatarUrl: String?,
         birthDate: String? = null,
-        mustChangePassword: Boolean? = null
+        mustChangePassword: Boolean? = null,
+        email: String? = null
     ) {
         val uid = requireUserId()
         val docRef = db.collection("users").document(uid)
@@ -290,6 +291,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
         if (mustChangePassword != null) {
             updates["mustChangePassword"] = mustChangePassword
+        }
+        if (email != null) {
+            updates["email"] = email.trim()
         }
         try {
             docRef.update(updates).await()

@@ -223,6 +223,7 @@ fun AuthScreen(
     var qrTokenInput by rememberSaveable { mutableStateOf("") }
     var qrFullName by rememberSaveable { mutableStateOf("") }
     var qrMassarInput by rememberSaveable { mutableStateOf("") }
+    var qrEmailInput by rememberSaveable { mutableStateOf("") }
     var qrPassword by rememberSaveable { mutableStateOf("") }
     var showInlineQrScanner by rememberSaveable { mutableStateOf(false) }
     var showLegalDialog by rememberSaveable { mutableStateOf(false) }
@@ -479,13 +480,16 @@ fun AuthScreen(
 
                         OutlinedTextField(
                             value = massarInput,
-                            onValueChange = { massarInput = it.uppercase(Locale.US) },
-                            label = { Text(stringResource(id = R.string.field_massar)) },
+                            onValueChange = { value ->
+                                massarInput = if (value.contains("@")) value.trim() else value.uppercase(Locale.US)
+                            },
+                            label = { Text(stringResource(id = R.string.field_massar_or_email)) },
                             placeholder = { Text(stringResource(id = R.string.field_massar_hint)) },
                             leadingIcon = { Icon(Icons.Filled.Badge, contentDescription = null) },
                             keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Characters,
-                                autoCorrectEnabled = false
+                                capitalization = KeyboardCapitalization.None,
+                                autoCorrectEnabled = false,
+                                keyboardType = KeyboardType.Email
                             ),
                             singleLine = true,
                             modifier = Modifier
@@ -530,9 +534,14 @@ fun AuthScreen(
 
                         Button(
                             onClick = {
-                                val cleanMassar = AuthSessionDraft.normalizeMassar(massarInput)
+                                val trimmedId = massarInput.trim()
+                                val isEmailLogin = trimmedId.contains("@")
+                                val cleanMassar = AuthSessionDraft.normalizeMassar(trimmedId)
                                 when {
-                                    cleanMassar.length < 4 -> {
+                                    isEmailLogin && !Patterns.EMAIL_ADDRESS.matcher(trimmedId).matches() -> {
+                                        errorMessage = localizedContext.getString(R.string.auth_error_email_invalid)
+                                    }
+                                    !isEmailLogin && cleanMassar.length < 4 -> {
                                         errorMessage = localizedContext.getString(R.string.error_massar_required)
                                     }
                                     studentPassword.length < 6 -> {
@@ -543,18 +552,23 @@ fun AuthScreen(
                                         isLoading = true
                                         coroutineScope.launch {
                                             try {
-                                                val synthEmail = AuthSessionDraft.massarToAuthEmail(cleanMassar)
+                                                val loginEmail = if (isEmailLogin) {
+                                                    trimmedId.lowercase(Locale.US)
+                                                } else {
+                                                    AuthSessionDraft.massarToAuthEmail(cleanMassar)
+                                                }
                                                 AuthSessionDraft.save(
                                                     context = activityContext,
                                                     role = "student",
-                                                    massarNumber = cleanMassar
+                                                    massarNumber = if (isEmailLogin) "" else cleanMassar,
+                                                    email = if (isEmailLogin) loginEmail else ""
                                                 )
-                                                Firebase.auth.signInWithEmailAndPassword(synthEmail, studentPassword).await()
+                                                Firebase.auth.signInWithEmailAndPassword(loginEmail, studentPassword).await()
                                                 isLoading = false
                                                 onAuthSuccess()
                                             } catch (e: Exception) {
                                                 isLoading = false
-                                                Log.e("Auth", "Student Massar sign-in failed", e)
+                                                Log.e("Auth", "Student sign-in failed", e)
                                                 errorMessage = mapFirebaseAuthError(localizedContext, e)
                                             }
                                         }
@@ -695,6 +709,19 @@ fun AuthScreen(
                         )
 
                         OutlinedTextField(
+                            value = qrEmailInput,
+                            onValueChange = { qrEmailInput = it },
+                            label = { Text(stringResource(id = R.string.field_recovery_email)) },
+                            placeholder = { Text(stringResource(id = R.string.field_recovery_email_hint)) },
+                            leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("auth_qr_email_input")
+                        )
+
+                        OutlinedTextField(
                             value = qrPassword,
                             onValueChange = { qrPassword = it },
                             label = { Text(stringResource(id = R.string.field_password)) },
@@ -721,6 +748,7 @@ fun AuthScreen(
                             onClick = {
                                 val cleanToken = QrCodeUtils.extractTokenFromScan(qrTokenInput)
                                 val cleanName = qrFullName.trim()
+                                val cleanQrEmail = qrEmailInput.trim()
                                 val enteredMassar = AuthSessionDraft.normalizeMassar(qrMassarInput)
                                 val finalMassar = if (enteredMassar.length >= 4) {
                                     enteredMassar
@@ -733,6 +761,9 @@ fun AuthScreen(
                                     }
                                     cleanName.length < 2 -> {
                                         errorMessage = localizedContext.getString(R.string.error_name_required)
+                                    }
+                                    cleanQrEmail.isNotBlank() && !Patterns.EMAIL_ADDRESS.matcher(cleanQrEmail).matches() -> {
+                                        errorMessage = localizedContext.getString(R.string.auth_error_email_invalid)
                                     }
                                     qrPassword.length < 6 -> {
                                         errorMessage = localizedContext.getString(R.string.auth_error_weak_password)
@@ -747,6 +778,7 @@ fun AuthScreen(
                                                     context = activityContext,
                                                     role = "student",
                                                     massarNumber = finalMassar,
+                                                    email = cleanQrEmail,
                                                     fullName = cleanName,
                                                     pendingClassQrToken = cleanToken
                                                 )
@@ -1236,6 +1268,7 @@ fun AccountSetupScreen(
     var fullName by remember(initialName) { mutableStateOf(initialName) }
     var birthDate by remember { mutableStateOf("") }
     var phone by remember(defaultPhone) { mutableStateOf(defaultPhone) }
+    var recoveryEmail by remember(defaultEmail) { mutableStateOf(defaultEmail) }
     var establishment by remember(defaultEstablishment) { mutableStateOf(defaultEstablishment) }
     var newPassword by remember { mutableStateOf("") }
     var confirmNewPassword by remember { mutableStateOf("") }
@@ -1246,6 +1279,7 @@ fun AccountSetupScreen(
     val phoneRequiredErr = stringResource(id = R.string.error_phone_required)
     val establishmentRequiredErr = stringResource(id = R.string.error_establishment_required)
     val birthDateRequiredErr = stringResource(id = R.string.error_birthdate_required)
+    val invalidEmailErr = stringResource(id = R.string.auth_error_email_invalid)
     val weakPassErr = stringResource(id = R.string.auth_error_weak_password)
     val mismatchPassErr = stringResource(id = R.string.auth_error_password_mismatch)
 
@@ -1405,6 +1439,19 @@ fun AccountSetupScreen(
 
                 if (resolvedRole == "student") {
                     OutlinedTextField(
+                        value = recoveryEmail,
+                        onValueChange = { recoveryEmail = it },
+                        label = { Text(stringResource(id = R.string.field_recovery_email)) },
+                        placeholder = { Text(stringResource(id = R.string.field_recovery_email_hint)) },
+                        leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("setup_email_input")
+                    )
+
+                    OutlinedTextField(
                         value = newPassword,
                         onValueChange = { newPassword = it },
                         label = { Text(stringResource(id = R.string.field_new_password_optional)) },
@@ -1445,6 +1492,7 @@ fun AccountSetupScreen(
 
                 Button(
                     onClick = {
+                        val cleanEmailInput = recoveryEmail.trim()
                         when {
                             fullName.trim().length < 2 -> validationError = nameRequiredErr
                             resolvedRole == "teacher" && phone.trim().length < 6 -> {
@@ -1455,6 +1503,11 @@ fun AccountSetupScreen(
                             }
                             resolvedRole == "student" && birthDate.trim().length < 6 -> {
                                 validationError = birthDateRequiredErr
+                            }
+                            resolvedRole == "student" &&
+                                cleanEmailInput.isNotBlank() &&
+                                !Patterns.EMAIL_ADDRESS.matcher(cleanEmailInput).matches() -> {
+                                validationError = invalidEmailErr
                             }
                             newPassword.isNotBlank() && newPassword.length < 6 -> {
                                 validationError = weakPassErr
@@ -1470,7 +1523,7 @@ fun AccountSetupScreen(
                                     resolvedRole,
                                     resolvedMassar,
                                     birthDate.trim(),
-                                    defaultEmail.trim(),
+                                    if (resolvedRole == "student") cleanEmailInput else defaultEmail.trim(),
                                     establishment.trim(),
                                     newPassword.takeIf { it.isNotBlank() }
                                 )
@@ -2604,26 +2657,74 @@ private fun StudentForgotPasswordDialog(
     initialMassar: String,
     onDismiss: () -> Unit
 ) {
-    val cleanMassar = AuthSessionDraft.normalizeMassar(initialMassar)
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val rawInitial = initialMassar.trim()
+    val cleanMassar = if (rawInitial.contains("@")) "" else AuthSessionDraft.normalizeMassar(rawInitial)
+    var emailInput by remember { mutableStateOf(if (rawInitial.contains("@")) rawInitial else "") }
+    var isSending by remember { mutableStateOf(false) }
+    var sentToEmail by remember { mutableStateOf<String?>(null) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+    val invalidEmailErr = stringResource(id = R.string.auth_error_email_invalid)
+
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSending) onDismiss() },
         title = { Text(stringResource(id = R.string.password_forgot_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Text(
                     text = stringResource(id = R.string.password_forgot_student_desc),
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                OutlinedTextField(
+                    value = emailInput,
+                    onValueChange = { emailInput = it },
+                    label = { Text(stringResource(id = R.string.field_recovery_email)) },
+                    placeholder = { Text(stringResource(id = R.string.field_recovery_email_hint)) },
+                    leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("student_forgot_email_input")
+                )
+                if (!sentToEmail.isNullOrBlank()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.password_forgot_email_sent, sentToEmail!!),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+                if (!errorMsg.isNullOrBlank()) {
+                    Text(
+                        text = errorMsg!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 if (cleanMassar.isNotBlank()) {
                     Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                         shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = stringResource(id = R.string.password_forgot_student_massar_tip, cleanMassar),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(10.dp)
                         )
                     }
@@ -2632,7 +2733,43 @@ private fun StudentForgotPasswordDialog(
         },
         confirmButton = {
             Button(
+                onClick = {
+                    val clean = emailInput.trim()
+                    if (clean.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(clean).matches()) {
+                        errorMsg = invalidEmailErr
+                        return@Button
+                    }
+                    errorMsg = null
+                    isSending = true
+                    scope.launch {
+                        try {
+                            Firebase.auth.sendPasswordResetEmail(clean).await()
+                            sentToEmail = clean
+                            isSending = false
+                        } catch (e: Exception) {
+                            isSending = false
+                            errorMsg = mapFirebaseAuthError(context, e)
+                        }
+                    }
+                },
+                enabled = !isSending,
+                modifier = Modifier.testTag("student_forgot_send_button")
+            ) {
+                if (isSending) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(stringResource(id = R.string.password_forgot_send_link))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
                 onClick = onDismiss,
+                enabled = !isSending,
                 modifier = Modifier.testTag("student_forgot_close_button")
             ) {
                 Text(stringResource(id = R.string.close))
