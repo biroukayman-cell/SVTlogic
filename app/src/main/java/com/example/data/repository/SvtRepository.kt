@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import com.example.R
+import com.example.core.AppUpdateUrlHelper
 import com.example.core.OperationType
 import com.example.core.handleFirestoreError
 import com.example.data.badges.BadgeEngine
@@ -1941,10 +1942,14 @@ class SvtRepository(private val db: FirebaseFirestore) {
         versionCode: Int,
         versionName: String,
         releaseNotes: String,
-        downloadUrl: String
+        downloadUrl: String,
+        approvedStudentIds: List<String> = emptyList(),
+        notifTitle: String = "",
+        notifBody: String = ""
     ): String {
         val uid = requireUserId()
         val updateRef = db.collection("app_updates").document()
+        val normalizedUrl = AppUpdateUrlHelper.normalizeDownloadUrl(downloadUrl)
         val payload = mapOf(
             "classId" to classId,
             "teacherId" to uid,
@@ -1952,12 +1957,36 @@ class SvtRepository(private val db: FirebaseFirestore) {
             "versionCode" to versionCode,
             "versionName" to versionName.trim(),
             "releaseNotes" to releaseNotes.trim(),
-            "downloadUrl" to downloadUrl.trim(),
+            "downloadUrl" to normalizedUrl,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
         try {
-            updateRef.set(payload).await()
+            val cleanNotifTitle = notifTitle.trim().take(200)
+            val cleanNotifBody = notifBody.trim().take(1000)
+            val targets = approvedStudentIds.distinct()
+            if (targets.isNotEmpty() && cleanNotifTitle.isNotEmpty() && cleanNotifBody.isNotEmpty()) {
+                val batch = db.batch()
+                batch.set(updateRef, payload)
+                for (studentId in targets.take(400)) {
+                    val notifRef = db.collection("student_notifications").document()
+                    batch.set(
+                        notifRef,
+                        mapOf(
+                            "studentId" to studentId,
+                            "teacherId" to uid,
+                            "type" to "announcement",
+                            "title" to cleanNotifTitle,
+                            "body" to cleanNotifBody,
+                            "isRead" to false,
+                            "createdAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+                batch.commit().await()
+            } else {
+                updateRef.set(payload).await()
+            }
             return updateRef.id
         } catch (e: CancellationException) {
             throw e

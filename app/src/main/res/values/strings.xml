@@ -326,6 +326,12 @@
     <string name="app_update_invalid_url">Veuillez saisir un lien HTTPS valide vers le fichier APK ou la page de téléchargement.</string>
     <string name="app_update_invalid_version">Veuillez saisir un numéro de build supérieur à 0 et un nom de version.</string>
     <string name="app_update_published_success">Mise à jour v%1$s publiée pour la classe</string>
+    <string name="app_update_published_classes_success">Mise à jour v%1$s publiée pour %2$d classe(s)</string>
+    <string name="app_update_drive_auto_converted">Lien Google Drive détecté : converti automatiquement en téléchargement direct.</string>
+    <string name="app_update_drive_folder_error">Ce lien pointe vers un dossier Drive. Partagez directement le fichier .apk.</string>
+    <string name="app_update_drive_sharing_hint">Sur Drive, partagez le fichier .apk avec « Tous les utilisateurs disposant du lien (Lecteur) ».</string>
+    <string name="app_update_select_classes_label">Classes concernées</string>
+    <string name="app_update_notif_title">Mise à jour BioTerre SVT v%1$s</string>
     <string name="resource_video_summary">Suivi : %1$d / %2$d élève(s) • Moy. %3$d%%</string>
 
     <!-- Thèmes et apparence -->

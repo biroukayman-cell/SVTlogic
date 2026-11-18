@@ -326,6 +326,12 @@
     <string name="app_update_invalid_url">يرجى إدخال رابط HTTPS صالح لملف APK أو لصفحة التحميل.</string>
     <string name="app_update_invalid_version">يرجى إدخال رقم بناء أكبر من 0 واسم للإصدار.</string>
     <string name="app_update_published_success">تم نشر التحديث v%1$s للقسم</string>
+    <string name="app_update_published_classes_success">تم نشر التحديث v%1$s لـ %2$d قسم/أقسام</string>
+    <string name="app_update_drive_auto_converted">تم اكتشاف رابط Google Drive: سيتم تحويله تلقائياً إلى تحميل مباشر.</string>
+    <string name="app_update_drive_folder_error">هذا الرابط يشير إلى مجلد في Drive. يرجى مشاركة رابط ملف .apk مباشرة.</string>
+    <string name="app_update_drive_sharing_hint">في Google Drive، فعّل المشاركة «أي شخص لديه الرابط (عارض)» لملف APK.</string>
+    <string name="app_update_select_classes_label">الأقسام المعنية</string>
+    <string name="app_update_notif_title">تحديث BioTerre SVT v%1$s</string>
     <string name="resource_video_summary">المتابعة: %1$d / %2$d تلميذ • المتوسط %3$d%%</string>
 
     <!-- المظهر والألوان -->

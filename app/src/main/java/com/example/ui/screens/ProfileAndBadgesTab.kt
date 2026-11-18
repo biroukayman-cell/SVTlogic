@@ -129,6 +129,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import com.example.BuildConfig
 import com.example.R
 import com.example.core.AppThemePalette
+import com.example.core.AppUpdateUrlHelper
 import com.example.core.ExcelParseErrorReason
 import com.example.core.ExcelParseResult
 import com.example.core.ExcelRosterParser
@@ -186,6 +187,9 @@ fun ProfileAndBadgesTab(
     onDeleteRosterStudent: (RosterStudent) -> Unit,
     onExportRosterPdf: (SvtClass, List<RosterStudent>) -> Unit,
     onPublishAppUpdate: (classId: String, versionCode: Int, versionName: String, releaseNotes: String, downloadUrl: String) -> Unit,
+    onPublishAppUpdateToClasses: (classIds: List<String>, versionCode: Int, versionName: String, releaseNotes: String, downloadUrl: String) -> Unit = { ids, vCode, vName, notes, url ->
+        ids.forEach { id -> onPublishAppUpdate(id, vCode, vName, notes, url) }
+    },
     onDeleteAppUpdate: (String) -> Unit,
     onUpdateClassLabDomains: (classId: String, domains: List<String>) -> Unit,
     onResetStudentDevice: (studentId: String) -> Unit,
@@ -1415,8 +1419,8 @@ fun ProfileAndBadgesTab(
         PublishAppUpdateDialog(
             teacherClasses = teacherClasses,
             initialClassId = defaultClassId,
-            onPublish = { clsId, vCode, vName, notes, url ->
-                onPublishAppUpdate(clsId, vCode, vName, notes, url)
+            onPublish = { clsIds, vCode, vName, notes, url ->
+                onPublishAppUpdateToClasses(clsIds, vCode, vName, notes, url)
                 showPublishUpdateDialog = false
             },
             onDismiss = { showPublishUpdateDialog = false }
@@ -2142,14 +2146,23 @@ private fun AppUpdatesCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PublishAppUpdateDialog(
     teacherClasses: List<SvtClass>,
     initialClassId: String,
-    onPublish: (classId: String, versionCode: Int, versionName: String, releaseNotes: String, downloadUrl: String) -> Unit,
+    onPublish: (classIds: List<String>, versionCode: Int, versionName: String, releaseNotes: String, downloadUrl: String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var selectedClassId by remember { mutableStateOf(initialClassId) }
+    var selectedClassIds by remember(teacherClasses, initialClassId) {
+        mutableStateOf(
+            if (teacherClasses.isNotEmpty()) {
+                teacherClasses.map { it.id }.toSet()
+            } else {
+                setOfNotNull(initialClassId.takeIf { it.isNotBlank() })
+            }
+        )
+    }
     var versionCodeText by remember { mutableStateOf((BuildConfig.VERSION_CODE + 1).toString()) }
     var versionName by remember { mutableStateOf("1.${BuildConfig.VERSION_CODE + 1}") }
     var releaseNotes by remember { mutableStateOf("") }
@@ -2158,6 +2171,10 @@ private fun PublishAppUpdateDialog(
 
     val invalidUrlMsg = stringResource(id = R.string.app_update_invalid_url)
     val invalidVersionMsg = stringResource(id = R.string.app_update_invalid_version)
+    val driveFolderErrorMsg = stringResource(id = R.string.app_update_drive_folder_error)
+    val minOneClassErrorMsg = stringResource(id = R.string.quiz_min_one_class_error)
+    val isDriveFolder = AppUpdateUrlHelper.isGoogleDriveFolderUrl(downloadUrl)
+    val isDriveFileDetected = !isDriveFolder && AppUpdateUrlHelper.extractGoogleDriveFileId(downloadUrl) != null
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2170,11 +2187,35 @@ private fun PublishAppUpdateDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (teacherClasses.size > 1) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(teacherClasses, key = { it.id }) { cls ->
+                    Text(
+                        text = stringResource(id = R.string.app_update_select_classes_label),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    val allIds = teacherClasses.map { it.id }.toSet()
+                    val allSelected = allIds.isNotEmpty() && selectedClassIds.containsAll(allIds)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = allSelected,
+                            onClick = {
+                                selectedClassIds = if (allSelected) emptySet() else allIds
+                            },
+                            label = { Text(stringResource(id = R.string.quiz_select_all_classes)) }
+                        )
+                        teacherClasses.forEach { cls ->
+                            val isSelected = cls.id in selectedClassIds
                             FilterChip(
-                                selected = selectedClassId == cls.id,
-                                onClick = { selectedClassId = cls.id },
+                                selected = isSelected,
+                                onClick = {
+                                    selectedClassIds = if (isSelected) {
+                                        selectedClassIds - cls.id
+                                    } else {
+                                        selectedClassIds + cls.id
+                                    }
+                                },
                                 label = { Text(cls.name) }
                             )
                         }
@@ -2195,11 +2236,34 @@ private fun PublishAppUpdateDialog(
                 )
                 OutlinedTextField(
                     value = downloadUrl,
-                    onValueChange = { downloadUrl = it },
+                    onValueChange = {
+                        downloadUrl = it
+                        localError = null
+                    },
                     label = { Text(stringResource(id = R.string.app_update_url_label)) },
-                    placeholder = { Text("https://github.com/.../releases/latest") },
+                    placeholder = { Text("https://drive.google.com/file/d/.../view") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    singleLine = true
+                    singleLine = true,
+                    isError = isDriveFolder
+                )
+                if (isDriveFolder) {
+                    Text(
+                        text = driveFolderErrorMsg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else if (isDriveFileDetected) {
+                    Text(
+                        text = stringResource(id = R.string.app_update_drive_auto_converted),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SvtSuccess,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                Text(
+                    text = stringResource(id = R.string.app_update_drive_sharing_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
                     value = releaseNotes,
@@ -2219,18 +2283,20 @@ private fun PublishAppUpdateDialog(
             Button(
                 onClick = {
                     val vCode = versionCodeText.toIntOrNull() ?: 0
-                    val cleanUrl = downloadUrl.trim()
+                    val normalizedUrl = AppUpdateUrlHelper.normalizeDownloadUrl(downloadUrl)
                     when {
+                        selectedClassIds.isEmpty() -> localError = minOneClassErrorMsg
+                        isDriveFolder -> localError = driveFolderErrorMsg
                         vCode < 1 || versionName.trim().isEmpty() -> localError = invalidVersionMsg
-                        !cleanUrl.startsWith("https://", ignoreCase = true) || cleanUrl.length < 10 ->
+                        !normalizedUrl.startsWith("https://", ignoreCase = true) || normalizedUrl.length < 10 ->
                             localError = invalidUrlMsg
                         else -> {
                             localError = null
-                            onPublish(selectedClassId, vCode, versionName.trim(), releaseNotes.trim(), cleanUrl)
+                            onPublish(selectedClassIds.toList(), vCode, versionName.trim(), releaseNotes.trim(), normalizedUrl)
                         }
                     }
                 },
-                enabled = selectedClassId.isNotBlank()
+                enabled = teacherClasses.isNotEmpty()
             ) {
                 Text(stringResource(id = R.string.announcement_publish))
             }
@@ -2244,10 +2310,7 @@ private fun PublishAppUpdateDialog(
 }
 
 internal fun openAppUpdateLink(context: Context, url: String) {
-    try {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url.trim()))
-        context.startActivity(intent)
-    } catch (_: Exception) {
+    if (!AppUpdateUrlHelper.openUpdateUrl(context, url)) {
         Toast.makeText(
             context,
             context.getString(R.string.app_update_invalid_url),

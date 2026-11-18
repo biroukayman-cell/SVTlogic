@@ -597,6 +597,17 @@ fun MainDashboardScreen(
                                         url
                                     )
                                 },
+                                onPublishAppUpdateToClasses = { clsIds, vCode, vName, notes, url ->
+                                    viewModel.publishAppUpdateToClasses(
+                                        context,
+                                        clsIds,
+                                        profile.fullName,
+                                        vCode,
+                                        vName,
+                                        notes,
+                                        url
+                                    )
+                                },
                                 onDeleteAppUpdate = { updateId ->
                                     viewModel.deleteAppUpdate(updateId)
                                 },

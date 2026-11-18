@@ -326,6 +326,12 @@
     <string name="app_update_invalid_url">Please enter a valid HTTPS link to the APK file or release page.</string>
     <string name="app_update_invalid_version">Please enter a build number greater than 0 and a version name.</string>
     <string name="app_update_published_success">Update v%1$s published to the class</string>
+    <string name="app_update_published_classes_success">Update v%1$s published to %2$d class(es)</string>
+    <string name="app_update_drive_auto_converted">Google Drive link detected: automatically converted to direct download.</string>
+    <string name="app_update_drive_folder_error">This link points to a Drive folder. Share the .apk file link directly.</string>
+    <string name="app_update_drive_sharing_hint">On Google Drive, set sharing to "Anyone with the link (Viewer)" on the .apk file.</string>
+    <string name="app_update_select_classes_label">Target classes</string>
+    <string name="app_update_notif_title">BioTerre SVT Update v%1$s</string>
     <string name="resource_video_summary">Tracking: %1$d / %2$d student(s) • Avg %3$d%%</string>
 
     <!-- Themes & Appearance -->

@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.R
 import com.example.core.AppLanguage
+import com.example.core.AppUpdateUrlHelper
 import com.example.core.AuthSessionDraft
 import com.example.core.AvatarStorageHelper
 import com.example.core.ConnectivityObserver
@@ -1964,7 +1965,36 @@ class SvtMainViewModel(
         releaseNotes: String,
         downloadUrl: String
     ) {
-        val cleanUrl = downloadUrl.trim()
+        publishAppUpdateToClasses(
+            uiContext = uiContext,
+            classIds = listOf(classId),
+            teacherName = teacherName,
+            versionCode = versionCode,
+            versionName = versionName,
+            releaseNotes = releaseNotes,
+            downloadUrl = downloadUrl
+        )
+    }
+
+    fun publishAppUpdateToClasses(
+        uiContext: Context,
+        classIds: List<String>,
+        teacherName: String,
+        versionCode: Int,
+        versionName: String,
+        releaseNotes: String,
+        downloadUrl: String
+    ) {
+        val targetClassIds = classIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (targetClassIds.isEmpty()) {
+            _actionError.value = uiContext.getString(R.string.quiz_min_one_class_error)
+            return
+        }
+        if (AppUpdateUrlHelper.isGoogleDriveFolderUrl(downloadUrl)) {
+            _actionError.value = uiContext.getString(R.string.app_update_drive_folder_error)
+            return
+        }
+        val cleanUrl = AppUpdateUrlHelper.normalizeDownloadUrl(downloadUrl)
         if (!cleanUrl.startsWith("https://", ignoreCase = true) || cleanUrl.length < 10) {
             _actionError.value = uiContext.getString(R.string.app_update_invalid_url)
             return
@@ -1973,17 +2003,39 @@ class SvtMainViewModel(
             _actionError.value = uiContext.getString(R.string.app_update_invalid_version)
             return
         }
+        val enrollmentsSnapshot = teacherEnrollments.value
+        val cleanVersion = versionName.trim()
+        val notifTitle = uiContext.getString(R.string.app_update_notif_title, cleanVersion)
+        val notifBody = releaseNotes.trim().ifBlank {
+            uiContext.getString(R.string.app_update_available_title, cleanVersion, versionCode)
+        }
         viewModelScope.launch {
+            var publishedCount = 0
             try {
-                repository.publishAppUpdate(
-                    classId = classId,
-                    teacherName = teacherName,
-                    versionCode = versionCode,
-                    versionName = versionName,
-                    releaseNotes = releaseNotes,
-                    downloadUrl = cleanUrl
-                )
-                _statusMessage.value = uiContext.getString(R.string.app_update_published_success, versionName.trim())
+                for (targetClassId in targetClassIds) {
+                    val approvedIds = enrollmentsSnapshot
+                        .filter { it.classId == targetClassId && it.status == "approved" }
+                        .map { it.studentId }
+                    repository.publishAppUpdate(
+                        classId = targetClassId,
+                        teacherName = teacherName,
+                        versionCode = versionCode,
+                        versionName = cleanVersion,
+                        releaseNotes = releaseNotes,
+                        downloadUrl = cleanUrl,
+                        approvedStudentIds = approvedIds,
+                        notifTitle = notifTitle,
+                        notifBody = notifBody
+                    )
+                    publishedCount++
+                }
+                if (publishedCount > 0) {
+                    _statusMessage.value = if (publishedCount == 1) {
+                        uiContext.getString(R.string.app_update_published_success, cleanVersion)
+                    } else {
+                        uiContext.getString(R.string.app_update_published_classes_success, cleanVersion, publishedCount)
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
