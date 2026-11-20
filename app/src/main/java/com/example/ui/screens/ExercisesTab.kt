@@ -2,6 +2,19 @@ package com.example.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +53,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
@@ -70,6 +84,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -84,6 +99,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.core.AppLanguage
+import com.example.core.AvatarStorageHelper
 import com.example.core.ExternalAiParsedQuiz
 import com.example.core.ExternalAiQuizHelper
 import com.example.core.QrCodeUtils
@@ -93,6 +109,7 @@ import com.example.data.model.QuizAttempt
 import com.example.data.model.QuizQuestion
 import com.example.data.model.SvtClass
 import com.example.data.svt.SvtKnowledgeCatalog
+import com.example.ui.components.QuizQuestionImageBanner
 import com.example.ui.components.SvtEmptyStateCard
 import com.example.ui.components.SvtHeroBannerCard
 import com.example.ui.theme.SvtCoralError
@@ -102,6 +119,7 @@ import com.example.ui.theme.SvtSuccess
 import com.example.ui.theme.SvtWarning
 import com.example.ui.viewmodel.AiQuizState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -136,6 +154,7 @@ fun ExercisesTab(
         onDone: (QuizAttempt) -> Unit
     ) -> Unit,
     onDeleteQuiz: (Quiz) -> Unit = {},
+    onOpenQcmResults: (() -> Unit)? = null,
     currentLanguage: AppLanguage = AppLanguage.FR,
     isGuestMode: Boolean = false,
     onGuestBlocked: () -> Unit = {}
@@ -232,6 +251,16 @@ fun ExercisesTab(
                             Icon(Icons.Filled.Psychology, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text(stringResource(id = R.string.quiz_external_ai_button))
+                        }
+                        if (onOpenQcmResults != null) {
+                            OutlinedButton(
+                                onClick = onOpenQcmResults,
+                                modifier = Modifier.testTag("open_teacher_qcm_results_button")
+                            ) {
+                                Icon(Icons.Filled.BarChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(id = R.string.quiz_view_student_results_btn))
+                            }
                         }
                     }
                 }
@@ -661,20 +690,50 @@ private fun TimedQuizPlayerDialog(
     var selectedArray by rememberSaveable(quiz.id) { mutableStateOf(IntArray(questions.size) { -1 }) }
     var perQuestionArray by rememberSaveable(quiz.id) { mutableStateOf(LongArray(questions.size) { 0L }) }
     var totalSeconds by rememberSaveable(quiz.id) { mutableLongStateOf(0L) }
+    var questionElapsedMillis by remember(quiz.id, currentIndex) {
+        mutableLongStateOf(perQuestionArray.getOrElse(currentIndex) { 0L } * 1000L)
+    }
 
     LaunchedEffect(quiz.id, currentIndex) {
+        var tickCount = 0
         while (true) {
-            delay(1000L)
-            totalSeconds += 1L
-            if (currentIndex in perQuestionArray.indices) {
-                val copy = perQuestionArray.copyOf()
-                copy[currentIndex] = copy[currentIndex] + 1L
-                perQuestionArray = copy
+            delay(100L)
+            questionElapsedMillis += 100L
+            tickCount += 1
+            if (tickCount % 10 == 0) {
+                totalSeconds += 1L
+                if (currentIndex in perQuestionArray.indices) {
+                    val copy = perQuestionArray.copyOf()
+                    copy[currentIndex] = copy[currentIndex] + 1L
+                    perQuestionArray = copy
+                }
             }
         }
     }
 
     val currentQ = questions.getOrNull(currentIndex) ?: return
+    val animatedQuestionProgress by animateFloatAsState(
+        targetValue = (currentIndex + 1).toFloat() / questions.size.coerceAtLeast(1),
+        animationSpec = tween(durationMillis = 360),
+        label = "quiz_question_progress"
+    )
+    // Smooth continuous per-question pace bar (45s target pace per question)
+    val paceTargetMs = 45_000f
+    val rawPaceFraction = (questionElapsedMillis / paceTargetMs).coerceIn(0f, 1f)
+    val animatedTimerProgress by animateFloatAsState(
+        targetValue = rawPaceFraction,
+        animationSpec = tween(durationMillis = 120, easing = LinearEasing),
+        label = "quiz_timer_pace"
+    )
+    val timerBarColor by animateColorAsState(
+        targetValue = when {
+            rawPaceFraction < 0.6f -> SvtEmeraldPrimary
+            rawPaceFraction < 0.85f -> SvtWarning
+            else -> SvtCoralError
+        },
+        animationSpec = tween(durationMillis = 300),
+        label = "quiz_timer_color"
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -728,70 +787,100 @@ private fun TimedQuizPlayerDialog(
                     }
                 }
                 LinearProgressIndicator(
-                    progress = { (currentIndex + 1).toFloat() / questions.size.coerceAtLeast(1) },
+                    progress = { animatedQuestionProgress },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(6.dp)
                         .clip(RoundedCornerShape(4.dp))
                 )
+                LinearProgressIndicator(
+                    progress = { animatedTimerProgress },
+                    color = timerBarColor,
+                    trackColor = timerBarColor.copy(alpha = 0.18f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .testTag("quiz_timer_pace_bar")
+                )
             }
         },
         text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = currentQ.questionText,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                currentQ.options.forEachIndexed { optIdx, optionText ->
-                    val isSelected = selectedArray.getOrElse(currentIndex) { -1 } == optIdx
-                    Surface(
-                        shape = MaterialTheme.shapes.medium,
-                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.medium)
-                            .border(
-                                width = if (isSelected) 1.5.dp else 0.dp,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                shape = MaterialTheme.shapes.medium
-                            )
-                            .clickable {
-                                if (isGuestMode) {
-                                    onGuestBlocked()
-                                } else {
-                                    val copy = selectedArray.copyOf()
-                                    copy[currentIndex] = optIdx
-                                    selectedArray = copy
-                                }
-                            }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = {
+            AnimatedContent(
+                targetState = currentIndex,
+                transitionSpec = {
+                    val forward = targetState >= initialState
+                    (slideInHorizontally(animationSpec = tween(280)) { w -> if (forward) w / 2 else -w / 2 } +
+                        fadeIn(animationSpec = tween(260))) togetherWith
+                        (slideOutHorizontally(animationSpec = tween(220)) { w -> if (forward) -w / 2 else w / 2 } +
+                            fadeOut(animationSpec = tween(200)))
+                },
+                label = "quiz_question_transition"
+            ) { animatedIdx ->
+                val displayQ = questions.getOrNull(animatedIdx) ?: currentQ
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (displayQ.imageUrl.isNotBlank()) {
+                        QuizQuestionImageBanner(
+                            imageUrl = displayQ.imageUrl,
+                            contentDescription = stringResource(id = R.string.quiz_question_image_desc),
+                            modifier = Modifier.testTag("quiz_question_image_$animatedIdx")
+                        )
+                    }
+                    Text(
+                        text = displayQ.questionText,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    displayQ.options.forEachIndexed { optIdx, optionText ->
+                        val isSelected = selectedArray.getOrElse(animatedIdx) { -1 } == optIdx
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.medium)
+                                .border(
+                                    width = if (isSelected) 1.5.dp else 0.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                    shape = MaterialTheme.shapes.medium
+                                )
+                                .clickable {
                                     if (isGuestMode) {
                                         onGuestBlocked()
                                     } else {
                                         val copy = selectedArray.copyOf()
-                                        copy[currentIndex] = optIdx
+                                        copy[animatedIdx] = optIdx
                                         selectedArray = copy
                                     }
                                 }
-                            )
-                            Text(
-                                text = optionText,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = {
+                                        if (isGuestMode) {
+                                            onGuestBlocked()
+                                        } else {
+                                            val copy = selectedArray.copyOf()
+                                            copy[animatedIdx] = optIdx
+                                            selectedArray = copy
+                                        }
+                                    }
+                                )
+                                Text(
+                                    text = optionText,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
                         }
                     }
                 }
@@ -823,6 +912,20 @@ private fun TimedQuizPlayerDialog(
                     enabled = isGuestMode || hasSelection
                 ) {
                     Text(stringResource(id = R.string.quiz_finish))
+                }
+            }
+        },
+        dismissButton = {
+            if (currentIndex > 0) {
+                TextButton(
+                    onClick = { currentIndex -= 1 },
+                    modifier = Modifier.testTag("quiz_previous_button")
+                ) {
+                    Text(stringResource(id = R.string.quiz_previous))
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(id = R.string.cancel))
                 }
             }
         }
@@ -903,6 +1006,13 @@ private fun QuizResultDetailDialog(
                                 )
                             }
                             if (q != null) {
+                                if (q.imageUrl.isNotBlank()) {
+                                    QuizQuestionImageBanner(
+                                        imageUrl = q.imageUrl,
+                                        contentDescription = stringResource(id = R.string.quiz_question_image_desc),
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+                                }
                                 Text(q.questionText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 val chosen = q.options.getOrNull(rec.selectedIndex) ?: "-"
                                 val correct = q.options.getOrNull(q.correctIndex) ?: "-"
@@ -1690,11 +1800,16 @@ private fun ManualCreateQuizDialog(
     ) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var title by remember(initialDraft) { mutableStateOf(initialDraft?.title.orEmpty()) }
     var chapter by remember(initialChapter) { mutableStateOf(initialChapter) }
     var desc by remember(initialDraft) { mutableStateOf(initialDraft?.description.orEmpty()) }
     var isDownloadable by remember { mutableStateOf(true) }
     var qText by remember { mutableStateOf("") }
+    var qImageUrl by remember { mutableStateOf("") }
+    var isProcessingImage by remember { mutableStateOf(false) }
+    var imagePickError by remember { mutableStateOf<String?>(null) }
     var opt1 by remember { mutableStateOf("") }
     var opt2 by remember { mutableStateOf("") }
     var opt3 by remember { mutableStateOf("") }
@@ -1716,6 +1831,24 @@ private fun ManualCreateQuizDialog(
                 else -> emptySet()
             }
         )
+    }
+
+    val questionImagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            isProcessingImage = true
+            imagePickError = null
+            coroutineScope.launch {
+                val res = AvatarStorageHelper.encodeQuizQuestionImage(context, uri)
+                isProcessingImage = false
+                res.onSuccess { encoded ->
+                    qImageUrl = encoded
+                }.onFailure { err ->
+                    imagePickError = err.message ?: context.getString(R.string.quiz_question_image_error)
+                }
+            }
+        }
     }
 
     AlertDialog(
@@ -1791,13 +1924,21 @@ private fun ManualCreateQuizDialog(
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "${idx + 1}. ${existingQ.questionText}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "${idx + 1}. ${existingQ.questionText}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    if (existingQ.imageUrl.isNotBlank()) {
+                                        Text(
+                                            text = stringResource(id = R.string.quiz_question_has_image_badge),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
                                 IconButton(
                                     onClick = { questionsList.removeAt(idx) },
                                     modifier = Modifier.testTag("manual_remove_question_$idx")
@@ -1821,6 +1962,90 @@ private fun ManualCreateQuizDialog(
                     label = { Text(stringResource(id = R.string.quiz_question_text)) },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // Optional QCM question image attachment
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.quiz_question_image_optional),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (qImageUrl.isNotBlank()) {
+                            QuizQuestionImageBanner(
+                                imageUrl = qImageUrl,
+                                contentDescription = stringResource(id = R.string.quiz_question_image_desc)
+                            )
+                        }
+                        if (isProcessingImage) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Text(
+                                    text = stringResource(id = R.string.quiz_question_image_loading),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        if (!imagePickError.isNullOrBlank()) {
+                            Text(
+                                text = imagePickError!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    questionImagePicker.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                                enabled = !isProcessingImage,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("manual_question_pick_image_btn")
+                            ) {
+                                Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(
+                                        id = if (qImageUrl.isBlank()) R.string.quiz_question_add_image
+                                        else R.string.quiz_question_change_image
+                                    ),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (qImageUrl.isNotBlank()) {
+                                OutlinedButton(
+                                    onClick = {
+                                        qImageUrl = ""
+                                        imagePickError = null
+                                    },
+                                    modifier = Modifier.testTag("manual_question_remove_image_btn")
+                                ) {
+                                    Icon(Icons.Filled.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(stringResource(id = R.string.quiz_question_remove_image))
+                                }
+                            }
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = opt1,
                     onValueChange = { opt1 = it },
@@ -1865,10 +2090,13 @@ private fun ManualCreateQuizDialog(
                                     questionText = qText.trim(),
                                     options = opts,
                                     correctIndex = correctIdx.coerceIn(0, opts.lastIndex),
-                                    explanation = explanation.trim()
+                                    explanation = explanation.trim(),
+                                    imageUrl = qImageUrl
                                 )
                             )
                             qText = ""
+                            qImageUrl = ""
+                            imagePickError = null
                             opt1 = ""
                             opt2 = ""
                             opt3 = ""
@@ -1895,7 +2123,8 @@ private fun ManualCreateQuizDialog(
                                 questionText = qText.trim(),
                                 options = pendingOpts,
                                 correctIndex = correctIdx.coerceIn(0, pendingOpts.lastIndex),
-                                explanation = explanation.trim()
+                                explanation = explanation.trim(),
+                                imageUrl = qImageUrl
                             )
                         )
                     }
@@ -1910,7 +2139,7 @@ private fun ManualCreateQuizDialog(
                         )
                     }
                 },
-                enabled = title.trim().length >= 2 && hasAtLeastOneQuestion && selectedClassIds.isNotEmpty(),
+                enabled = !isProcessingImage && title.trim().length >= 2 && hasAtLeastOneQuestion && selectedClassIds.isNotEmpty(),
                 modifier = Modifier.testTag("manual_publish_button")
             ) {
                 Text(stringResource(id = R.string.quiz_publish_classes_count, selectedClassIds.size))

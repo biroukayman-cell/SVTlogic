@@ -942,6 +942,9 @@ class OfflineStorageManager(
                     put("options", optsArr)
                     put("correctIndex", q.correctIndex)
                     put("explanation", q.explanation)
+                    if (q.imageUrl.isNotBlank()) {
+                        put("imageUrl", q.imageUrl)
+                    }
                 }
             )
         }
@@ -972,7 +975,8 @@ class OfflineStorageManager(
                     questionText = qObj.getString("questionText"),
                     options = opts,
                     correctIndex = qObj.getInt("correctIndex"),
-                    explanation = qObj.optString("explanation")
+                    explanation = qObj.optString("explanation"),
+                    imageUrl = qObj.optString("imageUrl", "")
                 )
             )
         }

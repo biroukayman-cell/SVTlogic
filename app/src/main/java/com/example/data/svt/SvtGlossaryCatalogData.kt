@@ -559,6 +559,344 @@ internal object SvtGlossaryCatalogData {
                 ar = "خزانات الكربون: المحيطات، الغابات والصخور الكلسية"
             ),
             keywords = listOf("carbone", "effet de serre", "co2", "climat", "eutrophisation", "دورة الكربون", "الاحتباس الحراري")
+        ),
+
+        // --- Enrichissement complémentaire multi-domaines SVT ---
+        SvtGlossaryEntry(
+            id = "crossing_over",
+            domain = SvtDomain.CELL_GENETICS,
+            term = LocalizedSvtText("Brassage intrachromosomique (Crossing-over)", "Crossing-Over (Intrachromosomal)", "التخليط الضمصبغي (العبور الصبغي)"),
+            definition = LocalizedSvtText(
+                fr = "Échange réciproque de segments de chromatides entre chromosomes homologues appariés en prophase I de méiose.",
+                en = "Reciprocal exchange of chromatid segments between paired homologous chromosomes during prophase I of meiosis.",
+                ar = "تبادل متماثل لقطع صبيغية بين الصبغيات المتماثلة خلال المرحلة التمهيدية I من الانقسام الاختزالي."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Crée de nouvelles combinaisons alléliques sur un même chromosome (chiasmas)",
+                en = "Generates recombinant chromosomes carrying new allele combinations (chiasmata)",
+                ar = "ينتج صبغيات جديدة التركيب عبر تشكل التصالبات الصبغية"
+            ),
+            keywords = listOf("crossing-over", "brassage", "chiasma", "prophase", "recombinaison", "العبور الصبغي", "التخليط")
+        ),
+        SvtGlossaryEntry(
+            id = "point_mutation",
+            domain = SvtDomain.CELL_GENETICS,
+            term = LocalizedSvtText("Mutation ponctuelle (Faux-sens, Non-sens, Silencieuse)", "Point Mutation (Missense, Nonsense, Silent)", "الطفرة النقطية"),
+            definition = LocalizedSvtText(
+                fr = "Modification aléatoire et héréditaire de la séquence d'ADN affectant un seul nucléotide (substitution, délétion ou insertion).",
+                en = "Random heritable alteration of a single DNA nucleotide via substitution, deletion, or insertion.",
+                ar = "تغير مفاجئ ووراثي يصيب نيكليوتيداً واحداً في متتالية ADN (استبدال، إضافة أو ضياع)."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Délétion/insertion provoquent souvent un décalage du cadre de lecture",
+                en = "Deletions or insertions often trigger a reading frameshift",
+                ar = "الإضافة والضياع يسببان غالباً إزاحة إطار القراءة"
+            ),
+            keywords = listOf("mutation", "faux-sens", "non-sens", "silencieuse", "deletion", "insertion", "الطفرة")
+        ),
+        SvtGlossaryEntry(
+            id = "karyotype_entry",
+            domain = SvtDomain.CELL_GENETICS,
+            term = LocalizedSvtText("Caryotype & Formule chromosomique", "Karyotype & Chromosome Formula", "الخريطة الصبغية والصيغة الصبغية"),
+            definition = LocalizedSvtText(
+                fr = "Représentation ordonnée par taille et position du centromère de l'ensemble des chromosomes métaphasiques d'une cellule.",
+                en = "Ordered display of all metaphase chromosomes of a cell arranged by size and centromere position.",
+                ar = "تمثيل مرتب حسب القد وموضع الجزيء المركزي لمجموع صبغيات خلية في المرحلة الاستوائية."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Espèce humaine : 2n = 46 = 44 autosomes + XX ou XY",
+                en = "Humans: 2n = 46 = 44 autosomes + XX or XY",
+                ar = "عند الإنسان: 2n = 46 = 44 صبغي لاجنسي + XX أو XY"
+            ),
+            keywords = listOf("caryotype", "chromosome", "autosome", "diploidie", "trisomie", "الخريطة الصبغية")
+        ),
+        SvtGlossaryEntry(
+            id = "semi_conservative_rep",
+            domain = SvtDomain.CELL_GENETICS,
+            term = LocalizedSvtText("Réplication semi-conservative", "Semi-Conservative Replication", "التضاعف نصف المحافظ"),
+            definition = LocalizedSvtText(
+                fr = "Mécanisme de duplication de l'ADN durant la phase S : chaque nouvelle molécule conserve un brin parental et un brin néoformé.",
+                en = "DNA duplication in S phase where each daughter duplex keeps one parental strand paired with one newly synthesized strand.",
+                ar = "آلية تضاعف الـ ADN خلال طور S حيث تحتفظ كل جزيئة جديدة بلولب أصلي وآخر حديث التركيب."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Assurée par l'ADN polymérase au niveau des yeux de réplication",
+                en = "Catalyzed by DNA polymerase at replication bubbles",
+                ar = "يتم بواسطة أنزيم ADN بوليميراز على مستوى عيون التضاعف"
+            ),
+            keywords = listOf("replication", "adn polymerase", "phase s", "semi-conservative", "التضاعف")
+        ),
+        SvtGlossaryEntry(
+            id = "inflammatory_reaction",
+            domain = SvtDomain.IMMUNITY,
+            term = LocalizedSvtText("Réaction inflammatoire aiguë", "Acute Inflammatory Response", "الاستجابة الالتهابية الحادة"),
+            definition = LocalizedSvtText(
+                fr = "Réponse immunitaire innée locale suite à une lésion ou infection, marquée par vasodilatation, diapédèse des leucocytes et phagocytose.",
+                en = "Local innate immune response triggered by tissue injury or infection featuring vasodilation, leukocyte diapedesis, and phagocytosis.",
+                ar = "استجابة مناعية طبيعية محلية بعد جرح أو خمج، تتميز بتمدد الشعيرات وانسلال الكريات البيضاء والبلعمة."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "4 signes : rougeur, chaleur, gonflement (œdème) et douleur",
+                en = "4 hallmarks: redness, heat, swelling, and pain",
+                ar = "الأعراض الأربعة: الاحمرار، الحرارة، الانتفاخ والألم"
+            ),
+            keywords = listOf("inflammation", "diapedese", "histamine", "mastocyte", "vasodilatation", "الالتهاب", "الانسلال")
+        ),
+        SvtGlossaryEntry(
+            id = "hiv_aids",
+            domain = SvtDomain.IMMUNITY,
+            term = LocalizedSvtText("VIH & Déficit immunitaire (SIDA)", "HIV & Immunodeficiency (AIDS)", "فيروس VIH وفقدان المناعة (السيدا)"),
+            definition = LocalizedSvtText(
+                fr = "Rétrovirus ciblant principalement les lymphocytes T4 (CD4) et macrophages, entraînant l'effondrement progressif des réponses adaptatives.",
+                en = "Retrovirus targeting helper CD4+ T lymphocytes and macrophages, progressively collapsing adaptive immunity.",
+                ar = "فيروس قهقري يستهدف اللمفاويات T4 والبلعميات مما يؤدي تدريجياً إلى انهيار المناعة المكتسبة."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Enzyme clé : transcriptase inverse (ARN viral → ADN proviral)",
+                en = "Key enzyme: reverse transcriptase (viral RNA → proviral DNA)",
+                ar = "الأنزيم الأساسي: الناسخ العكسي"
+            ),
+            keywords = listOf("vih", "sida", "retrovirus", "lt4", "immunodeficience", "transcriptase", "السيدا")
+        ),
+        SvtGlossaryEntry(
+            id = "hypersensitivity_allergy",
+            domain = SvtDomain.IMMUNITY,
+            term = LocalizedSvtText("Allergie (Hypersensibilité immédiate)", "Allergy (Immediate Hypersensitivity)", "الأرجية (الحساسية المفرطة)"),
+            definition = LocalizedSvtText(
+                fr = "Réaction immunitaire exagérée contre un allergène inoffensif, médiée par les anticorps IgE et la dégranulation des mastocytes (histamine).",
+                en = "Exaggerated immune reaction to a harmless allergen driven by IgE antibodies and mast cell histamine release.",
+                ar = "رد فعل مناعي مفرط تجاه مؤرج غير ضار، تتدخل فيه مضادات الأجسام IgE وتحرير الهيستامين."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "2 phases : sensibilisation asymptomatique puis réaction allergique",
+                en = "2 phases: silent sensitization followed by allergic symptoms",
+                ar = "مرحلتان: التحسيس الصامت ثم الاستجابة الأرجية"
+            ),
+            keywords = listOf("allergie", "allergene", "ige", "histamine", "mastocyte", "الأرجية", "الحساسية")
+        ),
+        SvtGlossaryEntry(
+            id = "hypothalamus_pituitary",
+            domain = SvtDomain.REPRODUCTION,
+            term = LocalizedSvtText("Complexe hypothalamo-hypophysaire", "Hypothalamic-Pituitary Complex", "المركب السريري النخامي"),
+            definition = LocalizedSvtText(
+                fr = "Ensemble neuro-endocrinien qui pilote les testicules et les ovaires via la GnRH hypothalamique et les gonadostimulines FSH et LH.",
+                en = "Neuroendocrine center controlling testes and ovaries via hypothalamic GnRH and pituitary gonadotropins FSH & LH.",
+                ar = "مركب عصبي غدي يتحكم في نشاط الخصيتين والمبيضين عبر هرمون GnRH وهرموني FSH و LH."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Régulé par rétrocontrôle des hormones gonadiques (testostérone, œstradiol, progestérone)",
+                en = "Regulated by feedback loops from sex steroids",
+                ar = "يخضع لمراقبة تغذية راجعة من طرف الهرمونات التناسلية"
+            ),
+            keywords = listOf("gnrh", "fsh", "lh", "hypophyse", "hypothalamus", "retrocontrole", "النخامية")
+        ),
+        SvtGlossaryEntry(
+            id = "corpus_luteum",
+            domain = SvtDomain.REPRODUCTION,
+            term = LocalizedSvtText("Corps jaune & Phase lutéale", "Corpus Luteum & Luteal Phase", "الجسم الأصفر والطور الجسفروني"),
+            definition = LocalizedSvtText(
+                fr = "Structure endocrine issue du follicule rompu après ovulation ; sécrète la progestérone et les œstrogènes pour préparer la nidation.",
+                en = "Endocrine gland formed from the ovulated follicle that secretes progesterone and estrogen to prepare the endometrium.",
+                ar = "بنية غدية تنشأ من الجريب المنفجر بعد الإباضة وتفرز الجسفرون لتهيئة مخاطة الرحم للتعشيش."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Sans fécondation → régression au 28e jour et apparition des règles",
+                en = "Without fertilization → regresses around day 28 triggering menstruation",
+                ar = "في غياب الإخصاب ← يضمر وتنزل الدورة الشهرية"
+            ),
+            keywords = listOf("corps jaune", "progesterone", "endometre", "nidation", "ovulation", "الجسم الأصفر")
+        ),
+        SvtGlossaryEntry(
+            id = "hcg_placenta",
+            domain = SvtDomain.REPRODUCTION,
+            term = LocalizedSvtText("Hormone HCG & Placenta", "hCG Hormone & Placenta", "هرمون HCG والمشيمة"),
+            definition = LocalizedSvtText(
+                fr = "Hormone sécrétée par le jeune embryon dès la nidation pour maintenir le corps jaune jusqu'à ce que le placenta assure la synthèse hormonale.",
+                en = "Hormone secreted by the implanting embryo to rescue the corpus luteum until the placenta takes over steroid production.",
+                ar = "هرمون يفرزه المضغة عند التعشيش للحفاظ على الجسم الأصفر إلى أن تتولى المشيمة إنتاج الهرمونات."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Détectée par les tests de grossesse",
+                en = "Detected by early pregnancy tests",
+                ar = "يُكشف عنه في اختبارات الحمل"
+            ),
+            keywords = listOf("hcg", "placenta", "grossesse", "nidation", "embryon", "المشيمة", "التعشيش")
+        ),
+        SvtGlossaryEntry(
+            id = "glycolysis_entry",
+            domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
+            term = LocalizedSvtText("Glycolyse", "Glycolysis", "انحلال الكليكوز"),
+            definition = LocalizedSvtText(
+                fr = "Ensemble de réactions enzymatiques dans le hyaloplasme oxydant 1 molécule de glucose (C₆) en 2 acides pyruviques (C₃) sans O₂.",
+                en = "Anaerobic cytosolic pathway breaking down 1 glucose molecule (C₆) into 2 pyruvates (C₃) yielding 2 net ATP and 2 NADH.",
+                ar = "مجموعة تفاعلات أنزيمية في الجبلة الشفافة تهدم الكليكوز إلى جزيئتي حمض البيروفيك دون الحاجة لـ O₂."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Bilan net : +2 ATP et +2 NADH,H⁺ dans le hyaloplasme",
+                en = "Net yield: +2 ATP and +2 NADH in the cytosol",
+                ar = "الحصيلة الصافية: +2 ATP و +2 NADH,H⁺"
+            ),
+            keywords = listOf("glycolyse", "pyruvate", "glucose", "hyaloplasme", "anaerobie", "انحلال الكليكوز")
+        ),
+        SvtGlossaryEntry(
+            id = "fermentation_entry",
+            domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
+            term = LocalizedSvtText("Fermentation lactique & alcoolique", "Lactic & Alcoholic Fermentation", "التخمر اللبني والكحولي"),
+            definition = LocalizedSvtText(
+                fr = "Voie métabolique anaérobie dégradant partiellement le glucose dans le hyaloplasme avec un bilan énergétique de seulement 2 ATP.",
+                en = "Anaerobic cytosolic pathway incompletely oxidizing glucose into lactate or ethanol + CO₂ for a net yield of 2 ATP.",
+                ar = "مسلك استقلابي لاهوائي يتم في الجبلة الشفافة ويهدم الكليكوز جزئياً منتجاً 2 ATP فقط."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Muscle (manque O₂) → Acide lactique • Levures → Éthanol + CO₂",
+                en = "Muscle (low O₂) → Lactic acid • Yeast → Ethanol + CO₂",
+                ar = "العضلة ← حمض لبني • الخميرة ← إيثانول + CO₂"
+            ),
+            keywords = listOf("fermentation", "lactique", "alcoolique", "ethanol", "levure", "التخمر")
+        ),
+        SvtGlossaryEntry(
+            id = "phosphocreatine_entry",
+            domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
+            term = LocalizedSvtText("Phosphocréatine & Régénération rapide d'ATP", "Phosphocreatine & Fast ATP Pathway", "الفوسفوكرياتين وتجديد الـ ATP السريع"),
+            definition = LocalizedSvtText(
+                fr = "Réserve énergétique musculaire anaérobie alactique régénérant quasi instantanément l'ATP durant les premiers secondes d'un effort intense.",
+                en = "Rapid anaerobic alactic muscle energy store transferring phosphate to ADP during the first seconds of intense effort.",
+                ar = "مخزون طاقي عضلي سريع يجدد ATP فورياً دون استهلاك O₂ خلال الثواني الأولى من المجهود."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "PC + ADP → Créatine + ATP (créatine kinase)",
+                en = "PCr + ADP → Creatine + ATP (creatine kinase)",
+                ar = "PC + ADP ← كرياتين + ATP"
+            ),
+            keywords = listOf("phosphocreatine", "adp", "atp", "effort", "alactique", "الفوسفوكرياتين")
+        ),
+        SvtGlossaryEntry(
+            id = "saltatory_conduction",
+            domain = SvtDomain.NERVOUS_MUSCULAR,
+            term = LocalizedSvtText("Conduction saltatoire (Myéline & Nœuds de Ranvier)", "Saltatory Conduction", "التوصيل القفزي"),
+            definition = LocalizedSvtText(
+                fr = "Propagation très rapide de l'influx nerveux d'un nœud de Ranvier à l'autre le long d'une fibre nerveuse myélinisée.",
+                en = "Rapid jumping propagation of action potentials from one node of Ranvier to the next along myelinated axons.",
+                ar = "انتشار سريع للسيالة العصبية بالقفز من عقدة رانفييه إلى أخرى على طول الليف النخاعيني."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "La gaine de myéline isole électriquement l'axone",
+                en = "Myelin sheath insulates the axon and boosts speed",
+                ar = "غمد النخاعين عازل كهربائي يسرّع السيالة"
+            ),
+            keywords = listOf("myeline", "noeud de ranvier", "saltatoire", "axone", "vitesse", "التوصيل القفزي", "النخاعين")
+        ),
+        SvtGlossaryEntry(
+            id = "sarcomere_sliding",
+            domain = SvtDomain.NERVOUS_MUSCULAR,
+            term = LocalizedSvtText("Sarcomère & Complexe Acto-Myosine", "Sarcomere & Actin-Myosin Sliding", "الساركومير ومركب الأكتوميوزين"),
+            definition = LocalizedSvtText(
+                fr = "Unité structurale et fonctionnelle de la myofibrille délimitée par deux stries Z, où glissent les filaments fins d'actine sur la myosine.",
+                en = "Functional contractile unit between two Z-discs where thin actin filaments slide over thick myosin filaments.",
+                ar = "الوحدة البنيوية والوظيفية للّييف العضلي بين حزّي Z، تنزلق فيها خييطات الأكتين فوق الميوزين."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Ca²⁺ découvre les sites sur l'actine ; l'ATP permet le pivotement et le détachement",
+                en = "Ca²⁺ exposes myosin-binding sites on actin; ATP powers head cycling",
+                ar = "أيونات Ca²⁺ تكشف مواقع التثبيت و ATP يمد الرؤوس بالطاقة"
+            ),
+            keywords = listOf("sarcomere", "actine", "myosine", "strie z", "contraction", "ca2+", "الساركومير", "الأكتين")
+        ),
+        SvtGlossaryEntry(
+            id = "action_potential_law",
+            domain = SvtDomain.NERVOUS_MUSCULAR,
+            term = LocalizedSvtText("Loi du tout ou rien & Période réfractaire", "All-or-None Law & Refractory Period", "قانون الكل أو العدم والمدة الجموحية"),
+            definition = LocalizedSvtText(
+                fr = "Pour une fibre nerveuse isolée, un stimulus inférieur au seuil ne déclenche rien ; au-delà, le potentiel d'action garde toujours la même amplitude.",
+                en = "In a single axon, sub-threshold stimuli elicit no spike while any suprathreshold stimulus triggers a full-amplitude action potential.",
+                ar = "في ليف عصبي معزول، إهاجة دون العتبة لا تُحدث استجابة، وفوق العتبة يكون لجهد العمل نفس الوسع دائماً."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Un nerf (plusieurs fibres) répond en amplitude croissante (sommation)",
+                en = "A whole nerve trunk shows graded compound amplitude by recruitment",
+                ar = "العصب الكامل يظهر استجابة متدرجة بتجنيد الألياف"
+            ),
+            keywords = listOf("tout ou rien", "seuil", "refractaire", "potentiel d action", "rhéobase", "قانون الكل أو العدم")
+        ),
+        SvtGlossaryEntry(
+            id = "andesite_granite_magmatism",
+            domain = SvtDomain.GEOLOGY,
+            term = LocalizedSvtText("Magmatisme de subduction (Andésite & Granitoïdes)", "Subduction Magmatism (Andesite & Granite)", "صهارية التمر (الأنديزيت والغرانيت)"),
+            definition = LocalizedSvtText(
+                fr = "Fusion partielle des péridotites du manteau sus-jacent déclenchée par l'eau libérée lors du métamorphisme de la croûte océanique subduite.",
+                en = "Hydration-induced partial melting of the mantle wedge triggered by water released from dehydrating subducted oceanic crust.",
+                ar = "انصهار جزئي لبيريدوتيت الرداء تحت تأثير الماء المحرر من تحول القشرة المحيطية المنغرزة."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "En surface → Andésite (microlitique) • En profondeur → Granodiorite/Granite (grenue)",
+                en = "Surface → Andesite • Deep intrusion → Granodiorite/Granite",
+                ar = "في السطح ← أنديزيت • في العمق ← غرانيت"
+            ),
+            keywords = listOf("andesite", "granite", "peridotite", "fusion partielle", "magma", "subduction", "الأنديزيت")
+        ),
+        SvtGlossaryEntry(
+            id = "radiometric_dating",
+            domain = SvtDomain.GEOLOGY,
+            term = LocalizedSvtText("Chronologie relative & Datation absolue", "Relative & Radiometric Dating", "التأريخ النسبي والتأريخ المطلق"),
+            definition = LocalizedSvtText(
+                fr = "Principes stratigraphiques (superposition, continuité, recoupement, identité paléontologique) et désintégration d'isotopes radioactifs (¹⁴C, U/Pb).",
+                en = "Stratigraphic laws (superposition, cross-cutting, fossil correlation) and radioactive isotope decay clocks (¹⁴C, K/Ar, U/Pb).",
+                ar = "مبادئ التطبق والهوية الإحاثية ثم التأريخ المطلق عبر تفكك النظائر المشعة."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Temps de demi-vie T : durée pour que la moitié des noyaux pères se désintègre",
+                en = "Half-life T½: time required for half of parent isotopes to decay",
+                ar = "عمر النصف T: المدة اللازمة لتفكك نصف النوى الأصلية"
+            ),
+            keywords = listOf("datation", "demi-vie", "stratigraphie", "fossile", "superposition", "التأريخ", "الطبقة")
+        ),
+        SvtGlossaryEntry(
+            id = "eutrophication_entry",
+            domain = SvtDomain.ECOLOGY,
+            term = LocalizedSvtText("Eutrophisation des milieux aquatiques", "Aquatic Eutrophication", "التخصب (النتْرَجة) في الأوساط المائية"),
+            definition = LocalizedSvtText(
+                fr = "Enrichissement excessif des eaux en nitrates et phosphates provoquant une prolifération algale qui bloque la lumière et épuise l'O₂ dissous.",
+                en = "Excess nutrient enrichment (nitrates, phosphates) triggering algal blooms, light blockage, bacterial decay, and severe hypoxia.",
+                ar = "إغناء مفرط للمياه بالنترات والفوسفاط يؤدي إلى تكاثر الطحالب وحجب الضوء واستنزاف الأكسجين المذاب."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Conséquence finale : asphyxie et mortalité de la faune aquatique",
+                en = "Final outcome: anoxia and die-off of fish and aerobic organisms",
+                ar = "النتيجة: اختناق الكائنات المائية وموتها"
+            ),
+            keywords = listOf("eutrophisation", "nitrates", "phosphates", "algues", "anoxie", "pollution", "التخصب")
+        ),
+        SvtGlossaryEntry(
+            id = "dbo5_dco_entry",
+            domain = SvtDomain.ECOLOGY,
+            term = LocalizedSvtText("DBO₅ & DCO (Qualité de l'eau)", "BOD₅ & COD (Water Quality)", "مؤشرا DBO₅ و DCO لجودة الماء"),
+            definition = LocalizedSvtText(
+                fr = "DBO₅ mesure l'O₂ consommé par les bactéries en 5 jours à 20°C (matière biodégradable) ; DCO mesure toute la matière oxydable chimiquement.",
+                en = "BOD₅ measures O₂ consumed by microbes over 5 days at 20°C; COD measures total chemically oxidizable organic load.",
+                ar = "DBO₅ يقيس الأكسجين المستهلك بيولوجياً خلال 5 أيام، بينما يقيس DCO مجموع المواد القابلة للأكسدة كيميائياً."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Plus DBO₅ et DCO sont élevés, plus l'eau est chargée en polluants organiques",
+                en = "Higher BOD₅ and COD indicate heavier organic pollution load",
+                ar = "كلما ارتفع DBO₅ و DCO دلّ ذلك على تلوث عضوي أكبر"
+            ),
+            keywords = listOf("dbo5", "dco", "ibgn", "qualite eau", "pollution organique", "biodégradable", "جودة الماء")
+        ),
+        SvtGlossaryEntry(
+            id = "bioaccumulation_entry",
+            domain = SvtDomain.ECOLOGY,
+            term = LocalizedSvtText("Bioaccumulation & Bioamplification", "Bioaccumulation & Biomagnification", "التراكم الإحيائي والتضخيم البيولوجي"),
+            definition = LocalizedSvtText(
+                fr = "Absorption et concentration croissante de substances toxiques non biodégradables (mercure, DDT, PCB) tout au long d'une chaîne alimentaire.",
+                en = "Progressive uptake and increasing concentration of non-biodegradable toxins (mercury, pesticides) up each trophic level.",
+                ar = "تخزين وتزايد تركيز المواد السامة غير القابلة للتحلل عبر حلقات السلسلة الغذائية."
+            ),
+            keyHint = LocalizedSvtText(
+                fr = "Les prédateurs supérieurs présentent les concentrations les plus élevées",
+                en = "Apex predators accumulate the highest toxic concentrations",
+                ar = "تصل أعلى التراكيز لدى المفترسات العليا"
+            ),
+            keywords = listOf("bioaccumulation", "metaux lourds", "pesticides", "chaine alimentaire", "التراكم الإحيائي")
         )
     )
 }

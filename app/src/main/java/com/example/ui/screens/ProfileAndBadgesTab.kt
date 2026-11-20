@@ -1248,8 +1248,11 @@ fun ProfileAndBadgesTab(
     }
 
     if (showEditDialog) {
+        val isQrLockedStudent = profile.role == "student" && (!studentEnrollment?.qrToken.isNullOrBlank())
         EditProfileDialog(
             isStudent = profile.role == "student",
+            massarNumber = profile.massarNumber,
+            isIdentityLockedByQr = isQrLockedStudent,
             currentName = profile.fullName,
             currentPhone = profile.phoneNumber,
             currentBirthDate = profile.birthDate,
@@ -2455,6 +2458,8 @@ private fun badgeIconForKey(key: String): ImageVector = when (key) {
 @Composable
 private fun EditProfileDialog(
     isStudent: Boolean,
+    massarNumber: String,
+    isIdentityLockedByQr: Boolean,
     currentName: String,
     currentPhone: String,
     currentBirthDate: String,
@@ -2473,14 +2478,68 @@ private fun EditProfileDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(id = R.string.profile_edit)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (isStudent && isIdentityLockedByQr) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f),
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(id = R.string.qr_identity_locked_notice),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { if (!isIdentityLockedByQr) name = it },
+                    readOnly = isIdentityLockedByQr,
                     label = { Text(stringResource(id = R.string.field_full_name)) },
-                    singleLine = true
+                    trailingIcon = if (isIdentityLockedByQr) {
+                        {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = stringResource(id = R.string.qr_identity_locked_badge)
+                            )
+                        }
+                    } else null,
+                    singleLine = true,
+                    modifier = Modifier.testTag("edit_profile_name_input")
                 )
                 if (isStudent) {
+                    if (massarNumber.isNotBlank()) {
+                        OutlinedTextField(
+                            value = massarNumber,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text(stringResource(id = R.string.field_massar_label)) },
+                            trailingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Lock,
+                                    contentDescription = stringResource(id = R.string.qr_identity_locked_badge)
+                                )
+                            },
+                            singleLine = true,
+                            modifier = Modifier.testTag("edit_profile_massar_input")
+                        )
+                    }
                     OutlinedTextField(
                         value = birthDate,
                         onValueChange = { birthDate = it },
@@ -2495,7 +2554,7 @@ private fun EditProfileDialog(
                             emailError = null
                         },
                         label = { Text(stringResource(id = R.string.field_recovery_email)) },
-                        placeholder = { Text(stringResource(id = R.string.field_recovery_email_hint)) },
+                        placeholder = { Text(stringResource(id = R.string.taalim_default_email_hint)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true,
                         isError = emailError != null,
@@ -2527,9 +2586,10 @@ private fun EditProfileDialog(
                         emailError = invalidEmailErr
                         return@Button
                     }
-                    if (name.trim().length >= 2) {
+                    val finalName = if (isIdentityLockedByQr) currentName.trim() else name.trim()
+                    if (finalName.length >= 2) {
                         onSave(
-                            name.trim(),
+                            finalName,
                             phone.trim(),
                             if (isStudent) birthDate.trim() else null,
                             if (isStudent) cleanEmail else null

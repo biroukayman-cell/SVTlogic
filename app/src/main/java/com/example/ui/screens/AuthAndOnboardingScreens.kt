@@ -224,6 +224,9 @@ fun AuthScreen(
     var qrFullName by rememberSaveable { mutableStateOf("") }
     var qrMassarInput by rememberSaveable { mutableStateOf("") }
     var qrEmailInput by rememberSaveable { mutableStateOf("") }
+    var qrEmailManuallyEdited by rememberSaveable { mutableStateOf(false) }
+    var qrScannedWithToken by rememberSaveable { mutableStateOf(false) }
+    var qrScannedWithMassar by rememberSaveable { mutableStateOf(false) }
     var qrPassword by rememberSaveable { mutableStateOf("") }
     var showInlineQrScanner by rememberSaveable { mutableStateOf(false) }
     var showLegalDialog by rememberSaveable { mutableStateOf(false) }
@@ -253,8 +256,14 @@ fun AuthScreen(
     val applyQrScanResult: (QrScanResult) -> Unit = { result ->
         if (result.classToken.isNotBlank()) {
             qrTokenInput = result.classToken
+            qrScannedWithToken = true
             if (!result.massarNumber.isNullOrBlank()) {
-                qrMassarInput = result.massarNumber
+                val cleanScannedMassar = result.massarNumber.uppercase(Locale.US)
+                qrMassarInput = cleanScannedMassar
+                qrScannedWithMassar = true
+                if (!qrEmailManuallyEdited) {
+                    qrEmailInput = AuthSessionDraft.defaultStudentTaalimEmail(cleanScannedMassar)
+                }
             }
             QrCodeUtils.copyTextToClipboard(localizedContext, "Code Classe", result.classToken)
             Toast.makeText(
@@ -671,10 +680,14 @@ fun AuthScreen(
 
                         OutlinedTextField(
                             value = qrTokenInput,
-                            onValueChange = { qrTokenInput = it },
+                            onValueChange = { if (!qrScannedWithToken) qrTokenInput = it },
+                            readOnly = qrScannedWithToken,
                             label = { Text(stringResource(id = R.string.qr_manual_label)) },
                             placeholder = { Text(stringResource(id = R.string.qr_manual_hint)) },
                             leadingIcon = { Icon(Icons.Filled.Key, contentDescription = null) },
+                            trailingIcon = if (qrScannedWithToken) {
+                                { Icon(Icons.Filled.Lock, contentDescription = stringResource(id = R.string.qr_identity_locked_badge)) }
+                            } else null,
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -694,10 +707,22 @@ fun AuthScreen(
 
                         OutlinedTextField(
                             value = qrMassarInput,
-                            onValueChange = { qrMassarInput = it.uppercase(Locale.US) },
+                            onValueChange = { raw ->
+                                if (!qrScannedWithMassar) {
+                                    val upper = raw.uppercase(Locale.US)
+                                    qrMassarInput = upper
+                                    if (!qrEmailManuallyEdited) {
+                                        qrEmailInput = AuthSessionDraft.defaultStudentTaalimEmail(upper)
+                                    }
+                                }
+                            },
+                            readOnly = qrScannedWithMassar,
                             label = { Text(stringResource(id = R.string.field_massar_optional)) },
                             placeholder = { Text(stringResource(id = R.string.field_massar_hint)) },
                             leadingIcon = { Icon(Icons.Filled.Badge, contentDescription = null) },
+                            trailingIcon = if (qrScannedWithMassar) {
+                                { Icon(Icons.Filled.Lock, contentDescription = stringResource(id = R.string.qr_identity_locked_badge)) }
+                            } else null,
                             keyboardOptions = KeyboardOptions(
                                 capitalization = KeyboardCapitalization.Characters,
                                 autoCorrectEnabled = false
@@ -710,9 +735,13 @@ fun AuthScreen(
 
                         OutlinedTextField(
                             value = qrEmailInput,
-                            onValueChange = { qrEmailInput = it },
+                            onValueChange = {
+                                qrEmailInput = it
+                                qrEmailManuallyEdited = it.trim().isNotEmpty()
+                            },
                             label = { Text(stringResource(id = R.string.field_recovery_email)) },
-                            placeholder = { Text(stringResource(id = R.string.field_recovery_email_hint)) },
+                            placeholder = { Text(stringResource(id = R.string.taalim_default_email_hint)) },
+                            supportingText = { Text(stringResource(id = R.string.taalim_default_email_hint)) },
                             leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             singleLine = true,
@@ -748,12 +777,14 @@ fun AuthScreen(
                             onClick = {
                                 val cleanToken = QrCodeUtils.extractTokenFromScan(qrTokenInput)
                                 val cleanName = qrFullName.trim()
-                                val cleanQrEmail = qrEmailInput.trim()
                                 val enteredMassar = AuthSessionDraft.normalizeMassar(qrMassarInput)
                                 val finalMassar = if (enteredMassar.length >= 4) {
                                     enteredMassar
                                 } else {
                                     "QR" + UUID.randomUUID().toString().replace("-", "").take(8).uppercase(Locale.US)
+                                }
+                                val cleanQrEmail = qrEmailInput.trim().ifBlank {
+                                    AuthSessionDraft.defaultStudentTaalimEmail(finalMassar)
                                 }
                                 when {
                                     cleanToken.length < 3 -> {
@@ -1245,6 +1276,7 @@ fun AccountSetupScreen(
     defaultPhone: String = "",
     defaultEstablishment: String = "",
     studentRoster: RosterStudent?,
+    hasPendingQrToken: Boolean = false,
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit,
     onSubmit: (
@@ -1264,11 +1296,16 @@ fun AccountSetupScreen(
     val resolvedRole = if (studentRoster != null) "student" else defaultRole
     val initialName = studentRoster?.fullName?.takeIf { it.isNotBlank() } ?: defaultName
     val resolvedMassar = studentRoster?.massarNumber?.takeIf { it.isNotBlank() } ?: defaultMassar
+    val isQrLockedIdentity = resolvedRole == "student" && (studentRoster != null || hasPendingQrToken)
+    val isFullNameLocked = isQrLockedIdentity && initialName.trim().length >= 2
+    val effectiveDefaultEmail = defaultEmail.ifBlank {
+        if (resolvedRole == "student") AuthSessionDraft.defaultStudentTaalimEmail(resolvedMassar) else ""
+    }
 
     var fullName by remember(initialName) { mutableStateOf(initialName) }
     var birthDate by remember { mutableStateOf("") }
     var phone by remember(defaultPhone) { mutableStateOf(defaultPhone) }
-    var recoveryEmail by remember(defaultEmail) { mutableStateOf(defaultEmail) }
+    var recoveryEmail by remember(effectiveDefaultEmail) { mutableStateOf(effectiveDefaultEmail) }
     var establishment by remember(defaultEstablishment) { mutableStateOf(defaultEstablishment) }
     var newPassword by remember { mutableStateOf("") }
     var confirmNewPassword by remember { mutableStateOf("") }
@@ -1368,11 +1405,66 @@ fun AccountSetupScreen(
                     }
                 }
 
+                if (isQrLockedIdentity) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(id = R.string.qr_identity_locked_notice),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                }
+
+                if (resolvedRole == "student" && resolvedMassar.isNotBlank()) {
+                    OutlinedTextField(
+                        value = resolvedMassar,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(stringResource(id = R.string.field_massar_label)) },
+                        leadingIcon = { Icon(Icons.Filled.Badge, contentDescription = null) },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = stringResource(id = R.string.qr_identity_locked_badge)
+                            )
+                        },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("setup_massar_locked_input")
+                    )
+                }
+
                 OutlinedTextField(
                     value = fullName,
-                    onValueChange = { fullName = it },
+                    onValueChange = { if (!isFullNameLocked) fullName = it },
+                    readOnly = isFullNameLocked,
                     label = { Text(stringResource(id = R.string.field_full_name)) },
                     leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                    trailingIcon = if (isFullNameLocked) {
+                        {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = stringResource(id = R.string.qr_identity_locked_badge)
+                            )
+                        }
+                    } else null,
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1442,7 +1534,8 @@ fun AccountSetupScreen(
                         value = recoveryEmail,
                         onValueChange = { recoveryEmail = it },
                         label = { Text(stringResource(id = R.string.field_recovery_email)) },
-                        placeholder = { Text(stringResource(id = R.string.field_recovery_email_hint)) },
+                        placeholder = { Text(stringResource(id = R.string.taalim_default_email_hint)) },
+                        supportingText = { Text(stringResource(id = R.string.taalim_default_email_hint)) },
                         leadingIcon = { Icon(Icons.Filled.Email, contentDescription = null) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true,
@@ -1492,9 +1585,12 @@ fun AccountSetupScreen(
 
                 Button(
                     onClick = {
-                        val cleanEmailInput = recoveryEmail.trim()
+                        val effectiveStudentEmail = recoveryEmail.trim().ifBlank {
+                            if (resolvedRole == "student") AuthSessionDraft.defaultStudentTaalimEmail(resolvedMassar) else ""
+                        }
+                        val finalSubmittedName = if (isFullNameLocked) initialName.trim() else fullName.trim()
                         when {
-                            fullName.trim().length < 2 -> validationError = nameRequiredErr
+                            finalSubmittedName.length < 2 -> validationError = nameRequiredErr
                             resolvedRole == "teacher" && phone.trim().length < 6 -> {
                                 validationError = phoneRequiredErr
                             }
@@ -1505,8 +1601,8 @@ fun AccountSetupScreen(
                                 validationError = birthDateRequiredErr
                             }
                             resolvedRole == "student" &&
-                                cleanEmailInput.isNotBlank() &&
-                                !Patterns.EMAIL_ADDRESS.matcher(cleanEmailInput).matches() -> {
+                                effectiveStudentEmail.isNotBlank() &&
+                                !Patterns.EMAIL_ADDRESS.matcher(effectiveStudentEmail).matches() -> {
                                 validationError = invalidEmailErr
                             }
                             newPassword.isNotBlank() && newPassword.length < 6 -> {
@@ -1518,12 +1614,12 @@ fun AccountSetupScreen(
                             else -> {
                                 validationError = null
                                 onSubmit(
-                                    fullName.trim(),
+                                    finalSubmittedName,
                                     phone.trim(),
                                     resolvedRole,
                                     resolvedMassar,
                                     birthDate.trim(),
-                                    if (resolvedRole == "student") cleanEmailInput else defaultEmail.trim(),
+                                    if (resolvedRole == "student") effectiveStudentEmail else defaultEmail.trim(),
                                     establishment.trim(),
                                     newPassword.takeIf { it.isNotBlank() }
                                 )

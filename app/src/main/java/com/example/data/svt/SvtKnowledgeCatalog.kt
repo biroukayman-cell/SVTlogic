@@ -624,4 +624,6 @@ object SvtKnowledgeCatalog {
             )
         )
     )
+
+    val mindMaps: List<SvtMindMap> = SvtMindMapsData.allMindMaps
 }

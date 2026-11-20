@@ -119,6 +119,56 @@ fun ProfileAvatarImage(
 }
 
 @Composable
+fun QuizQuestionImageBanner(
+    imageUrl: String,
+    contentDescription: String,
+    modifier: Modifier = Modifier
+) {
+    if (imageUrl.isBlank()) return
+    val isDataUri = AvatarStorageHelper.isDataUri(imageUrl)
+    val decodedBitmap by produceState<Bitmap?>(initialValue = null, imageUrl) {
+        value = if (isDataUri) AvatarStorageHelper.decodeDataUriBitmap(imageUrl) else null
+    }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        modifier = modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(12.dp)
+            )
+    ) {
+        when {
+            isDataUri && decodedBitmap != null -> {
+                Image(
+                    bitmap = decodedBitmap!!.asImageBitmap(),
+                    contentDescription = contentDescription,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(190.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+            }
+            AvatarStorageHelper.isRemoteHttpUrl(imageUrl) -> {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = contentDescription,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(190.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun GuestReadOnlyBanner(
     onExitGuest: () -> Unit,
     modifier: Modifier = Modifier

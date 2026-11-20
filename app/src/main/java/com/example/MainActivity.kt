@@ -452,16 +452,23 @@ private fun AuthenticatedSvtFlow(
                     }
                 }
             } else {
+                val fallbackMassar = studentRoster?.massarNumber?.takeIf { it.isNotBlank() } ?: authDraft.massarNumber
+                val resolvedDefaultEmail = authDraft.email.ifBlank {
+                    currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
+                }.ifBlank {
+                    if (authDraft.role == "student" || studentRoster != null) {
+                        AuthSessionDraft.defaultStudentTaalimEmail(fallbackMassar)
+                    } else ""
+                }
                 AccountSetupScreen(
                     defaultName = authDraft.fullName.ifBlank { currentUser.displayName.orEmpty() },
                     defaultRole = authDraft.role,
                     defaultMassar = authDraft.massarNumber,
-                    defaultEmail = authDraft.email.ifBlank {
-                        currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
-                    },
+                    defaultEmail = resolvedDefaultEmail,
                     defaultPhone = authDraft.phoneNumber,
                     defaultEstablishment = authDraft.establishment,
                     studentRoster = studentRoster,
+                    hasPendingQrToken = authDraft.pendingClassQrToken.isNotBlank(),
                     currentLanguage = currentLanguage,
                     onLanguageSelected = onLanguageSelected,
                     onSubmit = handleAccountSetupSubmit,
@@ -473,16 +480,23 @@ private fun AuthenticatedSvtFlow(
         }
 
         is ProfileGateState.Error -> {
+            val fallbackMassar = studentRoster?.massarNumber?.takeIf { it.isNotBlank() } ?: authDraft.massarNumber
+            val resolvedDefaultEmail = authDraft.email.ifBlank {
+                currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
+            }.ifBlank {
+                if (authDraft.role == "student" || studentRoster != null) {
+                    AuthSessionDraft.defaultStudentTaalimEmail(fallbackMassar)
+                } else ""
+            }
             AccountSetupScreen(
                 defaultName = authDraft.fullName.ifBlank { currentUser.displayName.orEmpty() },
                 defaultRole = authDraft.role,
                 defaultMassar = authDraft.massarNumber,
-                defaultEmail = authDraft.email.ifBlank {
-                    currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
-                },
+                defaultEmail = resolvedDefaultEmail,
                 defaultPhone = authDraft.phoneNumber,
                 defaultEstablishment = authDraft.establishment,
                 studentRoster = studentRoster,
+                hasPendingQrToken = authDraft.pendingClassQrToken.isNotBlank(),
                 currentLanguage = currentLanguage,
                 onLanguageSelected = onLanguageSelected,
                 onSubmit = handleAccountSetupSubmit,

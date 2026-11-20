@@ -156,6 +156,55 @@ object AvatarStorageHelper {
         }
     }
 
+    suspend fun encodeQuizQuestionImage(
+        context: Context,
+        sourceUri: Uri
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val primaryResolver = context.contentResolver
+            val appResolver = context.applicationContext.contentResolver
+            val maxQuestionDim = 640
+            val maxQuestionBytes = 75_000
+
+            val imageBytes = readUriBytes(primaryResolver, sourceUri)
+                ?: readUriBytes(appResolver, sourceUri)
+
+            val rawBitmap = (if (imageBytes != null && imageBytes.isNotEmpty()) {
+                val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, boundsOpts)
+                val srcW = boundsOpts.outWidth
+                val srcH = boundsOpts.outHeight
+                if (srcW > 0 && srcH > 0) {
+                    var sampleSize = 1
+                    while (max(srcW / sampleSize, srcH / sampleSize) > maxQuestionDim * 2) {
+                        sampleSize *= 2
+                    }
+                    val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+                    BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, opts)
+                } else {
+                    BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                }
+            } else null) ?: decodeWithImageDecoder(primaryResolver, sourceUri)
+                ?: decodeWithImageDecoder(appResolver, sourceUri)
+                ?: error("Cannot open selected question image")
+
+            val scaledBitmap = scaleBitmapToMax(rawBitmap, maxQuestionDim)
+            if (scaledBitmap !== rawBitmap) {
+                rawBitmap.recycle()
+            }
+            val compressedBytes = compressWithinLimit(scaledBitmap, maxQuestionBytes)
+            scaledBitmap.recycle()
+            encodeJpegBytesToDataUri(compressedBytes)
+        }
+    }
+
+    suspend fun decodeDataUriBitmap(dataUri: String): Bitmap? = withContext(Dispatchers.IO) {
+        if (!isDataUri(dataUri)) return@withContext null
+        val bytes = decodeBase64Payload(dataUri) ?: return@withContext null
+        if (bytes.isEmpty()) return@withContext null
+        runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
+    }
+
     suspend fun resolveLocalAvatarBitmap(
         context: Context,
         userId: String,

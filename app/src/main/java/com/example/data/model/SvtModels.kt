@@ -108,7 +108,8 @@ data class QuizQuestion(
     val questionText: String = "",
     val options: List<String> = emptyList(),
     val correctIndex: Int = 0,
-    val explanation: String = ""
+    val explanation: String = "",
+    val imageUrl: String = ""
 )
 
 @IgnoreExtraProperties

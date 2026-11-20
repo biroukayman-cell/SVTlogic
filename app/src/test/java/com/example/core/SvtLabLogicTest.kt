@@ -243,4 +243,97 @@ class SvtLabLogicTest {
             )
         }
     }
+
+    @Test
+    fun `enriched glossary has at least 36 unique entries and every domain has a mind map`() {
+        assertTrue(
+            "Expected at least 36 glossary entries, found ${SvtKnowledgeCatalog.glossaryEntries.size}",
+            SvtKnowledgeCatalog.glossaryEntries.size >= 36
+        )
+        assertTrue(
+            "Expected at least 8 mind maps, found ${SvtKnowledgeCatalog.mindMaps.size}",
+            SvtKnowledgeCatalog.mindMaps.size >= 8
+        )
+        assertEquals(
+            SvtKnowledgeCatalog.mindMaps.size,
+            SvtKnowledgeCatalog.mindMaps.map { it.id }.distinct().size
+        )
+
+        SvtDomain.entries.forEach { domain ->
+            assertTrue(
+                "Missing mind map for $domain",
+                SvtKnowledgeCatalog.mindMaps.any { it.domain == domain }
+            )
+        }
+
+        SvtKnowledgeCatalog.mindMaps.forEach { map ->
+            assertTrue(map.branches.isNotEmpty())
+            AppLanguage.entries.forEach { lang ->
+                assertTrue(map.centralConcept.get(lang).isNotBlank())
+                assertTrue(map.subtitle.get(lang).isNotBlank())
+                assertTrue(map.summary.get(lang).isNotBlank())
+            }
+        }
+    }
+
+    @Test
+    fun `computeMetabolicEnergy distinguishes aerobic respiration and fermentations`() {
+        val resp = SvtLabLogic.computeMetabolicEnergy(2, SvtLabLogic.MetabolicPathway.AEROBIC_RESPIRATION)
+        assertEquals(76, resp.totalAtpMoles)
+        assertEquals(12, resp.o2ConsumedMoles)
+        assertEquals(12, resp.co2ProducedMoles)
+        assertEquals(0, resp.organicByproductMoles)
+
+        val lactic = SvtLabLogic.computeMetabolicEnergy(2, SvtLabLogic.MetabolicPathway.LACTIC_FERMENTATION)
+        assertEquals(4, lactic.totalAtpMoles)
+        assertEquals(0, lactic.o2ConsumedMoles)
+        assertEquals(0, lactic.co2ProducedMoles)
+        assertEquals(4, lactic.organicByproductMoles)
+
+        val alcoholic = SvtLabLogic.computeMetabolicEnergy(2, SvtLabLogic.MetabolicPathway.ALCOHOLIC_FERMENTATION)
+        assertEquals(4, alcoholic.totalAtpMoles)
+        assertEquals(0, alcoholic.o2ConsumedMoles)
+        assertEquals(4, alcoholic.co2ProducedMoles)
+        assertEquals(4, alcoholic.organicByproductMoles)
+    }
+
+    @Test
+    fun `computeMonohybridCross produces Mendelian 3 to 1 ratios for Aa x Aa`() {
+        val result = SvtLabLogic.computeMonohybridCross(
+            SvtLabLogic.MonohybridGenotype.HETERO,
+            SvtLabLogic.MonohybridGenotype.HETERO
+        )
+        assertEquals(25, result.aaPercent)
+        assertEquals(50, result.hetPercent)
+        assertEquals(25, result.recPercent)
+        assertEquals(75, result.dominantPhenotypePercent)
+        assertEquals(25, result.recessivePhenotypePercent)
+    }
+
+    @Test
+    fun `isBloodCompatible enforces ABO and Rh incompatibility rules`() {
+        // Universal donor O- works for everyone
+        assertTrue(SvtLabLogic.isBloodCompatible(SvtLabLogic.BloodGroupAbo.O, false, SvtLabLogic.BloodGroupAbo.AB, true))
+        assertTrue(SvtLabLogic.isBloodCompatible(SvtLabLogic.BloodGroupAbo.O, false, SvtLabLogic.BloodGroupAbo.O, false))
+        // Universal recipient AB+ can receive any type
+        assertTrue(SvtLabLogic.isBloodCompatible(SvtLabLogic.BloodGroupAbo.A, true, SvtLabLogic.BloodGroupAbo.AB, true))
+        assertTrue(SvtLabLogic.isBloodCompatible(SvtLabLogic.BloodGroupAbo.B, false, SvtLabLogic.BloodGroupAbo.AB, true))
+        // Cross-group incompatibility & Rh+ into Rh- blocked
+        assertFalse(SvtLabLogic.isBloodCompatible(SvtLabLogic.BloodGroupAbo.A, true, SvtLabLogic.BloodGroupAbo.B, true))
+        assertFalse(SvtLabLogic.isBloodCompatible(SvtLabLogic.BloodGroupAbo.O, true, SvtLabLogic.BloodGroupAbo.O, false))
+    }
+
+    @Test
+    fun `computeSeismicEpicenter and evaluateWaterQuality return accurate metrics`() {
+        val seismic = SvtLabLogic.computeSeismicEpicenter(deltaTSeconds = 10.0, vpKmPerSec = 6.0, vsKmPerSec = 3.5)
+        // d = 10 * (6 * 3.5) / (6 - 3.5) = 210 / 2.5 = 84.0 km
+        assertEquals(84.0, seismic.distanceKm, 0.01)
+
+        val excellentWater = SvtLabLogic.evaluateWaterQuality(dbo5MgL = 2.0, dcoMgL = 6.0, dissolvedO2MgL = 9.0)
+        assertEquals(SvtLabLogic.WaterQualityClass.EXCELLENT, excellentWater.qualityClass)
+        assertEquals(3.0, excellentWater.biodegradabilityRatio, 0.01)
+
+        val pollutedWater = SvtLabLogic.evaluateWaterQuality(dbo5MgL = 25.0, dcoMgL = 80.0, dissolvedO2MgL = 1.8)
+        assertEquals(SvtLabLogic.WaterQualityClass.POLLUTED, pollutedWater.qualityClass)
+    }
 }

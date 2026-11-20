@@ -385,15 +385,15 @@
     <!-- البيانات القانونية وسياسة الخصوصية -->
     <string name="legal_notice_title">البيانات القانونية</string>
     <string name="legal_notice_footer">© 2026 BioTerre SVT • من تطوير Ayman BIROUK</string>
-    <string name="legal_notice_body">تطبيق BioTerre SVT التعليمي.\nسنة الإنشاء: 2026\nالمطور: Ayman BIROUK\nجميع الحقوق محفوظة.</string>
+    <string name="legal_notice_body">تطبيق BioTerre SVT التعليمي.\nسنة الإنشاء: 2026\nالمطور والناشر: Ayman BIROUK (biroukayman@gmail.com)\nجميع الحقوق محفوظة — يُمنع منعاً باتاً نسخ أو تعديل أو فك تشفير أو إعادة توزيع ملف التطبيق (APK) أو شيفرته البرمجية دون ترخيص.</string>
     <string name="privacy_policy_title">سياسة الخصوصية وحماية البيانات</string>
     <string name="privacy_policy_button">سياسة الخصوصية</string>
-    <string name="privacy_policy_summary">بياناتك الدراسية (الملف الشخصي، التمارين، تتبع الدروس والرسائل الخاصة) محمية وتُستخدم فقط للأغراض التعليمية في مادة علوم الحياة والأرض ولا تُباع أو تُشارك تجارياً.</string>
-    <string name="privacy_policy_body">آخر تحديث: 2026\n\n1. المسؤول عن التطبيق\nتطبيق BioTerre SVT هو تطبيق تعليمي أُنشئ سنة 2026 من طرف Ayman BIROUK (للتواصل: biroukayman@gmail.com).\n\n2. البيانات المجمعة والغرض التعليمي\nيعالج التطبيق فقط البيانات الضرورية لتسيير القسم ومتابعة التعلم:\n• الحساب والهوية: الاسم الكامل، الصفة (تلميذ أو أستاذ)، رقم مسار (للتلميذ)، البريد المهني (للأستاذ)، الهاتف وتاريخ الازدياد (اختياريان).\n• النشاط الدراسي: الانضمام إلى القسم، نتائج ومدة إنجاز الاختبارات، نسبة مشاهدة الفيديو، حالة فتح الملفات، الرسائل الخاصة بين التلميذ والأستاذ والشارات.\n• التخزين دون اتصال: الملفات المحملة تُحفظ محلياً على جهازك.\n\n3. أذونات الجهاز\n• الكاميرا: تُستعمل حصرياً لمسح رمز QR الخاص بالقسم دون تسجيل أو إرسال أي صور أو فيديوهات شخصية.\n• الإشعارات: للتنبيه بالدروس، الاختبارات، الإعلانات، الرسائل والشارات الجديدة.\n• الملفات والمعرض: يقتصر الوصول فقط على الملفات التي تختارها يدوياً عبر منتقي النظام الآمن.\n\n4. الأمان والسرية\n• صلاحيات وصول مقيدة حسب القسم والمستخدم: لا يطّلع التلميذ إلا على محتوى قسمه.\n• المراسلة الخاصة سرية تماماً بين التلميذ وأستاذه.\n• التطبيق خالٍ من الإعلانات ولا يبيع أو يشارك بيانات المستخدمين مع أي طرف تجاري.\n\n5. الاحتفاظ بالبيانات وحقوقك\nيمكنك تعديل بياناتك الشخصية من تبويب الملف الشخصي. حذف التلميذ أو القسم يؤدي إلى إزالة بياناته المرتبطة. لأي طلب متعلق بحماية البيانات: biroukayman@gmail.com.</string>
+    <string name="privacy_policy_summary">بياناتك الدراسية (الملف الشخصي، التمارين، صور الأسئلة، تتبع الدروس، النسب المئوية للأقسام والرسائل الخاصة) محمية ومخصصة للتعلم في SVT مع ضوابط صارمة ضد سوء الاستخدام والقرصنة.</string>
+    <string name="privacy_policy_body">آخر تحديث: 2026 (v2)\n\n1. المسؤول عن التطبيق\nتطبيق BioTerre SVT هو تطبيق تعليمي أُنشئ سنة 2026 من طرف Ayman BIROUK (للتواصل: biroukayman@gmail.com).\n\n2. البيانات المجمعة والغرض التعليمي\nيعالج التطبيق فقط البيانات الضرورية لتسيير القسم ومتابعة التعلم:\n• الحساب والهوية: الاسم الكامل، الصفة (تلميذ أو أستاذ)، رقم مسار (يُقفل نهائياً بعد التسجيل عبر رمز QR للأستاذ)، البريد الافتراضي للتلميذ («رقم_مسار@taalim.ma» أو البريد المدخل لاستعادة كلمة المرور)، البريد المهني للأستاذ، المؤسسة، الهاتف وتاريخ الازدياد (اختياريان).\n• النشاط الدراسي ولوحة القيادة: الانضمام إلى القسم، النقط والنسب المئوية الإجمالية لكل تلميذ، مدة الاختبارات، نسبة مشاهدة الفيديو، حالة فتح الملفات، المراسلة الخاصة والشارات.\n• صور أسئلة الاختبارات: تُضغط الصور المضافة من طرف الأساتذة في الاختبارات وتُستعمل حصرياً داخل القسم.\n• التخزين المحلي والأمان: الملفات المحملة وتفضيلات رمز القفل PIN تُحفظ محلياً على جهازك المرخص.\n\n3. أذونات الجهاز\n• الكاميرا: لمسح رمز QR للقسم فقط دون تصوير أو حفظ أي صور شخصية.\n• منتقي الصور النظامي (دون صلاحيات تخزين واسعة): يتم اختيار الصور الشخصية وصور الأسئلة يدوياً وبشكل محدود دون الوصول الشامل لذاكرة الهاتف.\n• الإشعارات: للتنبيه بالدروس، الاختبارات، الإعلانات، الرسائل والموافقات.\n\n4. الأمان والسرية\n• قفل هوية QR (عدم إمكانية تغيير الاسم ورقم مسار)، ربط حساب التلميذ بهاتف واحد، طبقة الحماية الثانية PIN وموافقة المسؤول على حسابات الأساتذة.\n• عزل تام بين الأقسام وسرية تامة في المراسلة الخاصة.\n• خالٍ تماماً من الإعلانات ومتتبعات الدعاية دون بيع أو مشاركة تجارية للبيانات.\n• استخدام أي نسخة APK معدّلة أو مقرصنة يُسقط ضمانات الأمان والخصوصية المكفولة في النسخة الرسمية.\n\n5. الاحتفاظ بالبيانات وحقوقك\nيمكنك مراجعة ملفك في تبويب الملف الشخصي (باستثناء الحقول المقفلة عبر QR لضمان نزاهة النتائج). لأي استفسار: biroukayman@gmail.com.</string>
     <string name="terms_of_use_title">شروط الاستخدام</string>
     <string name="terms_of_use_button">شروط الاستخدام</string>
-    <string name="terms_of_use_summary">قواعد الانضمام للأقسام، الاستعمال التعليمي للموارد واحترام آداب التواصل بين التلاميذ والأساتذة في BioTerre SVT.</string>
-    <string name="terms_of_use_body">آخر تحديث: 2026\n\n1. الغرض والموافقة\nتنظم شروط الاستخدام هذه الولوج إلى التطبيق التعليمي BioTerre SVT واستعماله (من إنشاء Ayman BIROUK سنة 2026). يعد استعمال التطبيق موافقة صريحة على هذه الشروط.\n\n2. الحسابات والانضمام للأقسام\n• الأساتذة: ينشئون ويديرون أقسامهم، الموارد، الاختبارات، لوائح التلاميذ ورموز QR الخاصة بالأقسام.\n• التلاميذ: ينضمون إلى أقسامهم عبر رقم مسار أو رمز QR / الرمز السري المقدم من الأستاذ.\n• يلتزم كل مستخدم بالحفاظ على سرية بيانات دخوله وتقديم معلومات صحيحة.\n\n3. الاستعمال التعليمي وحسن السلوك\n• التطبيق مخصص حصرياً للتعلم والمتابعة الدراسية في مادة علوم الحياة والأرض.\n• يجب أن تظل الرسائل الخاصة والأنشطة المنجزة محترمة وملائمة للإطار التربوي.\n• يُمنع نشر أي محتوى غير قانوني أو محاولة الولوج غير المصرح به إلى بيانات قسم أو تلميذ آخر.\n\n4. المحتوى والملكية الفكرية\n• تصميم وبرمجة تطبيق BioTerre SVT مملوكة لمطوره Ayman BIROUK (2026).\n• تبقى الدروس والفيديوهات والوثائق والاختبارات تحت المسؤولية التربوية للأساتذة الناشرين لها.\n\n5. التوفر والتحديثات\nيدعم التطبيق العمل دون اتصال بالنسبة للموارد المحملة مسبقاً، وقد تصدر تحديثات لتحسين الأداء والأمان.\n\n6. التواصل\nلأي استفسار حول هذه الشروط: biroukayman@gmail.com.</string>
+    <string name="terms_of_use_summary">قواعد الاستعمال التربوي، البريد الافتراضي @taalim.ma، قفل الهوية عبر QR، الحماية الصارمة من القرصنة وعدم مسؤولية المطور عن سوء الاستخدام.</string>
+    <string name="terms_of_use_body">آخر تحديث: 2026 (v2)\n\n1. الغرض والموافقة\nتنظم شروط الاستخدام هذه الولوج إلى التطبيق التعليمي BioTerre SVT واستعماله (من إنشاء Ayman BIROUK سنة 2026). يعد تثبيت التطبيق أو استعماله موافقة صريحة وكاملة على هذه الشروط.\n\n2. الحسابات، بريد @taalim.ma وقفل QR\n• الأساتذة: يدخلون معلوماتهم الصحيحة (بما فيها المؤسسة) وينتظرون موافقة المسؤول قبل إنشاء الأقسام، لوحة القيادة، الاختبارات (مع أو بدون صور)، الموارد والإعلانات.\n• التلاميذ: ينضمون عبر رقم مسار أو رمز QR. يتم تعيين البريد الافتراضي للاستعادة تلقائياً بصيغة «رقم_مسار@taalim.ma» ما لم يغيّره المستخدم.\n• نزاهة النتائج (قفل QR): عند تسجيل التلميذ عبر رمز QR الخاص بالأستاذ، يتم قفل اسمه الكامل ورقم مسار نهائياً ولا يمكن تغييرهما لضمان مصداقية النقط والنسب المئوية.\n• وضع الضيف: معاينة تجريبية للقراءة فقط دون استقبال أو رد.\n\n3. الاستعمال التربوي وحسن السلوك\n• التطبيق مخصص حصرياً لتعليم وتعلم مادة علوم الحياة والأرض (SVT).\n• يُمنع منعاً باتاً نشر صور أو وثائق أو روابط أو رسائل مخالفة للقانون أو مسيئة أو منتهكة لحقوق الغير.\n\n4. مكافحة القرصنة، العبث البرمجي والملكية الفكرية\n• تعود جميع حقوق الملكية الفكرية للتطبيق، شيفرته، خوارزمياته العلمية، خرائطه الذهنية، معجمه وتصميماته حصرياً إلى المطور Ayman BIROUK (2026).\n• يُحظر حظراً باتاً: فك شيفرة التطبيق أو الهندسة العكسية أو تعديل ملف APK أو إعادة تجميعه؛ توزيع نسخ مقلدة أو مقرصنة؛ محاولة تجاوز أنظمة الحماية (ربط الهاتف الواحد، رمز PIN، قفل الاسم/مسار، موافقة الأستاذ أو قواعد Firebase)؛ استخراج البيانات آلياً أو تعطيل الخوادم.\n• أي محاولة قرصنة أو تزوير أو سوء استعمال تعرض صاحبها للتوقيف الفوري للحساب وللمساءلة القانونية والتأديبية.\n\n5. تحديد المسؤولية وحماية المطور والناشر\n• يوفّر المطور والناشر (Ayman BIROUK) التطبيق كما هو لأغراض تعليمية، ولا يتحمل أي مسؤولية عن: (أ) سوء الاستعمال أو الغش أو الأفعال غير المشروعة من طرف المستخدمين؛ (ب) الروابط الخارجية أو التحديثات أو الملفات أو الصور المنشورة تحت مسؤولية المستخدمين؛ (ج) الأضرار الناتجة عن تثبيت نسخ APK معدّلة أو غير رسمية أو أجهزة مخترقة الصلاحيات (Root) أو انقطاعات الشبكة.\n• يظل كل مستخدم مسؤولاً شخصياً عن تأمين هاتفه وسرية كلمة المرور ورمز PIN.\n\n6. التواصل الرسمي\nللإبلاغ عن أي سوء استخدام أو قرصنة أو استفسار قانوني: biroukayman@gmail.com.</string>
     <string name="terms_acceptance_title">الموافقة على شروط الاستخدام</string>
     <string name="terms_acceptance_subtitle">مرحباً %1$s! قبل الدخول إلى فضاء التلميذ، يرجى قراءة شروط استخدام BioTerre SVT والموافقة عليها.</string>
     <string name="terms_acceptance_checkbox">لقد قرأت وأوافق على شروط الاستخدام وسياسة الخصوصية</string>
@@ -632,4 +632,86 @@
     <string name="admin_reset_teacher_password_btn">إعادة تعيين كلمة المرور</string>
     <string name="admin_reset_teacher_password_sent">تم إرسال بريد إعادة التعيين إلى %1$s وتجهيز رسالة SMS للرقم %2$s.</string>
     <string name="admin_reset_teacher_sms_body">BioTerre SVT — مرحباً %1$s، تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك %2$s.</string>
+
+    <!-- انتقالات QCM، صور الأسئلة، الخرائط الذهنية، أدوات المختبر، لوحة القيادة ونتائج التلاميذ، قفل QR وبريد @taalim.ma -->
+    <string name="quiz_previous">السابق</string>
+    <string name="quiz_timer_progress_label">التقدم والإيقاع</string>
+    <string name="quiz_question_image_optional">صورة أو وثيقة للسؤال (اختياري)</string>
+    <string name="quiz_question_add_image">إضافة صورة</string>
+    <string name="quiz_question_change_image">تغيير الصورة</string>
+    <string name="quiz_question_remove_image">إزالة الصورة</string>
+    <string name="quiz_question_image_loading">جاري معالجة الصورة...</string>
+    <string name="quiz_question_image_error">تعذر تحميل الصورة المختارة.</string>
+    <string name="quiz_question_image_desc">صورة توضيحية لسؤال الاختبار</string>
+    <string name="quiz_question_has_image_badge">يتضمن صورة</string>
+    <string name="quiz_view_student_results_btn">نتائج التلاميذ (%)</string>
+
+    <string name="svt_lab_tab_mindmaps">خرائط ذهنية</string>
+    <string name="svt_lab_tab_tools">أدوات SVT</string>
+    <string name="svt_mindmap_section_title">خرائط ذهنية تفاعلية SVT</string>
+    <string name="svt_mindmap_section_desc">استكشف كل محور عبر فروع منظمة ومفاهيم أساسية ومعادلات مهمة.</string>
+    <string name="svt_mindmap_empty">لا توجد خريطة ذهنية للمحاور المفعلة حالياً.</string>
+    <string name="svt_mindmap_branches_count">%1$d فروع</string>
+    <string name="svt_tool_atp_tab">استقلاب ATP</string>
+    <string name="svt_tool_genetics_tab">الوراثة والدم</string>
+    <string name="svt_tool_earth_tab">البيئة والزلازل</string>
+    <string name="svt_tool_atp_title">حاسبة الطاقة الخلوية (ATP)</string>
+    <string name="svt_tool_atp_glucose_label">كمية الكليكوز (مول)</string>
+    <string name="svt_tool_atp_pathway_respiration">التنفس الخلوي الحيوي (38 ATP)</string>
+    <string name="svt_tool_atp_pathway_lactic">التخمر اللبني (2 ATP + حمض لبني)</string>
+    <string name="svt_tool_atp_pathway_alcoholic">التخمر الكحولي (2 ATP + إيثانول)</string>
+    <string name="svt_tool_atp_total_result">الحصيلة الطاقية: %1$d ATP</string>
+    <string name="svt_tool_atp_efficiency">المردود الطاقي المقدر: %1$d%% (%2$s kJ/mol)</string>
+    <string name="svt_tool_punnett_title">شبكة التزاوج الأحادي (بونيت)</string>
+    <string name="svt_tool_punnett_parent1">الأب 1</string>
+    <string name="svt_tool_punnett_parent2">الأب 2</string>
+    <string name="svt_tool_punnett_dominant_pct">المظهر الخارجي السائد [A]: %1$d%%</string>
+    <string name="svt_tool_punnett_recessive_pct">المظهر الخارجي المتنحي [a]: %1$d%%</string>
+    <string name="svt_tool_abo_title">توافق تحاقن الدم (الفصائل ABO)</string>
+    <string name="svt_tool_abo_donor">المتبرع</string>
+    <string name="svt_tool_abo_recipient">المتلقي</string>
+    <string name="svt_tool_abo_compatible">متوافق — لا يحدث تلكد للكريات الحمراء</string>
+    <string name="svt_tool_abo_incompatible">غير متوافق — خطر التلكد (مضادات الأجسام %1$s)</string>
+    <string name="svt_tool_water_title">مقياس جودة المياه (DBO₅ و DCO والأكسجين)</string>
+    <string name="svt_tool_water_dbo5">DBO₅ (ملغ/ل)</string>
+    <string name="svt_tool_water_dco">DCO (ملغ/ل)</string>
+    <string name="svt_tool_water_o2">الأكسجين المذاب (ملغ/ل)</string>
+    <string name="svt_tool_water_quality_excellent">مياه ممتازة</string>
+    <string name="svt_tool_water_quality_good">جودة حسنة</string>
+    <string name="svt_tool_water_quality_moderate">تلوث متوسط</string>
+    <string name="svt_tool_water_quality_polluted">تلوث عضوي مرتفع / تخثث</string>
+    <string name="svt_tool_water_ratio">نسبة DCO / DBO₅ : %1$s</string>
+    <string name="svt_tool_seismic_title">حساب المسافة عن مركز الزلزال (موجات P و S)</string>
+    <string name="svt_tool_seismic_deltat">الفارق الزمني Δt (ts - tp) بالثواني</string>
+    <string name="svt_tool_seismic_result">المسافة المقدرة عن المركز السطحي: %1$s كلم (Vp = 6.0 • Vs = 3.5 كلم/ث)</string>
+
+    <string name="tab_teacher_dashboard">الرئيسية</string>
+    <string name="teacher_dashboard_title">لوحة قيادة الأستاذ</string>
+    <string name="teacher_dashboard_subtitle">متابعة الأقسام، التلاميذ ونتائج الاختبارات مباشرة</string>
+    <string name="teacher_dashboard_overview_tab">نظرة عامة</string>
+    <string name="teacher_dashboard_results_tab">نتائج QCM (%)</string>
+    <string name="teacher_kpi_classes">الأقسام</string>
+    <string name="teacher_kpi_students">تلاميذ مقبولون</string>
+    <string name="teacher_kpi_pending">%1$d قيد الانتظار</string>
+    <string name="teacher_kpi_qcm_avg">معدل QCM</string>
+    <string name="teacher_kpi_copies">%1$d إجابة • %2$d تمرين</string>
+    <string name="teacher_kpi_courses_video">الموارد والفيديو</string>
+    <string name="teacher_kpi_unread_msgs">%1$d رسائل غير مقروءة</string>
+    <string name="teacher_dashboard_class_breakdown">ملخص حسب القسم</string>
+    <string name="teacher_dashboard_shortcuts">اختصارات سريعة</string>
+    <string name="teacher_qcm_results_title">نتائج QCM حسب القسم والتلميذ</string>
+    <string name="teacher_qcm_results_desc">اطّلع على تفاصيل كل تمرين والنسبة المئوية الإجمالية لكل تلميذ.</string>
+    <string name="teacher_qcm_all_classes">الكل (%1$d)</string>
+    <string name="teacher_qcm_search_hint">ابحث عن تلميذ أو رقم مسار...</string>
+    <string name="teacher_qcm_sort_pct">الترتيب: % ↓</string>
+    <string name="teacher_qcm_sort_name">الترتيب: أ - ي</string>
+    <string name="teacher_qcm_overall_pct">المجموع: %1$d%%</string>
+    <string name="teacher_qcm_taken_count">%1$d / %2$d تمارين • %3$s / %4$s نقطة</string>
+    <string name="teacher_qcm_not_taken">لم يُنجز بعد</string>
+    <string name="teacher_qcm_no_students">لم يتم العثور على تلاميذ أو نتائج لهذا البحث.</string>
+
+    <string name="qr_identity_locked_badge">هوية QR مقفلة</string>
+    <string name="qr_identity_locked_notice">حساب مسجل عبر رمز QR للأستاذ: الاسم الكامل ورقم مسار مقفلان ولا يمكن تعديلهما.</string>
+    <string name="field_massar_label">رقم مسار</string>
+    <string name="taalim_default_email_hint">الافتراضي: رقم_مسار@taalim.ma</string>
 </resources>

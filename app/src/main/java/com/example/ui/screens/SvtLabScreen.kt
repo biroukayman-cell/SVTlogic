@@ -3,6 +3,10 @@ package com.example.ui.screens
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,7 +34,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.NavigateBefore
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Biotech
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
@@ -111,7 +117,9 @@ private enum class SvtLabTab(
     val testTag: String
 ) {
     GLOSSARY(R.string.svt_lab_tab_glossary, Icons.Filled.MenuBook, "svt_lab_tab_glossary"),
+    MIND_MAPS(R.string.svt_lab_tab_mindmaps, Icons.Filled.AccountTree, "svt_lab_tab_mindmaps"),
     FLASHCARDS(R.string.svt_lab_tab_flashcards, Icons.Filled.Style, "svt_lab_tab_flashcards"),
+    INTERACTIVE_TOOLS(R.string.svt_lab_tab_tools, Icons.Filled.Calculate, "svt_lab_tab_tools"),
     DNA(R.string.svt_lab_tab_dna, Icons.Filled.Biotech, "svt_lab_tab_dna"),
     MICROSCOPE_GEOLOGY(R.string.svt_lab_tab_microscope, Icons.Filled.Public, "svt_lab_tab_microscope")
 }
@@ -338,12 +346,15 @@ fun SvtLabTabScreen(
 
             HorizontalDivider()
 
-            Box(
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                when (selectedTab) {
+                    .fillMaxWidth(),
+                label = "svt_lab_tab_transition"
+            ) { tab ->
+                when (tab) {
                     SvtLabTab.GLOSSARY -> GlossaryLabSection(
                         isOnline = isOnline,
                         isGuestMode = isGuestMode,
@@ -354,8 +365,15 @@ fun SvtLabTabScreen(
                         onSearchLabSvtTerm = onSearchLabSvtTerm,
                         onClearLabSvtSearch = onClearLabSvtSearch
                     )
+                    SvtLabTab.MIND_MAPS -> SvtMindMapsLabSection(
+                        currentLanguage = currentLanguage,
+                        allowedDomains = effectiveDomains
+                    )
                     SvtLabTab.FLASHCARDS -> FlashcardsLabSection(
                         currentLanguage = currentLanguage,
+                        allowedDomains = effectiveDomains
+                    )
+                    SvtLabTab.INTERACTIVE_TOOLS -> SvtInteractiveToolsLabSection(
                         allowedDomains = effectiveDomains
                     )
                     SvtLabTab.DNA -> DnaSimulatorLabSection(currentLanguage = currentLanguage)

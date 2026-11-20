@@ -583,6 +583,11 @@ class SvtMainViewModel(
         viewModelScope.launch {
             _isSettingUpProfile.value = true
             try {
+                val resolvedEmail = if (role == "student") {
+                    email.trim().ifBlank { AuthSessionDraft.defaultStudentTaalimEmail(massarNumber) }
+                } else {
+                    email.trim()
+                }
                 val createdProfile = repository.createUserProfile(
                     fullName = fullName,
                     phoneNumber = phone,
@@ -590,7 +595,7 @@ class SvtMainViewModel(
                     avatarUrl = null,
                     massarNumber = massarNumber,
                     birthDate = birthDate,
-                    email = email,
+                    email = resolvedEmail,
                     establishment = establishment,
                     mustChangePassword = mustChangePassword,
                     boundDeviceId = if (role == "student") currentDeviceId else "",
@@ -613,7 +618,7 @@ class SvtMainViewModel(
                         _optimisticEnrollment.value = enrollment
                     }
                 }
-                val cleanRecoveryEmail = email.trim()
+                val cleanRecoveryEmail = resolvedEmail.trim()
                 if (role == "student" &&
                     cleanRecoveryEmail.isNotBlank() &&
                     android.util.Patterns.EMAIL_ADDRESS.matcher(cleanRecoveryEmail).matches()
@@ -644,9 +649,17 @@ class SvtMainViewModel(
     ) {
         viewModelScope.launch {
             try {
+                val currentProfile = (profileState.value as? ProfileGateState.Ready)?.profile
+                val isQrRegisteredStudent = currentProfile?.role == "student" &&
+                    (!studentEnrollment.value?.qrToken.isNullOrBlank() || !studentRoster.value?.qrToken.isNullOrBlank())
+                val effectiveName = if (isQrRegisteredStudent) {
+                    currentProfile?.fullName?.takeIf { it.isNotBlank() } ?: fullName
+                } else {
+                    fullName
+                }
                 val cleanEmail = email?.trim()
                 repository.updateProfileInfo(
-                    fullName = fullName,
+                    fullName = effectiveName,
                     phoneNumber = phone,
                     avatarUrl = avatarUrl,
                     birthDate = birthDate,

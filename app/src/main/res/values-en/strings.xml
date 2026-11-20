@@ -385,15 +385,15 @@
     <!-- Legal Notice & Privacy -->
     <string name="legal_notice_title">Legal Notice</string>
     <string name="legal_notice_footer">© 2026 BioTerre SVT • Created by Ayman BIROUK</string>
-    <string name="legal_notice_body">BioTerre SVT educational application.\nYear created: 2026\nCreator: Ayman BIROUK\nAll rights reserved.</string>
+    <string name="legal_notice_body">BioTerre SVT educational application.\nYear created: 2026\nCreator &amp; Publisher: Ayman BIROUK (biroukayman@gmail.com)\nAll rights reserved — Unauthorized copying, modification, decompilation, or redistribution of the APK or source code is strictly prohibited.</string>
     <string name="privacy_policy_title">Privacy Policy &amp; Data Protection</string>
     <string name="privacy_policy_button">Privacy Policy</string>
-    <string name="privacy_policy_summary">Your academic data (profile, quizzes, course progress, and private messages) is protected, used solely for SVT learning, and never sold or shared for commercial purposes.</string>
-    <string name="privacy_policy_body">Last updated: 2026\n\n1. Application Controller\nBioTerre SVT is an educational application created in 2026 by Ayman BIROUK (contact: biroukayman@gmail.com).\n\n2. Data Collected &amp; Educational Purpose\nThe app only processes data required for classroom management and learning progress:\n• Account &amp; identity: full name, role (student or teacher), Massar ID (student), professional email (teacher), optional phone number and birth date.\n• Academic activity: class enrollment, quiz scores and timing, video watch percentage, file opening status, private student-teacher messages, and earned badges.\n• Offline storage: downloaded resources are stored locally on your device.\n\n3. Device Permissions\n• Camera: used exclusively to scan class QR Codes. No personal photos or videos are recorded or uploaded.\n• Notifications: used to alert you about new courses, quizzes, announcements, messages, and badges.\n• Files &amp; gallery: access is strictly limited to files manually chosen through the secure system picker.\n\n4. Security &amp; Confidentiality\n• Strict per-class and per-user access rules: students only access resources for their enrolled class.\n• Private messaging is strictly confidential between each student and their teacher.\n• No ads, no advertising trackers, and no sale or commercial sharing of personal data.\n\n5. Retention &amp; Your Rights\nYou can view and update your profile details in the Profile tab. Removing a student or class deletes associated records. For any data protection request, contact: biroukayman@gmail.com.</string>
+    <string name="privacy_policy_summary">Your academic data (profile, quizzes, question illustrations, course progress, class percentages, and private messages) is protected, reserved for SVT learning, and covered by strict anti-misuse and anti-piracy safeguards.</string>
+    <string name="privacy_policy_body">Last updated: 2026 (v2)\n\n1. Application Controller\nBioTerre SVT is an educational application created in 2026 by Ayman BIROUK (contact: biroukayman@gmail.com).\n\n2. Data Collected &amp; Educational Purpose\nThe app only processes data necessary for classroom management and academic tracking:\n• Account &amp; identity: full name, role (student or teacher), Massar ID (permanently locked after teacher QR registration), default student recovery email (\"massarnumber@taalim.ma\" or entered email for password reset), professional email (teacher), school/institution, optional phone number and birth date.\n• Academic activity &amp; dashboard: class enrollment, quiz scores, overall per-student percentages and durations, video watch completion, file opening status, private student-teacher messages, and badges.\n• QCM question illustrations: images attached by teachers inside quizzes are compressed strictly for classroom learning.\n• Offline storage &amp; security: downloaded lessons, pending sync logs, and PIN lock preferences are stored locally on your authorized device.\n\n3. Device Permissions\n• Camera: used exclusively to scan class QR Codes. No personal photos or videos are recorded.\n• System Photo Picker (zero broad storage permissions): avatars and QCM illustrations are picked manually per selection without broad media storage access.\n• Notifications: used to alert you about courses, quizzes, announcements, messages, and approvals.\n\n4. Security, Integrity &amp; Confidentiality\n• QR identity lock (non-editable name and Massar ID), single-phone student binding, optional 2nd-layer PIN lock, and administrator teacher approval.\n• Strict per-class isolation and private confidential teacher-student messaging.\n• Zero ads, zero tracking SDKs, and zero sale or commercial transfer of personal data.\n• Using a modified, pirated, or tampered APK voids the confidentiality and integrity guarantees of the official build.\n\n5. Retention &amp; Rights\nYou can review your profile in the Profile tab (except QR-locked fields kept intact to preserve grade reliability). For any data protection inquiry: biroukayman@gmail.com.</string>
     <string name="terms_of_use_title">Terms of Use</string>
     <string name="terms_of_use_button">Terms of Use</string>
-    <string name="terms_of_use_summary">Rules for class access, educational use of resources, and respectful conduct between students and teachers on BioTerre SVT.</string>
-    <string name="terms_of_use_body">Last updated: 2026\n\n1. Purpose &amp; Acceptance\nThese Terms of Use govern access to and use of the BioTerre SVT educational application (created in 2026 by Ayman BIROUK). Using the application constitutes acceptance of these terms.\n\n2. Accounts &amp; Class Access\n• Teachers: create and manage their classes, resources, quizzes, student rosters, and class QR/access codes.\n• Students: join their class using their Massar ID or the class QR Code / secret code provided by their teacher.\n• Users must keep their login credentials confidential and provide accurate information.\n\n3. Educational Use &amp; Conduct\n• The application is reserved strictly for SVT learning and classroom follow-up.\n• Messages and submitted activities must remain respectful and appropriate for an educational environment.\n• Uploading unlawful content, disrupting the service, or attempting to access another class or student\'s data is prohibited.\n\n4. Content &amp; Intellectual Property\n• The BioTerre SVT software, design, and brand belong to its creator Ayman BIROUK (2026).\n• Courses, videos, documents, and quizzes remain under the educational responsibility of the teachers who publish them.\n\n5. Availability &amp; Updates\nThe application supports offline access for previously downloaded resources. Updates may be released to improve stability and security.\n\n6. Contact\nFor any questions regarding these terms: biroukayman@gmail.com.</string>
+    <string name="terms_of_use_summary">Educational access rules, @taalim.ma default emails, QR identity lock, strict anti-piracy prohibitions, and creator liability protection.</string>
+    <string name="terms_of_use_body">Last updated: 2026 (v2)\n\n1. Purpose &amp; Acceptance\nThese Terms of Use govern access to and use of the BioTerre SVT educational application (created in 2026 by Ayman BIROUK). Installing or using the app constitutes full acceptance of these terms.\n\n2. Accounts, @taalim.ma Email &amp; QR Lock\n• Teachers: submit accurate profile details (including school name) and await administrator approval before creating classes, dashboards, quizzes (with or without images), resources, and announcements.\n• Students: join classes via Massar ID or class QR Code. Student recovery email defaults to \"massarnumber@taalim.ma\" unless customized.\n• Academic integrity (QR lock): once a student registers using a teacher\'s QR Code, their full name and Massar ID are permanently locked and cannot be altered to ensure accurate grades and class percentages.\n• Guest Mode: read-only demonstration preview; cannot receive live data or reply.\n\n3. Educational Use &amp; Conduct\n• BioTerre SVT is reserved solely for Life &amp; Earth Sciences (SVT) teaching and study.\n• Sharing unlawful, defamatory, infringing, or inappropriate images, documents, links, or messages is strictly prohibited.\n\n4. Anti-Piracy, Anti-Tampering &amp; Intellectual Property\n• All intellectual property rights in BioTerre SVT, its source code, architecture, scientific simulators, mind maps, glossary, and visuals belong exclusively to Ayman BIROUK (2026).\n• Users are STRICTLY PROHIBITED from: decompiling, disassembling, reverse-engineering, patching, or repackaging the APK; distributing cloned or pirated builds; bypassing security controls (single-device binding, PIN lock, QR identity lock, teacher approval, or Firebase security rules); automated scraping; or disrupting backend services.\n• Any piracy, tampering, or abuse results in immediate account suspension and exposes offenders to legal and disciplinary action.\n\n5. Limitation of Liability &amp; Manufacturer Protection\n• The creator and publisher (Ayman BIROUK) provides the software \"as is\" for educational purposes and shall NOT be liable for: (a) unlawful, fraudulent, or improper misuse by any user; (b) third-party links, APK update URLs, files, or images uploaded by users; (c) damages arising from unofficial or tampered APKs, rooted devices, or external network outages.\n• Each user remains solely responsible for securing their device, password, and PIN code.\n\n6. Official Contact\nReport misuse, piracy, or legal inquiries to: biroukayman@gmail.com.</string>
     <string name="terms_acceptance_title">Accept Terms of Use</string>
     <string name="terms_acceptance_subtitle">Hello %1$s! Before accessing your student space, please read and accept the BioTerre SVT Terms of Use.</string>
     <string name="terms_acceptance_checkbox">I have read and accept the Terms of Use and Privacy Policy</string>
@@ -632,4 +632,86 @@
     <string name="admin_reset_teacher_password_btn">Reset password</string>
     <string name="admin_reset_teacher_password_sent">Reset email sent to %1$s and SMS prepared for %2$s.</string>
     <string name="admin_reset_teacher_sms_body">BioTerre SVT — Hello %1$s, a password reset link has been sent to %2$s.</string>
+
+    <!-- Quiz Animations, Quiz Images, Mind Maps, Lab Tools, Teacher Dashboard & Results, QR Lock & @taalim.ma -->
+    <string name="quiz_previous">Previous</string>
+    <string name="quiz_timer_progress_label">Progress &amp; pace</string>
+    <string name="quiz_question_image_optional">Question image / diagram (optional)</string>
+    <string name="quiz_question_add_image">Add image</string>
+    <string name="quiz_question_change_image">Change image</string>
+    <string name="quiz_question_remove_image">Remove image</string>
+    <string name="quiz_question_image_loading">Processing image...</string>
+    <string name="quiz_question_image_error">Could not load the selected image.</string>
+    <string name="quiz_question_image_desc">Quiz question illustration</string>
+    <string name="quiz_question_has_image_badge">With image</string>
+    <string name="quiz_view_student_results_btn">Student Results (%)</string>
+
+    <string name="svt_lab_tab_mindmaps">Mind Maps</string>
+    <string name="svt_lab_tab_tools">SVT Tools</string>
+    <string name="svt_mindmap_section_title">Interactive SVT Mind Maps</string>
+    <string name="svt_mindmap_section_desc">Explore every chapter through structured branches, key concepts, and core formulas.</string>
+    <string name="svt_mindmap_empty">No mind map matches the currently enabled SVT themes.</string>
+    <string name="svt_mindmap_branches_count">%1$d branches</string>
+    <string name="svt_tool_atp_tab">ATP Metabolism</string>
+    <string name="svt_tool_genetics_tab">Genetics &amp; Blood</string>
+    <string name="svt_tool_earth_tab">Ecology &amp; Quakes</string>
+    <string name="svt_tool_atp_title">Cellular Energy Calculator (ATP)</string>
+    <string name="svt_tool_atp_glucose_label">Glucose amount (mol)</string>
+    <string name="svt_tool_atp_pathway_respiration">Aerobic respiration (C₆H₁₂O₆ + 6 O₂ → 38 ATP)</string>
+    <string name="svt_tool_atp_pathway_lactic">Lactic fermentation (→ 2 ATP + 2 lactic acid)</string>
+    <string name="svt_tool_atp_pathway_alcoholic">Alcoholic fermentation (→ 2 ATP + 2 ethanol)</string>
+    <string name="svt_tool_atp_total_result">Total ATP yield: %1$d ATP</string>
+    <string name="svt_tool_atp_efficiency">Estimated energy yield: %1$d%% (%2$s kJ/mol)</string>
+    <string name="svt_tool_punnett_title">Monohybrid Punnett Square Cross</string>
+    <string name="svt_tool_punnett_parent1">Parent 1</string>
+    <string name="svt_tool_punnett_parent2">Parent 2</string>
+    <string name="svt_tool_punnett_dominant_pct">Dominant phenotype [A]: %1$d%%</string>
+    <string name="svt_tool_punnett_recessive_pct">Recessive phenotype [a]: %1$d%%</string>
+    <string name="svt_tool_abo_title">Blood Transfusion Compatibility (ABO)</string>
+    <string name="svt_tool_abo_donor">Donor</string>
+    <string name="svt_tool_abo_recipient">Recipient</string>
+    <string name="svt_tool_abo_compatible">Compatible — No red blood cell agglutination</string>
+    <string name="svt_tool_abo_incompatible">Incompatible — Risk of agglutination (anti-%1$s antibodies)</string>
+    <string name="svt_tool_water_title">Water Quality Evaluator (BOD₅, COD &amp; Dissolved O₂)</string>
+    <string name="svt_tool_water_dbo5">BOD₅ (mg/L)</string>
+    <string name="svt_tool_water_dco">COD (mg/L)</string>
+    <string name="svt_tool_water_o2">Dissolved O₂ (mg/L)</string>
+    <string name="svt_tool_water_quality_excellent">Excellent water (Oligotrophic)</string>
+    <string name="svt_tool_water_quality_good">Good quality</string>
+    <string name="svt_tool_water_quality_moderate">Moderate pollution</string>
+    <string name="svt_tool_water_quality_polluted">High organic pollution / Eutrophication</string>
+    <string name="svt_tool_water_ratio">COD / BOD₅ ratio: %1$s</string>
+    <string name="svt_tool_seismic_title">Seismic Epicenter Distance (P &amp; S Waves)</string>
+    <string name="svt_tool_seismic_deltat">Delay Δt (ts - tp) in seconds</string>
+    <string name="svt_tool_seismic_result">Estimated epicenter distance: %1$s km (Vp = 6.0 km/s • Vs = 3.5 km/s)</string>
+
+    <string name="tab_teacher_dashboard">Board</string>
+    <string name="teacher_dashboard_title">Teacher Dashboard</string>
+    <string name="teacher_dashboard_subtitle">Class metrics, student tracking, and real-time quiz results</string>
+    <string name="teacher_dashboard_overview_tab">Overview</string>
+    <string name="teacher_dashboard_results_tab">Quiz Results (%)</string>
+    <string name="teacher_kpi_classes">Classes</string>
+    <string name="teacher_kpi_students">Approved students</string>
+    <string name="teacher_kpi_pending">%1$d pending</string>
+    <string name="teacher_kpi_qcm_avg">Quiz Average</string>
+    <string name="teacher_kpi_copies">%1$d attempts • %2$d quizzes</string>
+    <string name="teacher_kpi_courses_video">Lessons &amp; Video</string>
+    <string name="teacher_kpi_unread_msgs">%1$d unread msg(s)</string>
+    <string name="teacher_dashboard_class_breakdown">Class Summary</string>
+    <string name="teacher_dashboard_shortcuts">Quick Actions</string>
+    <string name="teacher_qcm_results_title">Quiz Results by Class &amp; Student</string>
+    <string name="teacher_qcm_results_desc">Inspect every quiz score and each student\'s overall cumulative percentage.</string>
+    <string name="teacher_qcm_all_classes">All (%1$d)</string>
+    <string name="teacher_qcm_search_hint">Search student name or Massar ID...</string>
+    <string name="teacher_qcm_sort_pct">Sort: % ↓</string>
+    <string name="teacher_qcm_sort_name">Sort: Name A-Z</string>
+    <string name="teacher_qcm_overall_pct">Total: %1$d%%</string>
+    <string name="teacher_qcm_taken_count">%1$d / %2$d quizzes done • %3$s / %4$s pts</string>
+    <string name="teacher_qcm_not_taken">Not taken</string>
+    <string name="teacher_qcm_no_students">No students or results found for this filter.</string>
+
+    <string name="qr_identity_locked_badge">QR identity locked</string>
+    <string name="qr_identity_locked_notice">Account registered via teacher\'s QR Code: full name and Massar ID are locked and cannot be changed.</string>
+    <string name="field_massar_label">Massar ID</string>
+    <string name="taalim_default_email_hint">Default: massarnumber@taalim.ma</string>
 </resources>

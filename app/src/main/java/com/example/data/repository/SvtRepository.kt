@@ -150,7 +150,12 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val docRef = db.collection("users").document(uid)
         val cleanMassar = massarNumber.trim()
         val cleanBirthDate = birthDate.trim()
-        val cleanEmail = email.trim()
+        val rawEmail = email.trim()
+        val cleanEmail = if (role == "student" && rawEmail.isBlank()) {
+            com.example.core.AuthSessionDraft.defaultStudentTaalimEmail(cleanMassar)
+        } else {
+            rawEmail
+        }
         val cleanEstablishment = establishment.trim()
         val currentAuthUser = auth.currentUser
         val isVerifiedOwnerAdmin = currentAuthUser?.email.equals("biroukayman@gmail.com", ignoreCase = true) &&
@@ -278,8 +283,23 @@ class SvtRepository(private val db: FirebaseFirestore) {
     ) {
         val uid = requireUserId()
         val docRef = db.collection("users").document(uid)
+
+        // Prevent name change if student registered via teacher QR code
+        val existingEnrollment = runCatching {
+            db.collection("enrollments").document(uid).get().await()
+        }.getOrNull()
+        val enrolledViaQr = existingEnrollment?.exists() == true &&
+            !existingEnrollment.getString("qrToken").isNullOrBlank()
+        val effectiveName = if (enrolledViaQr) {
+            val currentSnap = runCatching { docRef.get().await() }.getOrNull()
+            val storedName = currentSnap?.getString("fullName").orEmpty().trim()
+            storedName.ifBlank { fullName.trim() }
+        } else {
+            fullName.trim()
+        }
+
         val updates = mutableMapOf<String, Any>(
-            "fullName" to fullName.trim(),
+            "fullName" to effectiveName,
             "phoneNumber" to phoneNumber.trim(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
@@ -932,12 +952,16 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val uid = requireUserId()
         val quizRef = db.collection("quizzes").document()
         val questionMaps = questions.map { q ->
-            mapOf(
-                "questionText" to q.questionText.trim(),
-                "options" to q.options.map { it.trim() },
-                "correctIndex" to q.correctIndex,
-                "explanation" to q.explanation.trim()
-            )
+            buildMap<String, Any> {
+                put("questionText", q.questionText.trim())
+                put("options", q.options.map { it.trim() })
+                put("correctIndex", q.correctIndex)
+                put("explanation", q.explanation.trim())
+                val cleanImg = q.imageUrl.trim()
+                if (cleanImg.isNotBlank()) {
+                    put("imageUrl", cleanImg)
+                }
+            }
         }
         val payload = mapOf(
             "classId" to classId,

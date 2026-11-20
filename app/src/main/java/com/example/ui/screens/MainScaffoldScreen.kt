@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Biotech
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.outlined.Biotech
 import androidx.compose.material.icons.outlined.Campaign
+import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Quiz
@@ -61,6 +63,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -103,6 +106,7 @@ enum class SvtTab(
     val unselectedIcon: ImageVector,
     val testTag: String
 ) {
+    DASHBOARD(R.string.tab_teacher_dashboard, Icons.Filled.Dashboard, Icons.Outlined.Dashboard, "tab_teacher_dashboard"),
     EXERCISES(R.string.tab_exercises, Icons.Filled.Quiz, Icons.Outlined.Quiz, "tab_exercises"),
     SVT_LAB(R.string.tab_svt_lab, Icons.Filled.Biotech, Icons.Outlined.Biotech, "tab_svt_lab"),
     RESOURCES(R.string.tab_resources, Icons.Filled.MenuBook, Icons.Outlined.MenuBook, "tab_resources"),
@@ -125,7 +129,13 @@ fun MainDashboardScreen(
 ) {
     val context = LocalContext.current
     val isTeacher = profile.role == "teacher"
-    var currentTab by rememberSaveable { mutableStateOf(SvtTab.EXERCISES) }
+    val visibleTabs = remember(isTeacher) {
+        if (isTeacher) SvtTab.entries else SvtTab.entries.filter { it != SvtTab.DASHBOARD }
+    }
+    var currentTab by rememberSaveable(isTeacher) {
+        mutableStateOf(if (isTeacher) SvtTab.DASHBOARD else SvtTab.EXERCISES)
+    }
+    var teacherDashboardSection by rememberSaveable { mutableIntStateOf(0) }
     var showNotificationsSheet by remember { mutableStateOf(false) }
     var showClassMenu by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -305,7 +315,7 @@ fun MainDashboardScreen(
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
                     ) {
-                        SvtTab.entries.forEach { tab ->
+                        visibleTabs.forEach { tab ->
                             val selected = tab == currentTab
                             NavigationBarItem(
                                 selected = selected,
@@ -340,7 +350,7 @@ fun MainDashboardScreen(
                     NavigationRail(
                         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
                     ) {
-                        SvtTab.entries.forEach { tab ->
+                        visibleTabs.forEach { tab ->
                             val selected = tab == currentTab
                             NavigationRailItem(
                                 selected = selected,
@@ -387,6 +397,22 @@ fun MainDashboardScreen(
 
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         when (currentTab) {
+                            SvtTab.DASHBOARD -> TeacherDashboardTab(
+                                selectedSection = teacherDashboardSection,
+                                onSelectSection = { teacherDashboardSection = it },
+                                selectedClassId = selectedClassId,
+                                teacherClasses = teacherClasses,
+                                teacherEnrollments = teacherEnrollments,
+                                teacherRoster = teacherRoster,
+                                teacherQuizzes = teacherQuizzes,
+                                teacherAttempts = teacherAttempts,
+                                teacherResources = teacherResources,
+                                teacherVideoTracking = teacherVideoTracking,
+                                teacherAnnouncements = teacherAnnouncements,
+                                teacherMessages = teacherMessages,
+                                onNavigateToTab = { targetTab -> currentTab = targetTab }
+                            )
+
                             SvtTab.EXERCISES -> ExercisesTab(
                                 isTeacher = isTeacher,
                                 isOnline = isOnline,
@@ -430,6 +456,12 @@ fun MainDashboardScreen(
                                 onDeleteQuiz = { quiz ->
                                     viewModel.deleteQuiz(context, quiz)
                                 },
+                                onOpenQcmResults = if (isTeacher) {
+                                    {
+                                        teacherDashboardSection = 1
+                                        currentTab = SvtTab.DASHBOARD
+                                    }
+                                } else null,
                                 currentLanguage = currentLanguage
                             )
 
@@ -759,7 +791,7 @@ fun GuestMainDashboardScreen(
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
                     ) {
-                        SvtTab.entries.forEach { tab ->
+                        SvtTab.entries.filter { it != SvtTab.DASHBOARD }.forEach { tab ->
                             val selected = tab == currentTab
                             NavigationBarItem(
                                 selected = selected,
@@ -794,7 +826,7 @@ fun GuestMainDashboardScreen(
                     NavigationRail(
                         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
                     ) {
-                        SvtTab.entries.forEach { tab ->
+                        SvtTab.entries.filter { it != SvtTab.DASHBOARD }.forEach { tab ->
                             val selected = tab == currentTab
                             NavigationRailItem(
                                 selected = selected,
@@ -832,7 +864,7 @@ fun GuestMainDashboardScreen(
                             .fillMaxWidth()
                     ) {
                         when (currentTab) {
-                            SvtTab.EXERCISES -> ExercisesTab(
+                            SvtTab.DASHBOARD, SvtTab.EXERCISES -> ExercisesTab(
                                 isTeacher = false,
                                 isOnline = false,
                                 selectedClassId = GuestDemoData.GUEST_CLASS_ID,

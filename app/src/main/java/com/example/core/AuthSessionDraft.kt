@@ -89,6 +89,12 @@ object AuthSessionDraft {
         return "massar.$clean@student.bioterre.svt"
     }
 
+    fun defaultStudentTaalimEmail(massar: String): String {
+        val clean = normalizeMassar(massar)
+        if (clean.isBlank() || clean.startsWith("QR")) return ""
+        return "${clean.lowercase(Locale.US)}@taalim.ma"
+    }
+
     fun generateProvisionalPassword(length: Int = 8): String {
         val sb = StringBuilder("Svt")
         val remaining = (length - 3).coerceAtLeast(5)
