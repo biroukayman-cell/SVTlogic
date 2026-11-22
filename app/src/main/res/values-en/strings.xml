@@ -752,4 +752,5 @@
     <string name="teacher_ai_analysis_retry">Retry</string>
     <string name="teacher_ai_analysis_offline_error">Internet connection is required to run AI class analysis.</string>
     <string name="teacher_ai_analysis_error">Failed to generate AI analysis: %1$s</string>
+    <string name="teacher_ai_analysis_appcheck_error">App Check / reCAPTCHA verification failed for AI analysis (%1$s). Check your Internet connection and Google Play Services.</string>
 </resources>

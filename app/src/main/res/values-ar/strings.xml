@@ -752,4 +752,5 @@
     <string name="teacher_ai_analysis_retry">إعادة المحاولة</string>
     <string name="teacher_ai_analysis_offline_error">يلزم الاتصال بالإنترنت لتشغيل التحليل بالذكاء الاصطناعي.</string>
     <string name="teacher_ai_analysis_error">تعذر إنشاء التحليل بالذكاء الاصطناعي: %1$s</string>
+    <string name="teacher_ai_analysis_appcheck_error">تعذر التحقق من App Check / reCAPTCHA لتحليل الذكاء الاصطناعي (%1$s). تحقق من الاتصال بالإنترنت وخدمات Google Play.</string>
 </resources>

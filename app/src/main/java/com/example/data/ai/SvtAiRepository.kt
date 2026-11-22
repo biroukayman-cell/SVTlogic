@@ -434,13 +434,14 @@ class SvtAiRepository {
                 val cls = cause::class.java.name
                 val msg = cause.message.orEmpty()
                 cls.contains("AppCheck", ignoreCase = true) ||
+                    cls.contains("Recaptcha", ignoreCase = true) ||
                     msg.contains("app check", ignoreCase = true) ||
                     msg.contains("appcheck", ignoreCase = true) ||
                     msg.contains("attestation", ignoreCase = true) ||
                     msg.contains("app token", ignoreCase = true) ||
                     msg.contains("firebase token", ignoreCase = true) ||
-                    msg.contains("Too many attempts", ignoreCase = true) ||
-                    msg.contains("403", ignoreCase = true)
+                    msg.contains("recaptcha", ignoreCase = true) ||
+                    msg.contains("Too many attempts", ignoreCase = true)
             }
         }
     }

@@ -1371,8 +1371,12 @@ class SvtMainViewModel(
                 _aiQuizState.value = AiQuizState.Success(draft)
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: AiAppCheckException) {
-                _aiQuizState.value = AiQuizState.Error(context.getString(R.string.quiz_ai_error_appcheck))
+            } catch (e: AiAppCheckException) {
+                val detail = e.cause?.localizedMessage ?: e.localizedMessage.orEmpty()
+                val base = context.getString(R.string.quiz_ai_error_appcheck)
+                _aiQuizState.value = AiQuizState.Error(
+                    if (detail.isNotBlank()) "$base\n($detail)" else base
+                )
             } catch (e: Exception) {
                 _aiQuizState.value = AiQuizState.Error(e.localizedMessage ?: "AI generation error")
             }
@@ -1409,11 +1413,12 @@ class SvtMainViewModel(
                 )
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: AiAppCheckException) {
+            } catch (e: AiAppCheckException) {
+                val detail = e.cause?.localizedMessage ?: e.localizedMessage ?: "App Check"
                 _classAiAnalysisState.value = ClassAiAnalysisState.Error(
                     classId = svtClass.id,
                     className = svtClass.name,
-                    message = context.getString(R.string.quiz_ai_error_appcheck)
+                    message = context.getString(R.string.teacher_ai_analysis_appcheck_error, detail)
                 )
             } catch (e: Exception) {
                 _classAiAnalysisState.value = ClassAiAnalysisState.Error(

@@ -752,4 +752,5 @@
     <string name="teacher_ai_analysis_retry">Réessayer</string>
     <string name="teacher_ai_analysis_offline_error">Connexion Internet requise pour lancer l\'analyse par IA.</string>
     <string name="teacher_ai_analysis_error">Impossible de générer l\'analyse IA : %1$s</string>
+    <string name="teacher_ai_analysis_appcheck_error">Vérification App Check / reCAPTCHA refusée pour l\'analyse IA (%1$s). Vérifiez la connexion Internet et les services Google Play.</string>
 </resources>

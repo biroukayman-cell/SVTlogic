@@ -100,6 +100,10 @@ class OfflineStorageManagerHelperTest {
         assertTrue(SvtAiRepository.isAppCheckOrTokenError(wrapped))
 
         assertTrue(SvtAiRepository.isAppCheckOrTokenError(IllegalStateException("Missing attestation firebase token")))
+        assertTrue(SvtAiRepository.isAppCheckOrTokenError(IllegalStateException("reCAPTCHA enterprise verification failed")))
+
+        val unrelatedApiError = IllegalStateException("HTTP 403: Vertex AI API disabled in project")
+        assertFalse(SvtAiRepository.isAppCheckOrTokenError(unrelatedApiError))
 
         val timeoutError = java.net.SocketTimeoutException("Read timed out")
         assertFalse(SvtAiRepository.isAppCheckOrTokenError(timeoutError))
