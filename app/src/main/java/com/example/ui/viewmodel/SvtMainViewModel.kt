@@ -10,6 +10,7 @@ import com.example.core.AppLanguage
 import com.example.core.AppUpdateUrlHelper
 import com.example.core.AuthSessionDraft
 import com.example.core.AvatarStorageHelper
+import com.example.core.BiometricAuthHelper
 import com.example.core.ConnectivityObserver
 import com.example.core.DeviceSessionManager
 import com.example.core.ImportedStudentRow
@@ -692,6 +693,9 @@ class SvtMainViewModel(
                     birthDate = birthDate,
                     email = cleanEmail
                 )
+                uiContext?.let { ctx ->
+                    BiometricAuthHelper.updateDisplayNameIfSaved(ctx, currentUserId, effectiveName)
+                }
                 if (!cleanEmail.isNullOrBlank() &&
                     android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()
                 ) {
@@ -847,6 +851,7 @@ class SvtMainViewModel(
                 }
                 user.updatePassword(newPassword).await()
                 repository.markPasswordChanged(mustChange = false)
+                BiometricAuthHelper.updatePasswordIfSaved(uiContext, user.uid, newPassword)
                 val okMsg = uiContext.getString(R.string.password_changed_success)
                 _statusMessage.value = okMsg
                 onResult(true, null)

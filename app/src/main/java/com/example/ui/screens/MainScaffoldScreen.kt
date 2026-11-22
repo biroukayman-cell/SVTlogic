@@ -83,6 +83,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.BuildConfig
 import com.example.R
 import com.example.core.AppLanguage
+import com.example.core.NotificationDrawerLogic
 import com.example.core.StudentCredentialsPdfExporter
 import com.example.core.ThemeConfig
 import com.example.data.demo.GuestDemoData
@@ -92,12 +93,13 @@ import com.example.data.svt.SvtDomain
 import com.example.ui.components.BadgeCelebrationDialog
 import com.example.ui.components.GuestReadOnlyBanner
 import com.example.ui.components.LanguageSwitcherRow
-import com.example.ui.components.NotificationsSheet
+import com.example.ui.components.NotificationDrawer
 import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtWarning
 import com.example.ui.viewmodel.AiQuizState
 import com.example.ui.viewmodel.LabSvtSearchState
 import com.example.ui.viewmodel.SvtMainViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 enum class SvtTab(
@@ -185,6 +187,34 @@ fun MainDashboardScreen(
     val actionError by viewModel.actionError.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
     var dismissedUpdateId by rememberSaveable { mutableStateOf<String?>(null) }
+    var knownNotificationIds by remember(profile.userId) { mutableStateOf<Set<String>?>(null) }
+    var newlyArrivedNotificationIds by remember(profile.userId) { mutableStateOf<Set<String>>(emptySet()) }
+
+    LaunchedEffect(profile.userId) {
+        if (knownNotificationIds == null) {
+            delay(1_500L)
+            if (knownNotificationIds == null) {
+                knownNotificationIds = studentNotifications.map { it.id }.toSet()
+            }
+        }
+    }
+
+    LaunchedEffect(studentNotifications) {
+        if (knownNotificationIds == null) {
+            if (studentNotifications.isNotEmpty()) {
+                knownNotificationIds = studentNotifications.map { it.id }.toSet()
+            }
+        } else {
+            val arrived = NotificationDrawerLogic.detectNewlyArrivedNotificationIds(
+                knownIds = knownNotificationIds,
+                currentNotifications = studentNotifications
+            )
+            if (arrived.isNotEmpty()) {
+                newlyArrivedNotificationIds = newlyArrivedNotificationIds + arrived
+            }
+            knownNotificationIds = knownNotificationIds.orEmpty() + studentNotifications.map { it.id }
+        }
+    }
 
     // Request POST_NOTIFICATIONS politely on Android 13+ for all signed-in users (students & teachers)
     val notifPermissionLauncher = rememberLauncherForActivityResult(
@@ -725,10 +755,14 @@ fun MainDashboardScreen(
     }
 
     if (showNotificationsSheet) {
-        NotificationsSheet(
+        NotificationDrawer(
             notifications = studentNotifications,
             onMarkAllRead = { viewModel.markAllNotificationsRead() },
-            onDismiss = { showNotificationsSheet = false }
+            onDismiss = { showNotificationsSheet = false },
+            newlyArrivedIds = newlyArrivedNotificationIds,
+            onAcknowledgeNewNotifications = { ackIds ->
+                newlyArrivedNotificationIds = newlyArrivedNotificationIds - ackIds
+            }
         )
     }
 

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -25,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
@@ -67,8 +69,11 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.core.AvatarStorageHelper
+import com.example.core.BiometricAuthHelper
+import com.example.core.BiometricAvailability
 import com.example.core.PinVerifyResult
 import com.example.core.SecurityLockManager
+import com.example.core.findFragmentActivity
 import kotlinx.coroutines.delay
 
 @Composable
@@ -227,6 +232,35 @@ fun SecurityPinLockScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var lockoutSeconds by remember {
         mutableIntStateOf(SecurityLockManager.getRemainingLockoutSeconds(context, userId))
+    }
+    val canBiometricUnlock = remember(userId, context) {
+        BiometricAuthHelper.getAvailability(context) == BiometricAvailability.AVAILABLE &&
+            BiometricAuthHelper.isBiometricEnabledForUser(context, userId)
+    }
+
+    fun triggerBiometricUnlock() {
+        val fragmentActivity = context.findFragmentActivity() ?: return
+        BiometricAuthHelper.authenticate(
+            activity = fragmentActivity,
+            title = context.getString(R.string.biometric_prompt_title),
+            subtitle = context.getString(R.string.biometric_prompt_unlock_subtitle),
+            negativeButtonText = context.getString(R.string.biometric_prompt_cancel_pin),
+            onSuccess = {
+                errorMessage = null
+                onUnlocked()
+            },
+            onError = { err ->
+                if (!err.isNullOrBlank()) {
+                    errorMessage = err
+                }
+            }
+        )
+    }
+
+    LaunchedEffect(userId, canBiometricUnlock) {
+        if (canBiometricUnlock && lockoutSeconds == 0) {
+            triggerBiometricUnlock()
+        }
     }
 
     LaunchedEffect(lockoutSeconds) {
@@ -464,6 +498,26 @@ fun SecurityPinLockScreen(
                                 imageVector = Icons.Filled.Lock,
                                 contentDescription = stringResource(id = R.string.security_pin_unlock)
                             )
+                        }
+                    }
+
+                    if (canBiometricUnlock) {
+                        Spacer(Modifier.height(6.dp))
+                        OutlinedButton(
+                            onClick = { triggerBiometricUnlock() },
+                            enabled = lockoutSeconds == 0,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("pin_lock_biometric_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Fingerprint,
+                                contentDescription = stringResource(id = R.string.biometric_unlock_button),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(id = R.string.biometric_unlock_button))
                         }
                     }
                 }

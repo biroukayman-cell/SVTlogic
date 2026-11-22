@@ -61,6 +61,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FlashlightOff
 import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.HourglassTop
@@ -132,9 +133,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
 import com.example.core.AppLanguage
 import com.example.core.AuthSessionDraft
+import com.example.core.BiometricAuthHelper
+import com.example.core.BiometricAvailability
 import com.example.core.QrCodeUtils
 import com.example.core.QrImageAnalyzer
 import com.example.core.QrScanResult
+import com.example.core.SavedBiometricCredential
+import com.example.core.SavedBiometricSummary
+import com.example.core.findFragmentActivity
 import com.example.data.model.Enrollment
 import com.example.data.model.RosterStudent
 import com.example.data.model.UserProfile
@@ -245,6 +251,80 @@ fun AuthScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showStudentForgotDialog by rememberSaveable { mutableStateOf(false) }
     var showTeacherForgotDialog by rememberSaveable { mutableStateOf(false) }
+
+    val biometricAvailability = remember(localizedContext) {
+        BiometricAuthHelper.getAvailability(localizedContext)
+    }
+    var savedBiometricSummary by remember {
+        mutableStateOf(BiometricAuthHelper.getSavedSummary(activityContext))
+    }
+    var enableBiometricAfterAuth by rememberSaveable { mutableStateOf(false) }
+    val canUseBiometricLogin = BiometricAuthHelper.canShowFingerprintLogin(
+        availability = biometricAvailability,
+        hasSavedCredential = savedBiometricSummary != null
+    )
+
+    val launchBiometricSignIn: () -> Unit = {
+        val fragmentActivity = localizedContext.findFragmentActivity()
+            ?: activityContext.findFragmentActivity()
+        if (fragmentActivity == null) {
+            errorMessage = localizedContext.getString(R.string.auth_error_generic)
+        } else {
+            errorMessage = null
+            BiometricAuthHelper.authenticate(
+                activity = fragmentActivity,
+                title = localizedContext.getString(R.string.biometric_prompt_title),
+                subtitle = localizedContext.getString(R.string.biometric_prompt_subtitle),
+                negativeButtonText = localizedContext.getString(R.string.biometric_prompt_cancel),
+                onSuccess = {
+                    val cred = BiometricAuthHelper.decryptSavedCredential(activityContext)
+                    if (cred == null) {
+                        BiometricAuthHelper.clearSavedCredential(activityContext)
+                        savedBiometricSummary = null
+                        errorMessage = localizedContext.getString(R.string.biometric_credentials_expired)
+                    } else {
+                        isLoading = true
+                        coroutineScope.launch {
+                            try {
+                                val role = cred.role.ifBlank { "student" }
+                                val savedMassar = if (role != "teacher" && !cred.identifierLabel.contains("@")) {
+                                    cred.identifierLabel
+                                } else ""
+                                val savedEmail = if (role == "teacher" || cred.identifierLabel.contains("@")) {
+                                    cred.email
+                                } else ""
+                                AuthSessionDraft.save(
+                                    context = activityContext,
+                                    role = role,
+                                    massarNumber = savedMassar,
+                                    email = savedEmail,
+                                    fullName = cred.displayName
+                                )
+                                Firebase.auth.signInWithEmailAndPassword(cred.email, cred.password).await()
+                                isLoading = false
+                                onAuthSuccess()
+                            } catch (e: Exception) {
+                                isLoading = false
+                                Log.e("Auth", "Biometric sign-in failed", e)
+                                if (e is FirebaseAuthInvalidCredentialsException || e is FirebaseAuthInvalidUserException) {
+                                    BiometricAuthHelper.clearSavedCredential(activityContext)
+                                    savedBiometricSummary = null
+                                    errorMessage = localizedContext.getString(R.string.biometric_credentials_expired)
+                                } else {
+                                    errorMessage = mapFirebaseAuthError(localizedContext, e)
+                                }
+                            }
+                        }
+                    }
+                },
+                onError = { err ->
+                    if (!err.isNullOrBlank()) {
+                        errorMessage = err
+                    }
+                }
+            )
+        }
+    }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -416,6 +496,16 @@ fun AuthScreen(
                             modifier = Modifier.padding(top = 6.dp)
                         )
 
+                        if (canUseBiometricLogin) {
+                            BiometricSignInButton(
+                                summary = savedBiometricSummary,
+                                enabled = !isLoading,
+                                onClick = launchBiometricSignIn,
+                                modifier = Modifier.testTag("biometric_login_button")
+                            )
+                            AuthErrorCard(errorMessage = errorMessage)
+                        }
+
                         RoleGatewayCard(
                             title = stringResource(id = R.string.auth_qr_quick_title),
                             subtitle = stringResource(id = R.string.auth_qr_quick_sub),
@@ -539,6 +629,14 @@ fun AuthScreen(
                             }
                         }
 
+                        if (biometricAvailability == BiometricAvailability.AVAILABLE) {
+                            BiometricOptInRow(
+                                checked = enableBiometricAfterAuth,
+                                onCheckedChange = { enableBiometricAfterAuth = it },
+                                modifier = Modifier.testTag("enable_biometric_checkbox")
+                            )
+                        }
+
                         AuthErrorCard(errorMessage = errorMessage)
 
                         Button(
@@ -573,6 +671,23 @@ fun AuthScreen(
                                                     email = if (isEmailLogin) loginEmail else ""
                                                 )
                                                 Firebase.auth.signInWithEmailAndPassword(loginEmail, studentPassword).await()
+                                                val uid = Firebase.auth.currentUser?.uid.orEmpty()
+                                                if (enableBiometricAfterAuth && uid.isNotBlank()) {
+                                                    val saved = BiometricAuthHelper.saveCredential(
+                                                        activityContext,
+                                                        SavedBiometricCredential(
+                                                            userId = uid,
+                                                            role = "student",
+                                                            displayName = "",
+                                                            identifierLabel = if (isEmailLogin) loginEmail else cleanMassar,
+                                                            email = loginEmail,
+                                                            password = studentPassword
+                                                        )
+                                                    )
+                                                    if (saved) {
+                                                        savedBiometricSummary = BiometricAuthHelper.getSavedSummary(activityContext)
+                                                    }
+                                                }
                                                 isLoading = false
                                                 onAuthSuccess()
                                             } catch (e: Exception) {
@@ -602,6 +717,15 @@ fun AuthScreen(
                                     style = MaterialTheme.typography.labelLarge
                                 )
                             }
+                        }
+
+                        if (canUseBiometricLogin) {
+                            BiometricSignInButton(
+                                summary = savedBiometricSummary,
+                                enabled = !isLoading,
+                                onClick = launchBiometricSignIn,
+                                modifier = Modifier.testTag("student_biometric_login_button")
+                            )
                         }
 
                         OutlinedButton(
@@ -771,6 +895,14 @@ fun AuthScreen(
                                 .testTag("auth_qr_password_input")
                         )
 
+                        if (biometricAvailability == BiometricAvailability.AVAILABLE) {
+                            BiometricOptInRow(
+                                checked = enableBiometricAfterAuth,
+                                onCheckedChange = { enableBiometricAfterAuth = it },
+                                modifier = Modifier.testTag("qr_enable_biometric_checkbox")
+                            )
+                        }
+
                         AuthErrorCard(errorMessage = errorMessage)
 
                         Button(
@@ -820,6 +952,23 @@ fun AuthScreen(
                                                         Firebase.auth.signInWithEmailAndPassword(synthEmail, qrPassword).await()
                                                     } else {
                                                         throw collision
+                                                    }
+                                                }
+                                                val uid = Firebase.auth.currentUser?.uid.orEmpty()
+                                                if (enableBiometricAfterAuth && uid.isNotBlank()) {
+                                                    val saved = BiometricAuthHelper.saveCredential(
+                                                        activityContext,
+                                                        SavedBiometricCredential(
+                                                            userId = uid,
+                                                            role = "student",
+                                                            displayName = cleanName,
+                                                            identifierLabel = finalMassar,
+                                                            email = synthEmail,
+                                                            password = qrPassword
+                                                        )
+                                                    )
+                                                    if (saved) {
+                                                        savedBiometricSummary = BiometricAuthHelper.getSavedSummary(activityContext)
                                                     }
                                                 }
                                                 isLoading = false
@@ -1013,6 +1162,14 @@ fun AuthScreen(
                             }
                         }
 
+                        if (!isTeacherRegister && biometricAvailability == BiometricAvailability.AVAILABLE) {
+                            BiometricOptInRow(
+                                checked = enableBiometricAfterAuth,
+                                onCheckedChange = { enableBiometricAfterAuth = it },
+                                modifier = Modifier.testTag("teacher_enable_biometric_checkbox")
+                            )
+                        }
+
                         AuthErrorCard(errorMessage = errorMessage)
 
                         Button(
@@ -1057,6 +1214,23 @@ fun AuthScreen(
                                                     Firebase.auth.createUserWithEmailAndPassword(cleanEmail, teacherPassword).await()
                                                 } else {
                                                     Firebase.auth.signInWithEmailAndPassword(cleanEmail, teacherPassword).await()
+                                                    val uid = Firebase.auth.currentUser?.uid.orEmpty()
+                                                    if (enableBiometricAfterAuth && uid.isNotBlank()) {
+                                                        val saved = BiometricAuthHelper.saveCredential(
+                                                            activityContext,
+                                                            SavedBiometricCredential(
+                                                                userId = uid,
+                                                                role = "teacher",
+                                                                displayName = "",
+                                                                identifierLabel = cleanEmail,
+                                                                email = cleanEmail,
+                                                                password = teacherPassword
+                                                            )
+                                                        )
+                                                        if (saved) {
+                                                            savedBiometricSummary = BiometricAuthHelper.getSavedSummary(activityContext)
+                                                        }
+                                                    }
                                                 }
                                                 isLoading = false
                                                 onAuthSuccess()
@@ -1089,6 +1263,15 @@ fun AuthScreen(
                                     style = MaterialTheme.typography.labelLarge
                                 )
                             }
+                        }
+
+                        if (!isTeacherRegister && canUseBiometricLogin) {
+                            BiometricSignInButton(
+                                summary = savedBiometricSummary,
+                                enabled = !isLoading,
+                                onClick = launchBiometricSignIn,
+                                modifier = Modifier.testTag("teacher_biometric_login_button")
+                            )
                         }
                     }
                 }
@@ -1244,6 +1427,109 @@ private fun RoleGatewayCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun BiometricSignInButton(
+    summary: SavedBiometricSummary?,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val accountLabel = summary?.displayName?.takeIf { it.isNotBlank() }
+        ?: summary?.identifierLabel?.takeIf { it.isNotBlank() }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .border(
+                width = 1.5.dp,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                shape = MaterialTheme.shapes.large
+            )
+            .clickable(enabled = enabled, onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Fingerprint,
+                    contentDescription = stringResource(id = R.string.biometric_login_button),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(id = R.string.biometric_login_button),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                if (!accountLabel.isNullOrBlank()) {
+                    Text(
+                        text = stringResource(id = R.string.biometric_login_subtitle_user, accountLabel),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BiometricOptInRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .toggleable(
+                value = checked,
+                onValueChange = onCheckedChange,
+                role = Role.Checkbox
+            )
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = null
+        )
+        Icon(
+            imageVector = Icons.Filled.Fingerprint,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            text = stringResource(id = R.string.biometric_enable_on_login),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

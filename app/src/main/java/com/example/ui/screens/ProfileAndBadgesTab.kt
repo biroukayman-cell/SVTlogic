@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.LocalFireDepartment
@@ -86,12 +87,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -130,15 +134,20 @@ import com.example.BuildConfig
 import com.example.R
 import com.example.core.AppThemePalette
 import com.example.core.AppUpdateUrlHelper
+import com.example.core.AuthSessionDraft
+import com.example.core.BiometricAuthHelper
+import com.example.core.BiometricAvailability
 import com.example.core.ExcelParseErrorReason
 import com.example.core.ExcelParseResult
 import com.example.core.ExcelRosterParser
 import com.example.core.TeacherAnalyticsLogic
 import com.example.core.ImportedStudentRow
 import com.example.core.QrCodeUtils
+import com.example.core.SavedBiometricCredential
 import com.example.core.SecurityLockManager
 import com.example.core.ThemeConfig
 import com.example.core.ThemeMode
+import com.example.core.findFragmentActivity
 import com.example.ui.components.ProfileAvatarImage
 import com.example.ui.components.SetupSecurityPinDialog
 import com.example.ui.components.SvtHeroBannerCard
@@ -157,6 +166,13 @@ import com.example.ui.theme.SvtGoldTertiary
 import com.example.ui.theme.SvtOceanSecondary
 import com.example.ui.theme.SvtSuccess
 import com.example.ui.theme.previewSwatchColors
+import com.google.firebase.Firebase
+import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.auth
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -232,10 +248,21 @@ fun ProfileAndBadgesTab(
     var manualStudentTargetClass by remember { mutableStateOf<SvtClass?>(null) }
     var expandedRosterClassIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
+    val coroutineScope = rememberCoroutineScope()
     var showPinSetupDialog by remember { mutableStateOf(false) }
     var isPinEnabled by remember(profile.userId, isGuestMode) {
         mutableStateOf(!isGuestMode && SecurityLockManager.isPinEnabled(context, profile.userId))
     }
+    val biometricAvailability = remember(context) {
+        BiometricAuthHelper.getAvailability(context)
+    }
+    val hasBiometricHardware = remember(biometricAvailability) {
+        BiometricAuthHelper.hasBiometricHardware(biometricAvailability)
+    }
+    var isBiometricEnabled by remember(profile.userId, isGuestMode) {
+        mutableStateOf(!isGuestMode && BiometricAuthHelper.isBiometricEnabledForUser(context, profile.userId))
+    }
+    var showEnableBiometricDialog by remember { mutableStateOf(false) }
     var hasNotifPermission by remember(isGuestMode) {
         mutableStateOf(
             Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
@@ -543,6 +570,35 @@ fun ProfileAndBadgesTab(
                     isPinEnabled = isPinEnabled,
                     onConfigureClick = { showPinSetupDialog = true }
                 )
+            }
+
+            if (hasBiometricHardware) {
+                item {
+                    BiometricSecurityCard(
+                        availability = biometricAvailability,
+                        isEnabled = isBiometricEnabled,
+                        onToggleChanged = { wantsEnable ->
+                            if (wantsEnable) {
+                                showEnableBiometricDialog = true
+                            } else {
+                                BiometricAuthHelper.clearSavedCredential(context)
+                                isBiometricEnabled = false
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.biometric_disabled_toast),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        onOpenEnrollSettings = {
+                            try {
+                                context.startActivity(BiometricAuthHelper.buildEnrollIntent())
+                            } catch (_: Exception) {
+                                onShowError(context.getString(R.string.biometric_card_none_enrolled))
+                            }
+                        }
+                    )
+                }
             }
 
             item {
@@ -1521,6 +1577,82 @@ fun ProfileAndBadgesTab(
             onDismiss = { showPinSetupDialog = false }
         )
     }
+
+    if (showEnableBiometricDialog && !isGuestMode) {
+        EnableBiometricPasswordDialog(
+            onConfirmPassword = { password, onError ->
+                val user = Firebase.auth.currentUser
+                val fragmentActivity = context.findFragmentActivity()
+                if (user == null || fragmentActivity == null) {
+                    onError(context.getString(R.string.auth_error_generic))
+                } else {
+                    coroutineScope.launch {
+                        try {
+                            val authEmail = user.email?.takeIf { it.isNotBlank() }
+                                ?: if (profile.role == "student" && profile.massarNumber.isNotBlank()) {
+                                    AuthSessionDraft.massarToAuthEmail(profile.massarNumber)
+                                } else {
+                                    profile.email.trim()
+                                }
+                            if (authEmail.isBlank()) {
+                                onError(context.getString(R.string.auth_error_generic))
+                                return@launch
+                            }
+                            user.reauthenticate(EmailAuthProvider.getCredential(authEmail, password)).await()
+                            BiometricAuthHelper.authenticate(
+                                activity = fragmentActivity,
+                                title = context.getString(R.string.biometric_prompt_title),
+                                subtitle = context.getString(R.string.biometric_prompt_subtitle),
+                                negativeButtonText = context.getString(R.string.cancel),
+                                onSuccess = {
+                                    val saved = BiometricAuthHelper.saveCredential(
+                                        context,
+                                        SavedBiometricCredential(
+                                            userId = user.uid,
+                                            role = profile.role.ifBlank { "student" },
+                                            displayName = profile.fullName,
+                                            identifierLabel = profile.massarNumber.ifBlank { authEmail },
+                                            email = authEmail,
+                                            password = password
+                                        )
+                                    )
+                                    if (saved) {
+                                        isBiometricEnabled = true
+                                        showEnableBiometricDialog = false
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.biometric_enabled_toast),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        onError(context.getString(R.string.auth_error_generic))
+                                    }
+                                },
+                                onError = { err ->
+                                    onError(err ?: context.getString(R.string.cancel))
+                                }
+                            )
+                        } catch (e: FirebaseAuthInvalidCredentialsException) {
+                            onError(context.getString(R.string.password_current_incorrect))
+                        } catch (e: FirebaseAuthInvalidUserException) {
+                            onError(context.getString(R.string.password_current_incorrect))
+                        } catch (e: Exception) {
+                            val raw = e.localizedMessage.orEmpty()
+                            val msg = if (raw.contains("credential", ignoreCase = true) ||
+                                raw.contains("INVALID_LOGIN_CREDENTIALS", ignoreCase = true)
+                            ) {
+                                context.getString(R.string.password_current_incorrect)
+                            } else {
+                                raw.ifBlank { context.getString(R.string.auth_error_generic) }
+                            }
+                            onError(msg)
+                        }
+                    }
+                }
+            },
+            onDismiss = { showEnableBiometricDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -1583,6 +1715,194 @@ private fun SecurityPinSettingsCard(
             }
         }
     }
+}
+
+@Composable
+private fun BiometricSecurityCard(
+    availability: BiometricAvailability,
+    isEnabled: Boolean,
+    onToggleChanged: (Boolean) -> Unit,
+    onOpenEnrollSettings: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("profile_biometric_card")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Fingerprint,
+                    contentDescription = stringResource(id = R.string.biometric_card_title),
+                    tint = if (isEnabled && availability == BiometricAvailability.AVAILABLE) {
+                        SvtSuccess
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(id = R.string.biometric_card_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    val statusText = when (availability) {
+                        BiometricAvailability.AVAILABLE -> stringResource(
+                            id = if (isEnabled) R.string.biometric_card_enabled
+                            else R.string.biometric_card_disabled
+                        )
+                        BiometricAvailability.NONE_ENROLLED -> stringResource(id = R.string.biometric_card_none_enrolled)
+                        BiometricAvailability.HARDWARE_UNAVAILABLE -> stringResource(id = R.string.biometric_card_disabled)
+                        BiometricAvailability.NO_HARDWARE -> ""
+                    }
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isEnabled && availability == BiometricAvailability.AVAILABLE) {
+                            SvtSuccess
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+                if (availability == BiometricAvailability.AVAILABLE) {
+                    Switch(
+                        checked = isEnabled,
+                        onCheckedChange = onToggleChanged,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("profile_biometric_toggle")
+                    )
+                }
+            }
+            if (availability == BiometricAvailability.NONE_ENROLLED) {
+                OutlinedButton(
+                    onClick = onOpenEnrollSettings,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("profile_biometric_enroll_button")
+                ) {
+                    Icon(Icons.Filled.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(id = R.string.biometric_enroll_settings_btn))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EnableBiometricPasswordDialog(
+    onConfirmPassword: (password: String, onError: (String) -> Unit) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var isVerifying by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isVerifying) onDismiss() },
+        icon = {
+            Icon(
+                imageVector = Icons.Filled.Fingerprint,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = { Text(stringResource(id = R.string.biometric_setup_password_title)) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = stringResource(id = R.string.biometric_setup_password_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        errorMessage = null
+                    },
+                    label = { Text(stringResource(id = R.string.field_password)) },
+                    leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = stringResource(id = R.string.field_password)
+                            )
+                        }
+                    },
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    singleLine = true,
+                    enabled = !isVerifying,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("biometric_setup_password_input")
+                )
+                if (!errorMessage.isNullOrBlank()) {
+                    Text(
+                        text = errorMessage!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (password.length < 6) {
+                        errorMessage = context.getString(R.string.auth_error_weak_password)
+                    } else {
+                        isVerifying = true
+                        errorMessage = null
+                        onConfirmPassword(password) { err ->
+                            isVerifying = false
+                            errorMessage = err
+                        }
+                    }
+                },
+                enabled = !isVerifying,
+                modifier = Modifier.testTag("biometric_setup_confirm_button")
+            ) {
+                if (isVerifying) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text(stringResource(id = R.string.profile_save))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isVerifying
+            ) {
+                Text(stringResource(id = R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable
