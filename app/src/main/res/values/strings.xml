@@ -738,4 +738,18 @@
     <string name="teacher_answers_empty_correct">Aucune réponse correcte trouvée pour cette sélection.</string>
     <string name="teacher_answers_empty_incorrect">Aucune réponse incorrecte — toutes les questions sont réussies !</string>
     <string name="teacher_answers_empty_detail">Aucun détail question par question disponible pour cette copie.</string>
+
+    <!-- Analyse par IA d'une classe -->
+    <string name="teacher_ai_analysis_btn">Analyse par IA</string>
+    <string name="teacher_ai_analysis_dialog_title">Analyse par IA — %1$s</string>
+    <string name="teacher_ai_analysis_loading">Analyse pédagogique de la classe en cours par l\'IA…</string>
+    <string name="teacher_ai_analysis_summary_title">Résumé de la classe</string>
+    <string name="teacher_ai_analysis_strengths_title">Points forts identifiés</string>
+    <string name="teacher_ai_analysis_gaps_title">Lacunes identifiées</string>
+    <string name="teacher_ai_analysis_recommendations_title">Pistes de remédiation</string>
+    <string name="teacher_ai_analysis_copy">Copier le résumé</string>
+    <string name="teacher_ai_analysis_copied">Résumé copié dans le presse-papiers.</string>
+    <string name="teacher_ai_analysis_retry">Réessayer</string>
+    <string name="teacher_ai_analysis_offline_error">Connexion Internet requise pour lancer l\'analyse par IA.</string>
+    <string name="teacher_ai_analysis_error">Impossible de générer l\'analyse IA : %1$s</string>
 </resources>

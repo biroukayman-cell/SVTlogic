@@ -106,9 +106,11 @@ import com.example.core.ExternalAiQuizHelper
 import com.example.core.QrCodeUtils
 import com.example.core.TeacherAnalyticsLogic
 import com.example.data.ai.GeneratedQuizDraft
+import com.example.data.model.Enrollment
 import com.example.data.model.Quiz
 import com.example.data.model.QuizAttempt
 import com.example.data.model.QuizQuestion
+import com.example.data.model.RosterStudent
 import com.example.data.model.SvtClass
 import com.example.data.svt.SvtKnowledgeCatalog
 import com.example.ui.components.QuestionSuccessRatioBar
@@ -133,6 +135,8 @@ fun ExercisesTab(
     isOnline: Boolean,
     selectedClassId: String?,
     teacherClasses: List<SvtClass> = emptyList(),
+    teacherRoster: List<RosterStudent> = emptyList(),
+    teacherEnrollments: List<Enrollment> = emptyList(),
     quizzes: List<Quiz>,
     attempts: List<QuizAttempt>,
     downloadedQuizIds: Set<String>,
@@ -587,6 +591,8 @@ fun ExercisesTab(
         TeacherQuizStatsDialog(
             quiz = quiz,
             attempts = quizAttempts,
+            roster = teacherRoster,
+            enrollments = teacherEnrollments,
             onDismiss = { statsQuizId = null }
         )
     }
@@ -1048,6 +1054,8 @@ private fun QuizResultDetailDialog(
 private fun TeacherQuizStatsDialog(
     quiz: Quiz,
     attempts: List<QuizAttempt>,
+    roster: List<RosterStudent>,
+    enrollments: List<Enrollment>,
     onDismiss: () -> Unit
 ) {
     var selectedAttemptForReview by remember { mutableStateOf<QuizAttempt?>(null) }
@@ -1131,6 +1139,13 @@ private fun TeacherQuizStatsDialog(
                     attempts.forEach { att ->
                         val pct = if (att.maxScore > 0) ((att.score / att.maxScore) * 100).toInt() else 0
                         val (qOk, qKo) = TeacherAnalyticsLogic.extractAttemptQuestionCounts(att, quiz)
+                        val officialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+                            studentId = att.studentId,
+                            classId = quiz.classId,
+                            fallbackName = att.studentName,
+                            roster = roster,
+                            enrollments = enrollments
+                        )
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             shape = MaterialTheme.shapes.small
@@ -1146,7 +1161,7 @@ private fun TeacherQuizStatsDialog(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
-                                        text = att.studentName,
+                                        text = officialName,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold,
                                         modifier = Modifier.weight(1f),
@@ -1211,8 +1226,15 @@ private fun TeacherQuizStatsDialog(
     )
 
     selectedAttemptForReview?.let { att ->
+        val officialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+            studentId = att.studentId,
+            classId = quiz.classId,
+            fallbackName = att.studentName,
+            roster = roster,
+            enrollments = enrollments
+        )
         StudentQuizAnswersReviewDialog(
-            studentName = att.studentName,
+            studentName = officialName,
             studentSubtitle = quiz.title,
             entries = listOf(StudentQuizReviewEntry(quiz = quiz, attempt = att)),
             initialQuizId = quiz.id,

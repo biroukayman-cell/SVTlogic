@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Class
@@ -85,6 +86,7 @@ import com.example.data.model.QuizAttempt
 import com.example.data.model.RosterStudent
 import com.example.data.model.SvtClass
 import com.example.data.model.VideoTracking
+import com.example.ui.components.ClassAiAnalysisDialog
 import com.example.ui.components.QuestionSuccessRatioBar
 import com.example.ui.components.StudentQuizAnswersReviewDialog
 import com.example.ui.components.StudentQuizReviewEntry
@@ -95,6 +97,7 @@ import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtOceanSecondary
 import com.example.ui.theme.SvtSuccess
 import com.example.ui.theme.SvtWarning
+import com.example.ui.viewmodel.ClassAiAnalysisState
 import java.util.Locale
 
 @Composable
@@ -111,6 +114,9 @@ fun TeacherDashboardTab(
     teacherVideoTracking: List<VideoTracking>,
     teacherAnnouncements: List<Announcement>,
     teacherMessages: List<PrivateMessage>,
+    classAiAnalysisState: ClassAiAnalysisState = ClassAiAnalysisState.Idle,
+    onAnalyzeClassWithAi: (SvtClass) -> Unit = {},
+    onDismissAiAnalysis: () -> Unit = {},
     onNavigateToTab: (SvtTab) -> Unit
 ) {
     val overview = remember(
@@ -135,6 +141,10 @@ fun TeacherDashboardTab(
             messages = teacherMessages,
             roster = teacherRoster
         )
+    }
+
+    val activeClassForShortcut = remember(teacherClasses, selectedClassId) {
+        teacherClasses.firstOrNull { it.id == selectedClassId } ?: teacherClasses.firstOrNull()
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -175,6 +185,8 @@ fun TeacherDashboardTab(
             if (sec == 0) {
                 TeacherOverviewSection(
                     overview = overview,
+                    activeClassForAi = activeClassForShortcut,
+                    onAnalyzeClassWithAi = onAnalyzeClassWithAi,
                     onOpenQcmResults = { onSelectSection(1) },
                     onNavigateToTab = onNavigateToTab
                 )
@@ -185,17 +197,28 @@ fun TeacherDashboardTab(
                     roster = teacherRoster,
                     quizzes = teacherQuizzes,
                     attempts = teacherAttempts,
-                    initialClassFilterId = selectedClassId
+                    initialClassFilterId = selectedClassId,
+                    onAnalyzeClassWithAi = onAnalyzeClassWithAi
                 )
             }
         }
     }
+
+    ClassAiAnalysisDialog(
+        state = classAiAnalysisState,
+        onRetry = { classId ->
+            teacherClasses.firstOrNull { it.id == classId }?.let(onAnalyzeClassWithAi)
+        },
+        onDismiss = onDismissAiAnalysis
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TeacherOverviewSection(
     overview: TeacherDashboardOverview,
+    activeClassForAi: SvtClass?,
+    onAnalyzeClassWithAi: (SvtClass) -> Unit,
     onOpenQcmResults: () -> Unit,
     onNavigateToTab: (SvtTab) -> Unit
 ) {
@@ -276,6 +299,16 @@ private fun TeacherOverviewSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                if (activeClassForAi != null) {
+                    FilledTonalButton(
+                        onClick = { onAnalyzeClassWithAi(activeClassForAi) },
+                        modifier = Modifier.testTag("teacher_ai_analysis_shortcut_button")
+                    ) {
+                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(id = R.string.teacher_ai_analysis_btn))
+                    }
+                }
                 OutlinedButton(
                     onClick = onOpenQcmResults,
                     modifier = Modifier.testTag("dashboard_shortcut_qcm_results")
@@ -481,6 +514,21 @@ private fun TeacherOverviewSection(
                                     }
                                 }
                             }
+
+                            FilledTonalButton(
+                                onClick = { onAnalyzeClassWithAi(summary.svtClass) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("class_ai_analysis_button_${summary.svtClass.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(id = R.string.teacher_ai_analysis_btn))
+                            }
                         }
                     }
                 }
@@ -664,7 +712,8 @@ private fun TeacherStudentQcmResultsSection(
     roster: List<RosterStudent>,
     quizzes: List<Quiz>,
     attempts: List<QuizAttempt>,
-    initialClassFilterId: String?
+    initialClassFilterId: String?,
+    onAnalyzeClassWithAi: (SvtClass) -> Unit
 ) {
     var filterClassId by rememberSaveable { mutableStateOf(initialClassFilterId) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -780,9 +829,11 @@ private fun TeacherStudentQcmResultsSection(
                 )
             }
             items(classGlobalStats, key = { "global_${it.classId}" }) { clsStat ->
+                val targetClass = classes.firstOrNull { it.id == clsStat.classId }
                 ClassGlobalQuestionStatsCard(
                     stats = clsStat,
                     defaultExpanded = classGlobalStats.size == 1,
+                    onAnalyzeWithAi = targetClass?.let { cls -> { onAnalyzeClassWithAi(cls) } },
                     onInspectStudent = { studentStat ->
                         val summary = summaryByClassAndStudent["${clsStat.classId}_${studentStat.studentId}"]
                         if (summary != null && summary.perQuizResults.any { it.attempt != null }) {
@@ -878,6 +929,7 @@ private fun TeacherStudentQcmResultsSection(
 private fun ClassGlobalQuestionStatsCard(
     stats: ClassGlobalQuestionStats,
     defaultExpanded: Boolean,
+    onAnalyzeWithAi: (() -> Unit)? = null,
     onInspectStudent: (StudentClassQuestionStats) -> Unit
 ) {
     var expanded by rememberSaveable(stats.classId, defaultExpanded) { mutableStateOf(defaultExpanded) }
@@ -951,6 +1003,23 @@ private fun ClassGlobalQuestionStatsCard(
                     color = SvtCoralError,
                     modifier = Modifier.weight(1f)
                 )
+            }
+
+            if (onAnalyzeWithAi != null) {
+                FilledTonalButton(
+                    onClick = onAnalyzeWithAi,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("qcm_class_ai_analysis_button_${stats.classId}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(id = R.string.teacher_ai_analysis_btn))
+                }
             }
 
             if (stats.studentStats.isNotEmpty()) {

@@ -2,6 +2,7 @@ package com.example.data.ai
 
 import android.util.Log
 import com.example.core.AppLanguage
+import com.example.core.ClassAiAnalysisInput
 import com.example.data.model.QuizQuestion
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
@@ -22,6 +23,13 @@ data class SvtTermLookupResult(
     val isSvtTerm: Boolean,
     val term: String,
     val definition: String
+)
+
+data class ClassAiAnalysisReport(
+    val textualSummary: String,
+    val strengths: List<String>,
+    val gaps: List<String>,
+    val recommendations: List<String>
 )
 
 class AiAppCheckException(cause: Throwable) : IllegalStateException(
@@ -57,6 +65,24 @@ class SvtAiRepository {
             "isSvtTerm" to Schema.boolean(description = "True ONLY if the query belongs strictly to Life and Earth Sciences (SVT: biology, genetics, immunity, reproduction, physiology, ecology, geology). False for any other topic."),
             "term" to Schema.string(description = "Canonical SVT scientific term name in the requested language, or empty string if isSvtTerm is false."),
             "definition" to Schema.string(description = "ONLY the concise scientific SVT definition (1 to 3 sentences, no tips, no extra commentary), or empty string if isSvtTerm is false.")
+        )
+    )
+
+    private val classAnalysisSchema = Schema.obj(
+        properties = mapOf(
+            "textualSummary" to Schema.string(description = "A clear, well-written pedagogical paragraph (3 to 5 sentences) summarizing the overall performance, strengths, and gaps of the entire class."),
+            "strengths" to Schema.array(
+                items = Schema.string(),
+                description = "2 to 5 concise bullet points describing the class's identified strengths (well-mastered chapters, concepts, or engagement)."
+            ),
+            "gaps" to Schema.array(
+                items = Schema.string(),
+                description = "2 to 5 concise bullet points describing the class's identified learning gaps, weaknesses, or difficult SVT concepts."
+            ),
+            "recommendations" to Schema.array(
+                items = Schema.string(),
+                description = "2 to 4 concrete pedagogical remediation actions the SVT teacher can apply with the class."
+            )
         )
     )
 
@@ -96,6 +122,26 @@ class SvtAiRepository {
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = definitionSchema
+            }
+        )
+    }
+
+    private val classAnalysisPrimaryModel by lazy {
+        Firebase.ai.generativeModel(
+            modelName = PRIMARY_MODEL,
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = classAnalysisSchema
+            }
+        )
+    }
+
+    private val classAnalysisFallbackModel by lazy {
+        Firebase.ai.generativeModel(
+            modelName = FALLBACK_MODEL,
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = classAnalysisSchema
             }
         )
     }
@@ -251,6 +297,130 @@ class SvtAiRepository {
             title = title,
             description = description,
             questions = questions
+        )
+    }
+
+    suspend fun analyzeClassPerformance(
+        input: ClassAiAnalysisInput,
+        language: AppLanguage
+    ): ClassAiAnalysisReport {
+        val langInstruction = when (language) {
+            AppLanguage.FR -> "Write the entire analysis strictly in clear, professional pedagogical French."
+            AppLanguage.AR -> "Write the entire analysis strictly in clear, professional pedagogical Modern Standard Arabic (العربية الفصحى التربوية)."
+            AppLanguage.EN -> "Write the entire analysis strictly in clear, professional pedagogical English."
+        }
+
+        val quizLines = if (input.quizMetrics.isEmpty()) {
+            "- No quizzes published yet."
+        } else {
+            input.quizMetrics.joinToString("\n") { q ->
+                val ch = q.chapterSvt.ifBlank { "General SVT" }
+                "- Quiz '${q.quizTitle}' (Chapter: $ch): ${q.attemptsCount} copies, average ${q.averagePct}%, ${q.succeededQuestions} correct answers, ${q.failedQuestions} failed answers"
+            }
+        }
+
+        val strongLines = if (input.strongestQuestions.isEmpty()) {
+            "- No specific high-success question data recorded yet."
+        } else {
+            input.strongestQuestions.joinToString("\n") { q ->
+                "- [${q.chapterSvt.ifBlank { q.quizTitle }}] \"${q.questionText.take(120)}\" -> ${q.successRatePct}% success (${q.succeededCount} ok / ${q.failedCount} failed)"
+            }
+        }
+
+        val weakLines = if (input.weakestQuestions.isEmpty()) {
+            "- No specific failed question data recorded yet."
+        } else {
+            input.weakestQuestions.joinToString("\n") { q ->
+                "- [${q.chapterSvt.ifBlank { q.quizTitle }}] \"${q.questionText.take(120)}\" -> ${q.successRatePct}% success (${q.succeededCount} ok / ${q.failedCount} failed)"
+            }
+        }
+
+        val prompt = """
+            You are an expert Life and Earth Sciences (SVT) pedagogical advisor assisting a teacher.
+            Analyze the overall performance of this entire class and produce a clear, actionable synthesis of its strengths and learning gaps.
+
+            Class Profile:
+            - Class: ${input.className} (Level: ${input.level}, Year: ${input.academicYear})
+            - Total students tracked: ${input.totalStudentsCount} (Active in QCM: ${input.activeQcmStudentsCount}, Not yet active in QCM: ${input.inactiveStudentsCount})
+            - Class overall QCM average: ${input.classAveragePct}%
+            - Global question performance: ${input.totalSucceededQuestions} succeeded vs ${input.totalFailedQuestions} failed (${input.questionSuccessRatePct}% success rate)
+            - Student score distribution: >=70%: ${input.strongStudentsCount}, 50-69%: ${input.averageStudentsCount}, <50%: ${input.strugglingStudentsCount}
+            - Course resources: ${input.totalResourcesCount} resources, video completion rate: ${input.videoCompletionRatePct}%
+
+            Per-Quiz & Chapter Results:
+            $quizLines
+
+            Best-Mastered Questions:
+            $strongLines
+
+            Most Missed Questions:
+            $weakLines
+
+            Instructions:
+            - $langInstruction
+            - Ground every point strictly in the provided class metrics and SVT chapters/questions (do not invent scores or student names).
+            - Summarize the class as a whole in "textualSummary" (highlighting overall level, key strengths, main gaps, and participation).
+            - Provide specific, concrete "strengths", "gaps", and "recommendations" lists tailored to the SVT chapters and metrics above.
+        """.trimIndent()
+
+        try {
+            return analyzeClassWithModel(classAnalysisPrimaryModel, prompt)
+        } catch (e: TimeoutCancellationException) {
+            Log.e(TAG, "Primary class analysis model timed out", e)
+            throw IllegalStateException("AI request timed out after 60s. Please retry.", e)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (primaryError: Exception) {
+            Log.w(TAG, "Primary class analysis model failed, trying fallback", primaryError)
+            return try {
+                analyzeClassWithModel(classAnalysisFallbackModel, prompt)
+            } catch (e: TimeoutCancellationException) {
+                Log.e(TAG, "Fallback class analysis model timed out", e)
+                throw IllegalStateException("AI request timed out after 60s. Please retry.", e)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (fallbackError: Exception) {
+                Log.e(TAG, "Fallback class analysis model failed", fallbackError)
+                if (isAppCheckOrTokenError(fallbackError) || isAppCheckOrTokenError(primaryError)) {
+                    throw AiAppCheckException(fallbackError)
+                }
+                throw fallbackError
+            }
+        }
+    }
+
+    private suspend fun analyzeClassWithModel(
+        model: com.google.firebase.ai.GenerativeModel,
+        prompt: String
+    ): ClassAiAnalysisReport {
+        val response = withTimeout(60_000L) {
+            model.generateContent(prompt)
+        }
+        val jsonText = response.text?.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("Empty response from Gemini.")
+
+        val root = JSONObject(jsonText)
+        val textualSummary = root.optString("textualSummary", "").trim()
+        val strengthsArr = root.optJSONArray("strengths")
+        val gapsArr = root.optJSONArray("gaps")
+        val recArr = root.optJSONArray("recommendations")
+
+        val strengths = (0 until (strengthsArr?.length() ?: 0))
+            .mapNotNull { strengthsArr?.optString(it)?.trim()?.takeIf { s -> s.isNotEmpty() } }
+        val gaps = (0 until (gapsArr?.length() ?: 0))
+            .mapNotNull { gapsArr?.optString(it)?.trim()?.takeIf { s -> s.isNotEmpty() } }
+        val recommendations = (0 until (recArr?.length() ?: 0))
+            .mapNotNull { recArr?.optString(it)?.trim()?.takeIf { s -> s.isNotEmpty() } }
+
+        if (textualSummary.isBlank() && strengths.isEmpty() && gaps.isEmpty()) {
+            throw IllegalStateException("Incomplete AI analysis response from Gemini.")
+        }
+
+        return ClassAiAnalysisReport(
+            textualSummary = textualSummary,
+            strengths = strengths,
+            gaps = gaps,
+            recommendations = recommendations
         )
     }
 

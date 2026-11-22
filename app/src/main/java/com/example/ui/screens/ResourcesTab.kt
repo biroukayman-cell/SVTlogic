@@ -126,8 +126,10 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.core.DocxTextExtractor
+import com.example.core.TeacherAnalyticsLogic
 import com.example.data.model.CourseResource
 import com.example.data.model.Enrollment
+import com.example.data.model.RosterStudent
 import com.example.data.model.VideoTracking
 import com.example.data.offline.DownloadedResource
 import com.example.data.offline.OfflineStorageManager
@@ -158,6 +160,7 @@ fun ResourcesTab(
     resources: List<CourseResource>,
     videoTrackings: List<VideoTracking>,
     classEnrollments: List<Enrollment>,
+    teacherRoster: List<RosterStudent> = emptyList(),
     downloadedResources: Map<String, DownloadedResource>,
     downloadingProgress: Map<String, Float>,
     isUploadingResource: Boolean,
@@ -877,6 +880,7 @@ fun ResourcesTab(
                 resource = res,
                 students = studentsInClass,
                 trackings = trackingsForRes,
+                roster = teacherRoster,
                 onDismiss = { trackingResourceId = null }
             )
         } else {
@@ -884,6 +888,7 @@ fun ResourcesTab(
                 resource = res,
                 students = studentsInClass,
                 trackings = trackingsForRes,
+                roster = teacherRoster,
                 onDismiss = { trackingResourceId = null }
             )
         }
@@ -1854,14 +1859,34 @@ private fun TeacherVideoTrackingDialog(
     resource: CourseResource,
     students: List<Enrollment>,
     trackings: List<VideoTracking>,
+    roster: List<RosterStudent>,
     onDismiss: () -> Unit
 ) {
     val trackingByStudentId = trackings.associateBy { it.studentId }
     val enrolledIds = students.map { it.studentId }.toSet()
     val extraRows = trackings
         .filterNot { enrolledIds.contains(it.studentId) }
-        .map { tr -> tr.studentId to tr.studentName.ifBlank { "Élève" } }
-    val displayRows = students.map { it.studentId to it.studentName } + extraRows
+        .map { tr ->
+            val officialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+                studentId = tr.studentId,
+                classId = resource.classId,
+                fallbackName = tr.studentName,
+                roster = roster,
+                enrollments = students
+            )
+            tr.studentId to officialName
+        }
+    val displayRows = students.map { enr ->
+        val officialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+            studentId = enr.studentId,
+            massarNumber = enr.massarNumber,
+            classId = resource.classId,
+            fallbackName = enr.studentName,
+            roster = roster,
+            enrollments = students
+        )
+        enr.studentId to officialName
+    } + extraRows
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1933,14 +1958,34 @@ private fun TeacherFileTrackingDialog(
     resource: CourseResource,
     students: List<Enrollment>,
     trackings: List<VideoTracking>,
+    roster: List<RosterStudent>,
     onDismiss: () -> Unit
 ) {
     val trackingByStudentId = trackings.associateBy { it.studentId }
     val enrolledIds = students.map { it.studentId }.toSet()
     val extraRows = trackings
         .filterNot { enrolledIds.contains(it.studentId) }
-        .map { tr -> tr.studentId to tr.studentName.ifBlank { "Élève" } }
-    val displayRows = students.map { it.studentId to it.studentName } + extraRows
+        .map { tr ->
+            val officialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+                studentId = tr.studentId,
+                classId = resource.classId,
+                fallbackName = tr.studentName,
+                roster = roster,
+                enrollments = students
+            )
+            tr.studentId to officialName
+        }
+    val displayRows = students.map { enr ->
+        val officialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+            studentId = enr.studentId,
+            massarNumber = enr.massarNumber,
+            classId = resource.classId,
+            fallbackName = enr.studentName,
+            roster = roster,
+            enrollments = students
+        )
+        enr.studentId to officialName
+    } + extraRows
 
     AlertDialog(
         onDismissRequest = onDismiss,

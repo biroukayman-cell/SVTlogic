@@ -738,4 +738,18 @@
     <string name="teacher_answers_empty_correct">No correct answers found for this selection.</string>
     <string name="teacher_answers_empty_incorrect">No incorrect answers — all questions were answered correctly!</string>
     <string name="teacher_answers_empty_detail">No question-by-question breakdown available for this attempt.</string>
+
+    <!-- Class AI Analysis -->
+    <string name="teacher_ai_analysis_btn">AI Analysis</string>
+    <string name="teacher_ai_analysis_dialog_title">AI Analysis — %1$s</string>
+    <string name="teacher_ai_analysis_loading">Generating AI pedagogical analysis for the class…</string>
+    <string name="teacher_ai_analysis_summary_title">Class Summary</string>
+    <string name="teacher_ai_analysis_strengths_title">Identified Strengths</string>
+    <string name="teacher_ai_analysis_gaps_title">Identified Gaps</string>
+    <string name="teacher_ai_analysis_recommendations_title">Suggested Remediation</string>
+    <string name="teacher_ai_analysis_copy">Copy summary</string>
+    <string name="teacher_ai_analysis_copied">Summary copied to clipboard.</string>
+    <string name="teacher_ai_analysis_retry">Retry</string>
+    <string name="teacher_ai_analysis_offline_error">Internet connection is required to run AI class analysis.</string>
+    <string name="teacher_ai_analysis_error">Failed to generate AI analysis: %1$s</string>
 </resources>

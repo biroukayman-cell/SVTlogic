@@ -133,6 +133,7 @@ import com.example.core.AppUpdateUrlHelper
 import com.example.core.ExcelParseErrorReason
 import com.example.core.ExcelParseResult
 import com.example.core.ExcelRosterParser
+import com.example.core.TeacherAnalyticsLogic
 import com.example.core.ImportedStudentRow
 import com.example.core.QrCodeUtils
 import com.example.core.SecurityLockManager
@@ -977,6 +978,14 @@ fun ProfileAndBadgesTab(
                                 }
                             }
                             pending.forEach { enrollment ->
+                                val pendingOfficialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+                                    studentId = enrollment.studentId,
+                                    massarNumber = enrollment.massarNumber,
+                                    classId = enrollment.classId,
+                                    fallbackName = enrollment.studentName,
+                                    roster = classRoster,
+                                    enrollments = classEnrollments
+                                )
                                 Surface(
                                     color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
                                     shape = MaterialTheme.shapes.medium
@@ -990,7 +999,7 @@ fun ProfileAndBadgesTab(
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = enrollment.studentName,
+                                                text = pendingOfficialName,
                                                 style = MaterialTheme.typography.titleSmall
                                             )
                                             val subtitleText = listOfNotNull(
@@ -1041,6 +1050,14 @@ fun ProfileAndBadgesTab(
                                     (enrollment.massarNumber.isNotBlank() &&
                                         it.massarNumber.equals(enrollment.massarNumber, ignoreCase = true))
                             }
+                            val approvedOfficialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+                                studentId = enrollment.studentId,
+                                massarNumber = enrollment.massarNumber,
+                                classId = enrollment.classId,
+                                fallbackName = enrollment.studentName,
+                                roster = classRoster,
+                                enrollments = classEnrollments
+                            )
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1049,7 +1066,7 @@ fun ProfileAndBadgesTab(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(enrollment.studentName, style = MaterialTheme.typography.bodyMedium)
+                                    Text(approvedOfficialName, style = MaterialTheme.typography.bodyMedium)
                                     val sub = listOfNotNull(
                                         enrollment.massarNumber.takeIf { it.isNotBlank() },
                                         enrollment.studentPhone.takeIf { it.isNotBlank() }
@@ -1345,10 +1362,18 @@ fun ProfileAndBadgesTab(
     }
 
     studentToDelete?.let { enrollment ->
+        val officialDeleteName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+            studentId = enrollment.studentId,
+            massarNumber = enrollment.massarNumber,
+            classId = enrollment.classId,
+            fallbackName = enrollment.studentName,
+            roster = teacherRoster,
+            enrollments = teacherEnrollments
+        )
         AlertDialog(
             onDismissRequest = { studentToDelete = null },
             title = { Text(stringResource(id = R.string.confirm_delete_title)) },
-            text = { Text(stringResource(id = R.string.confirm_delete_student_msg, enrollment.studentName)) },
+            text = { Text(stringResource(id = R.string.confirm_delete_student_msg, officialDeleteName)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -1369,10 +1394,18 @@ fun ProfileAndBadgesTab(
     }
 
     studentToResetDevice?.let { enrollment ->
+        val officialResetName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+            studentId = enrollment.studentId,
+            massarNumber = enrollment.massarNumber,
+            classId = enrollment.classId,
+            fallbackName = enrollment.studentName,
+            roster = teacherRoster,
+            enrollments = teacherEnrollments
+        )
         AlertDialog(
             onDismissRequest = { studentToResetDevice = null },
             title = { Text(stringResource(id = R.string.device_lock_reset_button)) },
-            text = { Text(stringResource(id = R.string.device_lock_reset_confirm, enrollment.studentName)) },
+            text = { Text(stringResource(id = R.string.device_lock_reset_confirm, officialResetName)) },
             confirmButton = {
                 Button(
                     onClick = {

@@ -738,4 +738,18 @@
     <string name="teacher_answers_empty_correct">لا توجد إجابات صحيحة لهذا الاختيار.</string>
     <string name="teacher_answers_empty_incorrect">لا توجد إجابات خاطئة — جميع الأسئلة صحيحة!</string>
     <string name="teacher_answers_empty_detail">لا تتوفر تفاصيل الإجابة لكل سؤال لهذه المحاولة.</string>
+
+    <!-- التحليل التربوي بالذكاء الاصطناعي للقسم -->
+    <string name="teacher_ai_analysis_btn">تحليل بالذكاء الاصطناعي</string>
+    <string name="teacher_ai_analysis_dialog_title">تحليل بالذكاء الاصطناعي — %1$s</string>
+    <string name="teacher_ai_analysis_loading">جارٍ إنشاء التحليل التربوي للقسم بالذكاء الاصطناعي…</string>
+    <string name="teacher_ai_analysis_summary_title">ملخص القسم</string>
+    <string name="teacher_ai_analysis_strengths_title">نقاط القوة المحددة</string>
+    <string name="teacher_ai_analysis_gaps_title">الثغرات ونقاط الضعف</string>
+    <string name="teacher_ai_analysis_recommendations_title">توصيات المعالجة التربوية</string>
+    <string name="teacher_ai_analysis_copy">نسخ الملخص</string>
+    <string name="teacher_ai_analysis_copied">تم نسخ الملخص إلى الحافظة.</string>
+    <string name="teacher_ai_analysis_retry">إعادة المحاولة</string>
+    <string name="teacher_ai_analysis_offline_error">يلزم الاتصال بالإنترنت لتشغيل التحليل بالذكاء الاصطناعي.</string>
+    <string name="teacher_ai_analysis_error">تعذر إنشاء التحليل بالذكاء الاصطناعي: %1$s</string>
 </resources>

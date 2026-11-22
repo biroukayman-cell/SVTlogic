@@ -16,7 +16,9 @@ import com.example.core.ImportedStudentRow
 import com.example.core.NotificationHelper
 import com.example.core.SvtBackgroundNotificationWorker
 import com.example.core.SvtLabLogic
+import com.example.core.TeacherAnalyticsLogic
 import com.example.data.ai.AiAppCheckException
+import com.example.data.ai.ClassAiAnalysisReport
 import com.example.data.ai.GeneratedQuizDraft
 import com.example.data.ai.SvtAiRepository
 import com.example.data.badges.SvtBadgeDefinition
@@ -90,6 +92,21 @@ sealed interface LabSvtSearchState {
     data class Definition(val query: String, val term: String, val definition: String) : LabSvtSearchState
     data class NonSvtRejected(val query: String) : LabSvtSearchState
     data class Error(val query: String, val message: String, val isOfflineOrAppCheck: Boolean = false) : LabSvtSearchState
+}
+
+sealed interface ClassAiAnalysisState {
+    data object Idle : ClassAiAnalysisState
+    data class Loading(val classId: String, val className: String) : ClassAiAnalysisState
+    data class Success(
+        val classId: String,
+        val className: String,
+        val report: ClassAiAnalysisReport
+    ) : ClassAiAnalysisState
+    data class Error(
+        val classId: String,
+        val className: String,
+        val message: String
+    ) : ClassAiAnalysisState
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -459,6 +476,10 @@ class SvtMainViewModel(
     val labSvtSearchState: StateFlow<LabSvtSearchState> = _labSvtSearchState.asStateFlow()
     private var labSearchJob: Job? = null
 
+    private val _classAiAnalysisState = MutableStateFlow<ClassAiAnalysisState>(ClassAiAnalysisState.Idle)
+    val classAiAnalysisState: StateFlow<ClassAiAnalysisState> = _classAiAnalysisState.asStateFlow()
+    private var classAiAnalysisJob: Job? = null
+
     private val _isImportingRoster = MutableStateFlow(false)
     val isImportingRoster: StateFlow<Boolean> = _isImportingRoster.asStateFlow()
 
@@ -500,6 +521,12 @@ class SvtMainViewModel(
 
     fun resetAiState() {
         _aiQuizState.value = AiQuizState.Idle
+    }
+
+    fun resetClassAiAnalysis() {
+        classAiAnalysisJob?.cancel()
+        classAiAnalysisJob = null
+        _classAiAnalysisState.value = ClassAiAnalysisState.Idle
     }
 
     fun clearLabSvtSearch() {
@@ -1348,6 +1375,55 @@ class SvtMainViewModel(
                 _aiQuizState.value = AiQuizState.Error(context.getString(R.string.quiz_ai_error_appcheck))
             } catch (e: Exception) {
                 _aiQuizState.value = AiQuizState.Error(e.localizedMessage ?: "AI generation error")
+            }
+        }
+    }
+
+    fun analyzeClassWithAi(svtClass: SvtClass, language: AppLanguage) {
+        if (!isOnline.value) {
+            _classAiAnalysisState.value = ClassAiAnalysisState.Error(
+                classId = svtClass.id,
+                className = svtClass.name,
+                message = context.getString(R.string.teacher_ai_analysis_offline_error)
+            )
+            return
+        }
+        val analysisInput = TeacherAnalyticsLogic.buildClassAiAnalysisInput(
+            svtClass = svtClass,
+            enrollments = teacherEnrollments.value,
+            roster = teacherRoster.value,
+            quizzes = teacherQuizzes.value,
+            attempts = teacherAttempts.value,
+            resources = teacherResources.value,
+            videoTrackings = teacherVideoTracking.value
+        )
+        classAiAnalysisJob?.cancel()
+        classAiAnalysisJob = viewModelScope.launch {
+            _classAiAnalysisState.value = ClassAiAnalysisState.Loading(svtClass.id, svtClass.name)
+            try {
+                val report = aiRepository.analyzeClassPerformance(analysisInput, language)
+                _classAiAnalysisState.value = ClassAiAnalysisState.Success(
+                    classId = svtClass.id,
+                    className = svtClass.name,
+                    report = report
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: AiAppCheckException) {
+                _classAiAnalysisState.value = ClassAiAnalysisState.Error(
+                    classId = svtClass.id,
+                    className = svtClass.name,
+                    message = context.getString(R.string.quiz_ai_error_appcheck)
+                )
+            } catch (e: Exception) {
+                _classAiAnalysisState.value = ClassAiAnalysisState.Error(
+                    classId = svtClass.id,
+                    className = svtClass.name,
+                    message = context.getString(
+                        R.string.teacher_ai_analysis_error,
+                        e.localizedMessage ?: "Error"
+                    )
+                )
             }
         }
     }

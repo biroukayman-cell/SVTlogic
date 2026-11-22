@@ -174,6 +174,7 @@ fun MainDashboardScreen(
 
     val aiQuizState by viewModel.aiQuizState.collectAsStateWithLifecycle()
     val labSvtSearchState by viewModel.labSvtSearchState.collectAsStateWithLifecycle()
+    val classAiAnalysisState by viewModel.classAiAnalysisState.collectAsStateWithLifecycle()
     val unlockedBadges by viewModel.newlyUnlockedBadges.collectAsStateWithLifecycle()
     val isUploadingResource by viewModel.isUploadingResource.collectAsStateWithLifecycle()
     val appUpdates by viewModel.appUpdates.collectAsStateWithLifecycle()
@@ -410,6 +411,11 @@ fun MainDashboardScreen(
                                 teacherVideoTracking = teacherVideoTracking,
                                 teacherAnnouncements = teacherAnnouncements,
                                 teacherMessages = teacherMessages,
+                                classAiAnalysisState = classAiAnalysisState,
+                                onAnalyzeClassWithAi = { cls ->
+                                    viewModel.analyzeClassWithAi(cls, currentLanguage)
+                                },
+                                onDismissAiAnalysis = { viewModel.resetClassAiAnalysis() },
                                 onNavigateToTab = { targetTab -> currentTab = targetTab }
                             )
 
@@ -418,6 +424,8 @@ fun MainDashboardScreen(
                                 isOnline = isOnline,
                                 selectedClassId = selectedClassId,
                                 teacherClasses = teacherClasses,
+                                teacherRoster = if (isTeacher) teacherRoster else emptyList(),
+                                teacherEnrollments = if (isTeacher) teacherEnrollments else emptyList(),
                                 quizzes = if (isTeacher) teacherQuizzes else studentQuizzes,
                                 attempts = if (isTeacher) teacherAttempts else studentAttempts,
                                 downloadedQuizIds = downloadedQuizzes.keys,
@@ -490,6 +498,7 @@ fun MainDashboardScreen(
                                 resources = if (isTeacher) teacherResources else studentResources,
                                 videoTrackings = if (isTeacher) teacherVideoTracking else studentVideoTracking,
                                 classEnrollments = teacherEnrollments,
+                                teacherRoster = if (isTeacher) teacherRoster else emptyList(),
                                 downloadedResources = downloadedResources,
                                 downloadingProgress = downloadingProgress,
                                 isUploadingResource = isUploadingResource,
@@ -549,6 +558,7 @@ fun MainDashboardScreen(
                                 currentUserId = currentUserId,
                                 selectedClassId = selectedClassId,
                                 teacherEnrollments = teacherEnrollments,
+                                teacherRoster = if (isTeacher) teacherRoster else emptyList(),
                                 messages = if (isTeacher) teacherMessages else studentMessages,
                                 onSendAsStudent = { viewModel.sendMessageAsStudent(it) },
                                 onSendAsTeacher = { clsId, stId, stName, content ->

@@ -93,7 +93,107 @@ data class StudentQcmResultSummary(
     val totalQuestionsAnsweredCount: Int = 0
 )
 
+data class QuizQuestionPerformanceMetric(
+    val quizTitle: String,
+    val chapterSvt: String,
+    val questionText: String,
+    val succeededCount: Int,
+    val failedCount: Int,
+    val successRatePct: Int
+)
+
+data class QuizClassPerformanceMetric(
+    val quizTitle: String,
+    val chapterSvt: String,
+    val attemptsCount: Int,
+    val averagePct: Int,
+    val succeededQuestions: Int,
+    val failedQuestions: Int
+)
+
+data class ClassAiAnalysisInput(
+    val classId: String,
+    val className: String,
+    val level: String,
+    val academicYear: String,
+    val totalStudentsCount: Int,
+    val activeQcmStudentsCount: Int,
+    val classAveragePct: Int,
+    val totalSucceededQuestions: Int,
+    val totalFailedQuestions: Int,
+    val questionSuccessRatePct: Int,
+    val strongStudentsCount: Int,
+    val averageStudentsCount: Int,
+    val strugglingStudentsCount: Int,
+    val inactiveStudentsCount: Int,
+    val quizMetrics: List<QuizClassPerformanceMetric>,
+    val strongestQuestions: List<QuizQuestionPerformanceMetric>,
+    val weakestQuestions: List<QuizQuestionPerformanceMetric>,
+    val totalResourcesCount: Int,
+    val videoCompletionRatePct: Int
+)
+
 object TeacherAnalyticsLogic {
+
+    /**
+     * Resolves the student's official name from the teacher's QR/barcode PDF roster
+     * ([RosterStudent.fullName]) whenever a match exists by UID or Massar number,
+     * ensuring teachers always see the official PDF name even if the student changed their name.
+     */
+    fun resolveOfficialStudentName(
+        studentId: String,
+        massarNumber: String = "",
+        classId: String? = null,
+        fallbackName: String = "",
+        roster: List<RosterStudent>,
+        enrollments: List<Enrollment> = emptyList()
+    ): String {
+        val cleanStudentId = studentId.trim()
+        val cleanClassId = classId?.trim().orEmpty()
+        val scopedRoster = if (cleanClassId.isNotEmpty()) {
+            roster.filter { it.classId == cleanClassId }
+        } else {
+            roster
+        }
+
+        val effectiveMassar = massarNumber.trim().ifBlank {
+            if (cleanStudentId.isNotEmpty()) {
+                enrollments.firstOrNull { enr ->
+                    enr.studentId == cleanStudentId &&
+                        (cleanClassId.isEmpty() || enr.classId == cleanClassId) &&
+                        enr.massarNumber.isNotBlank()
+                }?.massarNumber.orEmpty().trim()
+            } else {
+                ""
+            }
+        }
+
+        fun findMatch(candidates: List<RosterStudent>): RosterStudent? {
+            if (cleanStudentId.isNotEmpty()) {
+                val byUid = candidates.firstOrNull {
+                    it.studentUid.isNotBlank() &&
+                        it.studentUid == cleanStudentId &&
+                        it.fullName.isNotBlank()
+                }
+                if (byUid != null) return byUid
+            }
+            if (effectiveMassar.isNotEmpty()) {
+                val byMassar = candidates.firstOrNull {
+                    it.massarNumber.isNotBlank() &&
+                        it.massarNumber.equals(effectiveMassar, ignoreCase = true) &&
+                        it.fullName.isNotBlank()
+                }
+                if (byMassar != null) return byMassar
+            }
+            return null
+        }
+
+        val match = findMatch(scopedRoster)
+            ?: if (cleanClassId.isNotEmpty()) findMatch(roster) else null
+
+        return match?.fullName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: fallbackName.trim().ifBlank { "Élève" }
+    }
 
     fun extractAttemptQuestionCounts(
         attempt: QuizAttempt,
@@ -295,9 +395,17 @@ object TeacherAnalyticsLogic {
 
             classEnrollments.forEach { enr ->
                 val massar = enr.massarNumber.ifBlank { rosterByUid[enr.studentId]?.massarNumber.orEmpty() }
+                val officialName = resolveOfficialStudentName(
+                    studentId = enr.studentId,
+                    massarNumber = massar,
+                    classId = cls.id,
+                    fallbackName = enr.studentName,
+                    roster = classRoster,
+                    enrollments = classEnrollments
+                )
                 seeds[enr.studentId] = StudentSeed(
                     studentId = enr.studentId,
-                    name = enr.studentName.ifBlank { "Élève" },
+                    name = officialName,
                     massar = massar
                 )
             }
@@ -305,9 +413,17 @@ object TeacherAnalyticsLogic {
             classAttempts.forEach { att ->
                 if (!seeds.containsKey(att.studentId)) {
                     val rosterMatch = rosterByUid[att.studentId]
+                    val officialName = resolveOfficialStudentName(
+                        studentId = att.studentId,
+                        massarNumber = rosterMatch?.massarNumber.orEmpty(),
+                        classId = cls.id,
+                        fallbackName = att.studentName,
+                        roster = classRoster,
+                        enrollments = classEnrollments
+                    )
                     seeds[att.studentId] = StudentSeed(
                         studentId = att.studentId,
-                        name = att.studentName.ifBlank { rosterMatch?.fullName ?: "Élève" },
+                        name = officialName,
                         massar = rosterMatch?.massarNumber.orEmpty()
                     )
                 }
@@ -398,6 +514,136 @@ object TeacherAnalyticsLogic {
                 { -it.overallPercentage },
                 { it.studentName.lowercase() }
             )
+        )
+    }
+
+    fun buildClassAiAnalysisInput(
+        svtClass: SvtClass,
+        enrollments: List<Enrollment>,
+        roster: List<RosterStudent>,
+        quizzes: List<Quiz>,
+        attempts: List<QuizAttempt>,
+        resources: List<CourseResource>,
+        videoTrackings: List<VideoTracking>
+    ): ClassAiAnalysisInput {
+        val classQuizzes = quizzes.filter { it.classId == svtClass.id }
+        val classQuizIds = classQuizzes.map { it.id }.toSet()
+        val classAttempts = attempts.filter { it.classId == svtClass.id && it.quizId in classQuizIds }
+
+        val studentResults = computeStudentQcmResults(
+            classes = listOf(svtClass),
+            enrollments = enrollments,
+            roster = roster,
+            quizzes = quizzes,
+            attempts = attempts,
+            filterClassId = svtClass.id
+        )
+
+        val activeStudents = studentResults.filter { it.quizzesTakenCount > 0 }
+        val strongStudentsCount = activeStudents.count { it.overallPercentage >= 70 }
+        val averageStudentsCount = activeStudents.count { it.overallPercentage in 50..69 }
+        val strugglingStudentsCount = activeStudents.count { it.overallPercentage < 50 }
+        val inactiveStudentsCount = studentResults.count { it.quizzesTakenCount == 0 }
+
+        val validAttemptPcts = classAttempts.mapNotNull { att ->
+            if (att.maxScore > 0.0) ((att.score / att.maxScore) * 100.0).coerceIn(0.0, 100.0) else null
+        }
+        val classAveragePct = if (validAttemptPcts.isEmpty()) 0 else validAttemptPcts.average().roundToInt()
+
+        val totalSucceeded = studentResults.sumOf { it.succeededQuestionsCount }
+        val totalFailed = studentResults.sumOf { it.failedQuestionsCount }
+        val totalAnswered = totalSucceeded + totalFailed
+        val questionSuccessRatePct = if (totalAnswered > 0) {
+            ((totalSucceeded.toDouble() / totalAnswered.toDouble()) * 100.0).roundToInt().coerceIn(0, 100)
+        } else {
+            0
+        }
+
+        val allQuestionMetrics = mutableListOf<QuizQuestionPerformanceMetric>()
+        val quizMetrics = classQuizzes.map { quiz ->
+            val qAttempts = classAttempts.filter { it.quizId == quiz.id }
+            val qPcts = qAttempts.mapNotNull { att ->
+                if (att.maxScore > 0.0) ((att.score / att.maxScore) * 100.0).coerceIn(0.0, 100.0) else null
+            }
+            val qAvg = if (qPcts.isEmpty()) 0 else qPcts.average().roundToInt()
+            var qOkTotal = 0
+            var qKoTotal = 0
+            qAttempts.forEach { att ->
+                val (ok, ko) = extractAttemptQuestionCounts(att, quiz)
+                qOkTotal += ok
+                qKoTotal += ko
+            }
+
+            quiz.questions.forEachIndexed { qIdx, question ->
+                val records = qAttempts.mapNotNull { att ->
+                    att.answers.firstOrNull { it.questionIndex == qIdx }
+                }
+                if (records.isNotEmpty()) {
+                    val ok = records.count { it.isCorrect }
+                    val ko = records.size - ok
+                    val rate = ((ok.toDouble() / records.size.toDouble()) * 100.0).roundToInt().coerceIn(0, 100)
+                    allQuestionMetrics.add(
+                        QuizQuestionPerformanceMetric(
+                            quizTitle = quiz.title,
+                            chapterSvt = quiz.chapterSvt,
+                            questionText = question.questionText,
+                            succeededCount = ok,
+                            failedCount = ko,
+                            successRatePct = rate
+                        )
+                    )
+                }
+            }
+
+            QuizClassPerformanceMetric(
+                quizTitle = quiz.title,
+                chapterSvt = quiz.chapterSvt,
+                attemptsCount = qAttempts.size,
+                averagePct = qAvg,
+                succeededQuestions = qOkTotal,
+                failedQuestions = qKoTotal
+            )
+        }
+
+        val strongestQuestions = allQuestionMetrics
+            .filter { it.successRatePct >= 60 }
+            .sortedWith(compareByDescending<QuizQuestionPerformanceMetric> { it.successRatePct }.thenByDescending { it.succeededCount })
+            .take(5)
+
+        val weakestQuestions = allQuestionMetrics
+            .filter { it.failedCount > 0 }
+            .sortedWith(compareBy<QuizQuestionPerformanceMetric> { it.successRatePct }.thenByDescending { it.failedCount })
+            .take(5)
+
+        val classResources = resources.filter { it.classId == svtClass.id }
+        val classTrackings = videoTrackings.filter { it.classId == svtClass.id }
+        val completedVideos = classTrackings.count { it.status == "completed" }
+        val videoCompletionPct = if (classTrackings.isEmpty()) {
+            0
+        } else {
+            ((completedVideos.toDouble() / classTrackings.size.toDouble()) * 100.0).roundToInt().coerceIn(0, 100)
+        }
+
+        return ClassAiAnalysisInput(
+            classId = svtClass.id,
+            className = svtClass.name,
+            level = svtClass.level,
+            academicYear = svtClass.academicYear,
+            totalStudentsCount = studentResults.size,
+            activeQcmStudentsCount = activeStudents.size,
+            classAveragePct = classAveragePct,
+            totalSucceededQuestions = totalSucceeded,
+            totalFailedQuestions = totalFailed,
+            questionSuccessRatePct = questionSuccessRatePct,
+            strongStudentsCount = strongStudentsCount,
+            averageStudentsCount = averageStudentsCount,
+            strugglingStudentsCount = strugglingStudentsCount,
+            inactiveStudentsCount = inactiveStudentsCount,
+            quizMetrics = quizMetrics,
+            strongestQuestions = strongestQuestions,
+            weakestQuestions = weakestQuestions,
+            totalResourcesCount = classResources.size,
+            videoCompletionRatePct = videoCompletionPct
         )
     }
 }

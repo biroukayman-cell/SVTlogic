@@ -228,4 +228,152 @@ class TeacherAnalyticsAndAuthTest {
         val withImage = plain.copy(imageUrl = "data:image/jpeg;base64,/9j/4AAQ")
         assertTrue(withImage.imageUrl.startsWith("data:image/jpeg;base64,"))
     }
+
+    @Test
+    fun `resolveOfficialStudentName and computeStudentQcmResults always prefer official PDF roster name even if student renamed`() {
+        val renamedEnrollments = listOf(
+            Enrollment(
+                id = "e1",
+                studentId = "s1",
+                classId = "c1",
+                studentName = "Salma Modified",
+                massarNumber = "J1001",
+                status = "approved"
+            ),
+            Enrollment(
+                id = "e_massar_only",
+                studentId = "s_massar_uid",
+                classId = "c2",
+                studentName = "Fake Nickname",
+                massarNumber = "k2002",
+                status = "approved"
+            )
+        )
+        val renamedAttempts = listOf(
+            QuizAttempt(
+                id = "a_ren_1",
+                quizId = "q1",
+                classId = "c1",
+                studentId = "s1",
+                studentName = "Salma Pseudo",
+                score = 7.0,
+                maxScore = 10.0
+            ),
+            QuizAttempt(
+                id = "a_ren_2",
+                quizId = "q3",
+                classId = "c2",
+                studentId = "s_massar_uid",
+                studentName = "Other Pseudo",
+                score = 9.0,
+                maxScore = 10.0
+            )
+        )
+
+        val resolvedByUid = TeacherAnalyticsLogic.resolveOfficialStudentName(
+            studentId = "s1",
+            classId = "c1",
+            fallbackName = "Salma Pseudo",
+            roster = roster,
+            enrollments = renamedEnrollments
+        )
+        assertEquals("Salma", resolvedByUid)
+
+        val resolvedByMassar = TeacherAnalyticsLogic.resolveOfficialStudentName(
+            studentId = "s_massar_uid",
+            classId = "c2",
+            fallbackName = "Other Pseudo",
+            roster = roster,
+            enrollments = renamedEnrollments
+        )
+        assertEquals("Omar", resolvedByMassar)
+
+        val results = TeacherAnalyticsLogic.computeStudentQcmResults(
+            classes = classes,
+            enrollments = renamedEnrollments,
+            roster = roster,
+            quizzes = quizzes,
+            attempts = renamedAttempts
+        )
+        assertEquals("Salma", results.first { it.studentId == "s1" }.studentName)
+        assertEquals("Omar", results.first { it.studentId == "s_massar_uid" }.studentName)
+    }
+
+    @Test
+    fun `buildClassAiAnalysisInput summarizes class strengths, gaps, score tiers, and video tracking`() {
+        val c1Quizzes = listOf(
+            Quiz(
+                id = "q_ai_1",
+                classId = "c1",
+                teacherId = "t1",
+                title = "Respiration cellulaire",
+                chapterSvt = "Consommation de la matière organique",
+                questions = listOf(
+                    QuizQuestion(questionText = "Rôle des mitochondries"),
+                    QuizQuestion(questionText = "Bilan ATP de la fermentation")
+                )
+            )
+        )
+        val c1Attempts = listOf(
+            QuizAttempt(
+                id = "att_1",
+                quizId = "q_ai_1",
+                classId = "c1",
+                studentId = "s1",
+                studentName = "Salma",
+                score = 2.0,
+                maxScore = 2.0,
+                answers = listOf(
+                    QuestionAnswerRecord(questionIndex = 0, selectedIndex = 0, isCorrect = true),
+                    QuestionAnswerRecord(questionIndex = 1, selectedIndex = 0, isCorrect = true)
+                )
+            ),
+            QuizAttempt(
+                id = "att_2",
+                quizId = "q_ai_1",
+                classId = "c1",
+                studentId = "s2",
+                studentName = "Youssef",
+                score = 1.0,
+                maxScore = 2.0,
+                answers = listOf(
+                    QuestionAnswerRecord(questionIndex = 0, selectedIndex = 0, isCorrect = true),
+                    QuestionAnswerRecord(questionIndex = 1, selectedIndex = 1, isCorrect = false)
+                )
+            )
+        )
+        val resources = listOf(
+            CourseResource(id = "r_vid", classId = "c1", type = "video"),
+            CourseResource(id = "r_pdf", classId = "c1", type = "pdf")
+        )
+        val trackings = listOf(
+            VideoTracking(id = "vt_1", resourceId = "r_vid", classId = "c1", studentId = "s1", status = "completed"),
+            VideoTracking(id = "vt_2", resourceId = "r_vid", classId = "c1", studentId = "s2", status = "partial")
+        )
+
+        val input = TeacherAnalyticsLogic.buildClassAiAnalysisInput(
+            svtClass = classes.first(),
+            enrollments = enrollments,
+            roster = roster,
+            quizzes = c1Quizzes,
+            attempts = c1Attempts,
+            resources = resources,
+            videoTrackings = trackings
+        )
+
+        assertEquals("2BAC SVT 1", input.className)
+        assertEquals(2, input.totalStudentsCount)
+        assertEquals(2, input.activeQcmStudentsCount)
+        assertEquals(75, input.classAveragePct)
+        assertEquals(3, input.totalSucceededQuestions)
+        assertEquals(1, input.totalFailedQuestions)
+        assertEquals(75, input.questionSuccessRatePct)
+        assertEquals(1, input.strongStudentsCount)
+        assertEquals(1, input.averageStudentsCount)
+        assertEquals(0, input.strugglingStudentsCount)
+        assertEquals(2, input.totalResourcesCount)
+        assertEquals(50, input.videoCompletionRatePct)
+        assertEquals("Rôle des mitochondries", input.strongestQuestions.first().questionText)
+        assertEquals("Bilan ATP de la fermentation", input.weakestQuestions.first().questionText)
+    }
 }

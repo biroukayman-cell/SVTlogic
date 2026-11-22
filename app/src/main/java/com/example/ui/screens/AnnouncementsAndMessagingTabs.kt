@@ -55,9 +55,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.core.TeacherAnalyticsLogic
 import com.example.data.model.Announcement
 import com.example.data.model.Enrollment
 import com.example.data.model.PrivateMessage
+import com.example.data.model.RosterStudent
 import com.example.ui.components.SvtEmptyStateCard
 import com.example.ui.components.SvtHeroBannerCard
 import java.text.SimpleDateFormat
@@ -260,6 +262,7 @@ fun MessagingTab(
     currentUserId: String,
     selectedClassId: String?,
     teacherEnrollments: List<Enrollment>,
+    teacherRoster: List<RosterStudent> = emptyList(),
     messages: List<PrivateMessage>,
     onSendAsStudent: (String) -> Unit,
     onSendAsTeacher: (classId: String, studentId: String, studentName: String, content: String) -> Unit,
@@ -316,6 +319,14 @@ fun MessagingTab(
                         val studentMsgs = messages.filter { it.studentId == student.studentId }
                         val unreadCount = studentMsgs.count { it.senderRole == "student" && !it.isRead }
                         val lastMsg = studentMsgs.lastOrNull()
+                        val officialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+                            studentId = student.studentId,
+                            massarNumber = student.massarNumber,
+                            classId = student.classId,
+                            fallbackName = student.studentName,
+                            roster = teacherRoster,
+                            enrollments = teacherEnrollments
+                        )
 
                         Card(
                             modifier = Modifier
@@ -340,7 +351,7 @@ fun MessagingTab(
                                     Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
                                 }
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(student.studentName, style = MaterialTheme.typography.titleMedium)
+                                    Text(officialName, style = MaterialTheme.typography.titleMedium)
                                     Text(
                                         text = lastMsg?.content ?: student.className,
                                         style = MaterialTheme.typography.bodySmall,
@@ -358,6 +369,14 @@ fun MessagingTab(
             }
         } else {
             val student = activeStudentEnrollment!!
+            val officialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+                studentId = student.studentId,
+                massarNumber = student.massarNumber,
+                classId = student.classId,
+                fallbackName = student.studentName,
+                roster = teacherRoster,
+                enrollments = teacherEnrollments
+            )
             BackHandler { activeStudentEnrollment = null }
             val threadMessages = remember(messages, student.studentId) {
                 messages.filter { it.studentId == student.studentId }
@@ -367,13 +386,13 @@ fun MessagingTab(
                 if (unreadFromStudent.isNotEmpty()) onMarkThreadRead(unreadFromStudent)
             }
             PrivateChatThread(
-                headerTitle = student.studentName,
+                headerTitle = officialName,
                 notice = student.className,
                 messages = threadMessages,
                 currentUserId = currentUserId,
                 onBack = { activeStudentEnrollment = null },
                 onSend = { content ->
-                    onSendAsTeacher(student.classId, student.studentId, student.studentName, content)
+                    onSendAsTeacher(student.classId, student.studentId, officialName, content)
                 }
             )
         }
