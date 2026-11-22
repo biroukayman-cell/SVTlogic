@@ -1,0 +1,32 @@
+{
+  "name": "BioTerre SVT",
+  "short_name": "BioTerre",
+  "description": "Espace pédagogique Sciences de la Vie et de la Terre — Cours, QCM chronométrés, Labo SVT interactif, suivi vidéo et messagerie.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#1B7A54",
+  "background_color": "#F4FAF7",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

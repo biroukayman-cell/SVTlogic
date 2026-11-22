@@ -714,4 +714,28 @@
     <string name="qr_identity_locked_notice">حساب مسجل عبر رمز QR للأستاذ: الاسم الكامل ورقم مسار مقفلان ولا يمكن تعديلهما.</string>
     <string name="field_massar_label">رقم مسار</string>
     <string name="taalim_default_email_hint">الافتراضي: رقم_مسار@taalim.ma</string>
+
+    <!-- إحصائيات الأقسام (الأسئلة الصحيحة والخاطئة) ومراجعة إجابات التلاميذ -->
+    <string name="teacher_class_questions_stats_title">إحصائيات الأسئلة (القسم)</string>
+    <string name="teacher_questions_succeeded_count">✓ %1$d صحيحة</string>
+    <string name="teacher_questions_failed_count">✗ %1$d خاطئة</string>
+    <string name="teacher_questions_success_rate">%1$d%% نسبة النجاح</string>
+    <string name="teacher_questions_answered_total">%1$d سؤال مُجاب • %2$d/%3$d تلميذ نشط</string>
+    <string name="teacher_class_student_questions_toggle">تفاصيل حسب التلميذ (%1$d)</string>
+    <string name="teacher_class_global_stats_header">الإحصائيات الشاملة حسب القسم (الأسئلة الصحيحة / الخاطئة)</string>
+    <string name="teacher_student_answers_btn">عرض الإجابات (✓/✗)</string>
+    <string name="teacher_student_all_answers_btn">عرض الإجابات الصحيحة / الخاطئة</string>
+    <string name="teacher_answers_dialog_title">إجابات %1$s</string>
+    <string name="teacher_answers_filter_all">الكل (%1$d)</string>
+    <string name="teacher_answers_filter_correct">الصحيحة (%1$d)</string>
+    <string name="teacher_answers_filter_incorrect">الخاطئة (%1$d)</string>
+    <string name="teacher_answers_all_quizzes_chip">كل الاختبارات (%1$d)</string>
+    <string name="teacher_answers_status_correct">صحيحة ✓</string>
+    <string name="teacher_answers_status_incorrect">خاطئة ✗</string>
+    <string name="teacher_answers_student_choice">إجابة التلميذ: %1$s</string>
+    <string name="teacher_answers_no_selection">لم يتم اختيار أي إجابة</string>
+    <string name="teacher_answers_correct_choice">الإجابة الصحيحة: %1$s</string>
+    <string name="teacher_answers_empty_correct">لا توجد إجابات صحيحة لهذا الاختيار.</string>
+    <string name="teacher_answers_empty_incorrect">لا توجد إجابات خاطئة — جميع الأسئلة صحيحة!</string>
+    <string name="teacher_answers_empty_detail">لا تتوفر تفاصيل الإجابة لكل سؤال لهذه المحاولة.</string>
 </resources>

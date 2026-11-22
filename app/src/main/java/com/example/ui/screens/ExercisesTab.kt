@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.OfflinePin
 import androidx.compose.material.icons.filled.PlayArrow
@@ -103,13 +104,17 @@ import com.example.core.AvatarStorageHelper
 import com.example.core.ExternalAiParsedQuiz
 import com.example.core.ExternalAiQuizHelper
 import com.example.core.QrCodeUtils
+import com.example.core.TeacherAnalyticsLogic
 import com.example.data.ai.GeneratedQuizDraft
 import com.example.data.model.Quiz
 import com.example.data.model.QuizAttempt
 import com.example.data.model.QuizQuestion
 import com.example.data.model.SvtClass
 import com.example.data.svt.SvtKnowledgeCatalog
+import com.example.ui.components.QuestionSuccessRatioBar
 import com.example.ui.components.QuizQuestionImageBanner
+import com.example.ui.components.StudentQuizAnswersReviewDialog
+import com.example.ui.components.StudentQuizReviewEntry
 import com.example.ui.components.SvtEmptyStateCard
 import com.example.ui.components.SvtHeroBannerCard
 import com.example.ui.theme.SvtCoralError
@@ -1045,10 +1050,24 @@ private fun TeacherQuizStatsDialog(
     attempts: List<QuizAttempt>,
     onDismiss: () -> Unit
 ) {
+    var selectedAttemptForReview by remember { mutableStateOf<QuizAttempt?>(null) }
+
     val avgPct = if (attempts.isEmpty()) 0 else {
         attempts.map { if (it.maxScore > 0) (it.score / it.maxScore) * 100.0 else 0.0 }.average().toInt()
     }
     val avgTime = if (attempts.isEmpty()) 0 else attempts.map { it.totalDurationSeconds }.average().toInt()
+    val questionTotals = remember(attempts, quiz) {
+        var ok = 0
+        var ko = 0
+        attempts.forEach { att ->
+            val (s, f) = TeacherAnalyticsLogic.extractAttemptQuestionCounts(att, quiz)
+            ok += s
+            ko += f
+        }
+        ok to ko
+    }
+    val totalSucceeded = questionTotals.first
+    val totalFailed = questionTotals.second
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1075,6 +1094,31 @@ private fun TeacherQuizStatsDialog(
                         modifier = Modifier.weight(1f)
                     )
                 }
+
+                if (attempts.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        QuestionSuccessRatioBar(
+                            succeededCount = totalSucceeded,
+                            failedCount = totalFailed
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            StatMetricChip(
+                                label = stringResource(id = R.string.teacher_questions_succeeded_count, totalSucceeded),
+                                color = SvtSuccess,
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatMetricChip(
+                                label = stringResource(id = R.string.teacher_questions_failed_count, totalFailed),
+                                color = SvtCoralError,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
                 Text(
                     text = stringResource(id = R.string.quiz_stats_attempts, attempts.size),
                     style = MaterialTheme.typography.labelMedium
@@ -1086,6 +1130,7 @@ private fun TeacherQuizStatsDialog(
                     )
                     attempts.forEach { att ->
                         val pct = if (att.maxScore > 0) ((att.score / att.maxScore) * 100).toInt() else 0
+                        val (qOk, qKo) = TeacherAnalyticsLogic.extractAttemptQuestionCounts(att, quiz)
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             shape = MaterialTheme.shapes.small
@@ -1100,13 +1145,60 @@ private fun TeacherQuizStatsDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text(att.studentName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                    Text("${att.score}/${att.maxScore} ($pct%) • ${att.totalDurationSeconds}s", style = MaterialTheme.typography.labelMedium)
+                                    Text(
+                                        text = att.studentName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = "${att.score}/${att.maxScore} ($pct%) • ${att.totalDurationSeconds}s",
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
                                 }
                                 LinearProgressIndicator(
                                     progress = { (pct / 100f).coerceIn(0f, 1f) },
                                     modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(4.dp))
                                 )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(
+                                            text = stringResource(id = R.string.teacher_questions_succeeded_count, qOk),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = SvtSuccess,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = stringResource(id = R.string.teacher_questions_failed_count, qKo),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = SvtCoralError,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = { selectedAttemptForReview = att },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.testTag("quiz_stats_view_answers_${att.studentId}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.FactCheck,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = stringResource(id = R.string.teacher_student_answers_btn),
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1117,6 +1209,16 @@ private fun TeacherQuizStatsDialog(
             Button(onClick = onDismiss) { Text(stringResource(id = R.string.close)) }
         }
     )
+
+    selectedAttemptForReview?.let { att ->
+        StudentQuizAnswersReviewDialog(
+            studentName = att.studentName,
+            studentSubtitle = quiz.title,
+            entries = listOf(StudentQuizReviewEntry(quiz = quiz, attempt = att)),
+            initialQuizId = quiz.id,
+            onDismiss = { selectedAttemptForReview = null }
+        )
+    }
 }
 
 @Composable

@@ -714,4 +714,28 @@
     <string name="qr_identity_locked_notice">Account registered via teacher\'s QR Code: full name and Massar ID are locked and cannot be changed.</string>
     <string name="field_massar_label">Massar ID</string>
     <string name="taalim_default_email_hint">Default: massarnumber@taalim.ma</string>
+
+    <!-- Global Class Question Stats & Student Correct/Incorrect Answer Review -->
+    <string name="teacher_class_questions_stats_title">Class Question Statistics</string>
+    <string name="teacher_questions_succeeded_count">✓ %1$d correct</string>
+    <string name="teacher_questions_failed_count">✗ %1$d failed</string>
+    <string name="teacher_questions_success_rate">%1$d%% success</string>
+    <string name="teacher_questions_answered_total">%1$d question(s) answered • %2$d/%3$d active student(s)</string>
+    <string name="teacher_class_student_questions_toggle">Per-student breakdown (%1$d)</string>
+    <string name="teacher_class_global_stats_header">Global Class Stats (Succeeded / Failed Questions)</string>
+    <string name="teacher_student_answers_btn">View answers (✓/✗)</string>
+    <string name="teacher_student_all_answers_btn">View correct / incorrect answers</string>
+    <string name="teacher_answers_dialog_title">Answers by %1$s</string>
+    <string name="teacher_answers_filter_all">All (%1$d)</string>
+    <string name="teacher_answers_filter_correct">Correct (%1$d)</string>
+    <string name="teacher_answers_filter_incorrect">Incorrect (%1$d)</string>
+    <string name="teacher_answers_all_quizzes_chip">All quizzes (%1$d)</string>
+    <string name="teacher_answers_status_correct">Correct ✓</string>
+    <string name="teacher_answers_status_incorrect">Incorrect ✗</string>
+    <string name="teacher_answers_student_choice">Student answer: %1$s</string>
+    <string name="teacher_answers_no_selection">No answer selected</string>
+    <string name="teacher_answers_correct_choice">Correct answer: %1$s</string>
+    <string name="teacher_answers_empty_correct">No correct answers found for this selection.</string>
+    <string name="teacher_answers_empty_incorrect">No incorrect answers — all questions were answered correctly!</string>
+    <string name="teacher_answers_empty_detail">No question-by-question breakdown available for this attempt.</string>
 </resources>

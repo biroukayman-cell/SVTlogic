@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: 244 250 247;
+  --color-surface: 255 255 255;
+  --color-surface-variant: 226 239 232;
+  --color-on-surface: 19 34 27;
+  --color-on-surface-variant: 66 89 78;
+  --color-outline: 114 137 125;
+
+  --color-primary: 27 122 84;
+  --color-on-primary: 255 255 255;
+  --color-primary-container: 196 240 218;
+  --color-on-primary-container: 4 33 20;
+
+  --color-secondary: 30 107 148;
+  --color-on-secondary: 255 255 255;
+  --color-secondary-container: 205 233 250;
+  --color-on-secondary-container: 6 32 48;
+
+  --color-tertiary: 198 126 21;
+  --color-tertiary-container: 255 230 191;
+  --color-on-tertiary-container: 43 23 0;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+html,
+body {
+  min-height: 100%;
+  overscroll-behavior-y: contain;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'Nunito', 'Noto Sans Arabic', system-ui, -apple-system, sans-serif;
+  background-color: rgb(var(--color-bg));
+  color: rgb(var(--color-on-surface));
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-display {
+  font-family: 'Outfit', 'Noto Sans Arabic', system-ui, -apple-system, sans-serif;
+}
+
+.pt-safe {
+  padding-top: max(env(safe-area-inset-top, 0px), 0px);
+}
+
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
+}
+
+.min-h-screen-safe {
+  min-height: 100dvh;
+}
+
+/* Smooth QCM slide-fade transition */
+@keyframes qcmSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-qcm-in {
+  animation: qcmSlideIn 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 3D Flashcard Flip */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+/* Hide scrollbars nicely for horizontal filter chips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}

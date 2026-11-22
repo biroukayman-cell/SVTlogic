@@ -11,6 +11,34 @@ import com.example.data.model.SvtClass
 import com.example.data.model.VideoTracking
 import kotlin.math.roundToInt
 
+enum class QuestionAnswerFilter {
+    ALL,
+    CORRECT,
+    INCORRECT
+}
+
+data class StudentClassQuestionStats(
+    val studentId: String,
+    val studentName: String,
+    val massarNumber: String,
+    val succeededQuestions: Int,
+    val failedQuestions: Int,
+    val totalQuestionsAnswered: Int,
+    val successRatePct: Int
+)
+
+data class ClassGlobalQuestionStats(
+    val classId: String,
+    val className: String,
+    val totalStudents: Int,
+    val activeStudentsCount: Int,
+    val totalSucceededQuestions: Int,
+    val totalFailedQuestions: Int,
+    val totalQuestionsAnswered: Int,
+    val successRatePct: Int,
+    val studentStats: List<StudentClassQuestionStats>
+)
+
 data class TeacherClassSummary(
     val svtClass: SvtClass,
     val approvedStudentsCount: Int,
@@ -18,7 +46,11 @@ data class TeacherClassSummary(
     val quizzesCount: Int,
     val attemptsCount: Int,
     val classAveragePct: Int,
-    val resourcesCount: Int
+    val resourcesCount: Int,
+    val totalSucceededQuestions: Int = 0,
+    val totalFailedQuestions: Int = 0,
+    val questionSuccessRatePct: Int = 0,
+    val studentQuestionStats: List<StudentClassQuestionStats> = emptyList()
 )
 
 data class TeacherDashboardOverview(
@@ -38,7 +70,9 @@ data class TeacherDashboardOverview(
 data class StudentSingleQuizResult(
     val quiz: Quiz,
     val attempt: QuizAttempt?,
-    val percentage: Int?
+    val percentage: Int?,
+    val succeededQuestionsCount: Int = 0,
+    val failedQuestionsCount: Int = 0
 )
 
 data class StudentQcmResultSummary(
@@ -53,10 +87,30 @@ data class StudentQcmResultSummary(
     val totalMaxScore: Double,
     val overallPercentage: Int,
     val totalTimeSeconds: Long,
-    val perQuizResults: List<StudentSingleQuizResult>
+    val perQuizResults: List<StudentSingleQuizResult>,
+    val succeededQuestionsCount: Int = 0,
+    val failedQuestionsCount: Int = 0,
+    val totalQuestionsAnsweredCount: Int = 0
 )
 
 object TeacherAnalyticsLogic {
+
+    fun extractAttemptQuestionCounts(
+        attempt: QuizAttempt,
+        quiz: Quiz? = null
+    ): Pair<Int, Int> {
+        if (attempt.answers.isNotEmpty()) {
+            val succeeded = attempt.answers.count { it.isCorrect }
+            val failed = attempt.answers.count { !it.isCorrect }
+            return succeeded to failed
+        }
+        val totalQuestions = quiz?.questions?.size?.takeIf { it > 0 }
+            ?: attempt.maxScore.roundToInt().coerceAtLeast(0)
+        if (totalQuestions <= 0) return 0 to 0
+        val succeeded = attempt.score.roundToInt().coerceIn(0, totalQuestions)
+        val failed = (totalQuestions - succeeded).coerceAtLeast(0)
+        return succeeded to failed
+    }
 
     fun computeDashboardOverview(
         classes: List<SvtClass>,
@@ -66,7 +120,8 @@ object TeacherAnalyticsLogic {
         resources: List<CourseResource>,
         videoTrackings: List<VideoTracking>,
         announcements: List<Announcement>,
-        messages: List<PrivateMessage>
+        messages: List<PrivateMessage>,
+        roster: List<RosterStudent> = emptyList()
     ): TeacherDashboardOverview {
         val approvedEnrollments = enrollments.filter { it.status == "approved" }
         val pendingEnrollments = enrollments.filter { it.status == "pending" }
@@ -84,6 +139,14 @@ object TeacherAnalyticsLogic {
             ((completedTrackings.toDouble() / videoTrackings.size.toDouble()) * 100.0).roundToInt().coerceIn(0, 100)
         }
 
+        val classQuestionStatsById = computeClassGlobalQuestionStats(
+            classes = classes,
+            enrollments = enrollments,
+            roster = roster,
+            quizzes = quizzes,
+            attempts = attempts
+        ).associateBy { it.classId }
+
         val summaries = classes.map { cls ->
             val clsApproved = approvedEnrollments.count { it.classId == cls.id }
             val clsPending = pendingEnrollments.count { it.classId == cls.id }
@@ -94,6 +157,7 @@ object TeacherAnalyticsLogic {
             }
             val clsAvg = if (clsPcts.isEmpty()) 0 else clsPcts.average().roundToInt()
             val clsResources = resources.count { it.classId == cls.id }
+            val clsQStats = classQuestionStatsById[cls.id]
             TeacherClassSummary(
                 svtClass = cls,
                 approvedStudentsCount = clsApproved,
@@ -101,7 +165,11 @@ object TeacherAnalyticsLogic {
                 quizzesCount = clsQuizzes,
                 attemptsCount = clsAttempts.size,
                 classAveragePct = clsAvg,
-                resourcesCount = clsResources
+                resourcesCount = clsResources,
+                totalSucceededQuestions = clsQStats?.totalSucceededQuestions ?: 0,
+                totalFailedQuestions = clsQStats?.totalFailedQuestions ?: 0,
+                questionSuccessRatePct = clsQStats?.successRatePct ?: 0,
+                studentQuestionStats = clsQStats?.studentStats ?: emptyList()
             )
         }
 
@@ -118,6 +186,77 @@ object TeacherAnalyticsLogic {
             videoCompletionRatePct = videoCompletionPct,
             classSummaries = summaries
         )
+    }
+
+    fun computeClassGlobalQuestionStats(
+        classes: List<SvtClass>,
+        enrollments: List<Enrollment>,
+        roster: List<RosterStudent>,
+        quizzes: List<Quiz>,
+        attempts: List<QuizAttempt>,
+        filterClassId: String? = null
+    ): List<ClassGlobalQuestionStats> {
+        val targetClasses = if (filterClassId.isNullOrBlank()) {
+            classes
+        } else {
+            classes.filter { it.id == filterClassId }
+        }
+        val studentResultsByClass = computeStudentQcmResults(
+            classes = targetClasses,
+            enrollments = enrollments,
+            roster = roster,
+            quizzes = quizzes,
+            attempts = attempts,
+            filterClassId = filterClassId
+        ).groupBy { it.classId }
+
+        return targetClasses.map { cls ->
+            val classStudents = studentResultsByClass[cls.id].orEmpty()
+            val studentStats = classStudents.map { st ->
+                val answered = st.totalQuestionsAnsweredCount
+                val rate = if (answered > 0) {
+                    ((st.succeededQuestionsCount.toDouble() / answered.toDouble()) * 100.0)
+                        .roundToInt()
+                        .coerceIn(0, 100)
+                } else {
+                    0
+                }
+                StudentClassQuestionStats(
+                    studentId = st.studentId,
+                    studentName = st.studentName,
+                    massarNumber = st.massarNumber,
+                    succeededQuestions = st.succeededQuestionsCount,
+                    failedQuestions = st.failedQuestionsCount,
+                    totalQuestionsAnswered = answered,
+                    successRatePct = rate
+                )
+            }.sortedWith(
+                compareByDescending<StudentClassQuestionStats> { it.succeededQuestions }
+                    .thenBy { it.failedQuestions }
+                    .thenBy { it.studentName.lowercase() }
+            )
+
+            val totalOk = studentStats.sumOf { it.succeededQuestions }
+            val totalKo = studentStats.sumOf { it.failedQuestions }
+            val totalAnswered = totalOk + totalKo
+            val classRate = if (totalAnswered > 0) {
+                ((totalOk.toDouble() / totalAnswered.toDouble()) * 100.0).roundToInt().coerceIn(0, 100)
+            } else {
+                0
+            }
+
+            ClassGlobalQuestionStats(
+                classId = cls.id,
+                className = cls.name,
+                totalStudents = studentStats.size,
+                activeStudentsCount = studentStats.count { it.totalQuestionsAnswered > 0 },
+                totalSucceededQuestions = totalOk,
+                totalFailedQuestions = totalKo,
+                totalQuestionsAnswered = totalAnswered,
+                successRatePct = classRate,
+                studentStats = studentStats
+            )
+        }
     }
 
     fun computeStudentQcmResults(
@@ -209,7 +348,14 @@ object TeacherAnalyticsLogic {
                         if (it.maxScore > 0.0) ((it.score / it.maxScore) * 100.0).roundToInt().coerceIn(0, 100)
                         else 0
                     }
-                    StudentSingleQuizResult(quiz = q, attempt = att, percentage = pct)
+                    val (qOk, qKo) = att?.let { extractAttemptQuestionCounts(it, q) } ?: (0 to 0)
+                    StudentSingleQuizResult(
+                        quiz = q,
+                        attempt = att,
+                        percentage = pct,
+                        succeededQuestionsCount = qOk,
+                        failedQuestionsCount = qKo
+                    )
                 }
 
                 val completedAttempts = perQuiz.mapNotNull { it.attempt }
@@ -221,6 +367,8 @@ object TeacherAnalyticsLogic {
                 } else {
                     0
                 }
+                val totalSucceededQuestions = perQuiz.sumOf { it.succeededQuestionsCount }
+                val totalFailedQuestions = perQuiz.sumOf { it.failedQuestionsCount }
 
                 results.add(
                     StudentQcmResultSummary(
@@ -235,7 +383,10 @@ object TeacherAnalyticsLogic {
                         totalMaxScore = totalMax,
                         overallPercentage = overallPct,
                         totalTimeSeconds = totalTime,
-                        perQuizResults = perQuiz
+                        perQuizResults = perQuiz,
+                        succeededQuestionsCount = totalSucceededQuestions,
+                        failedQuestionsCount = totalFailedQuestions,
+                        totalQuestionsAnsweredCount = totalSucceededQuestions + totalFailedQuestions
                     )
                 )
             }

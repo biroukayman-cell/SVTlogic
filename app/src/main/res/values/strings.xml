@@ -714,4 +714,28 @@
     <string name="qr_identity_locked_notice">Compte créé via le QR Code du professeur : le nom complet et le numéro Massar sont verrouillés et ne peuvent plus être modifiés.</string>
     <string name="field_massar_label">Numéro Massar</string>
     <string name="taalim_default_email_hint">Par défaut : numeromassar@taalim.ma</string>
+
+    <!-- Statistiques globales par classe (questions réussies/échouées) & Réponses correctes/incorrectes par élève -->
+    <string name="teacher_class_questions_stats_title">Statistiques questions (Classe)</string>
+    <string name="teacher_questions_succeeded_count">✓ %1$d réussies</string>
+    <string name="teacher_questions_failed_count">✗ %1$d échouées</string>
+    <string name="teacher_questions_success_rate">%1$d%% de réussite</string>
+    <string name="teacher_questions_answered_total">%1$d question(s) traitée(s) • %2$d/%3$d élève(s) actif(s)</string>
+    <string name="teacher_class_student_questions_toggle">Détail par élève (%1$d)</string>
+    <string name="teacher_class_global_stats_header">Statistique globale par classe (Questions réussies / échouées)</string>
+    <string name="teacher_student_answers_btn">Voir réponses (✓/✗)</string>
+    <string name="teacher_student_all_answers_btn">Voir réponses correctes / incorrectes</string>
+    <string name="teacher_answers_dialog_title">Réponses de %1$s</string>
+    <string name="teacher_answers_filter_all">Toutes (%1$d)</string>
+    <string name="teacher_answers_filter_correct">Correctes (%1$d)</string>
+    <string name="teacher_answers_filter_incorrect">Incorrectes (%1$d)</string>
+    <string name="teacher_answers_all_quizzes_chip">Tous les QCM (%1$d)</string>
+    <string name="teacher_answers_status_correct">Correcte ✓</string>
+    <string name="teacher_answers_status_incorrect">Incorrecte ✗</string>
+    <string name="teacher_answers_student_choice">Réponse de l\'élève : %1$s</string>
+    <string name="teacher_answers_no_selection">Aucune réponse sélectionnée</string>
+    <string name="teacher_answers_correct_choice">Bonne réponse : %1$s</string>
+    <string name="teacher_answers_empty_correct">Aucune réponse correcte trouvée pour cette sélection.</string>
+    <string name="teacher_answers_empty_incorrect">Aucune réponse incorrecte — toutes les questions sont réussies !</string>
+    <string name="teacher_answers_empty_detail">Aucun détail question par question disponible pour cette copie.</string>
 </resources>

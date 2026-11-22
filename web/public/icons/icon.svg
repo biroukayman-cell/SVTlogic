@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1B7A54" />
+      <stop offset="100%" stop-color="#1E6B94" />
+    </linearGradient>
+    <linearGradient id="leafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7AD9AD" />
+      <stop offset="100%" stop-color="#C4F0DA" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <circle cx="256" cy="256" r="168" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="10" />
+  <path
+    d="M158 336 C158 214, 240 144, 362 146 C364 268, 294 352, 174 352 C164 352, 158 346, 158 336 Z"
+    fill="url(#leafGrad)"
+  />
+  <path
+    d="M168 342 C218 292, 276 232, 344 164"
+    fill="none"
+    stroke="#1B7A54"
+    stroke-width="14"
+    stroke-linecap="round"
+  />
+  <path
+    d="M188 188 C218 208, 224 238, 198 264 M236 286 C268 308, 304 300, 326 272"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="12"
+    stroke-linecap="round"
+  />
+  <circle cx="348" cy="348" r="36" fill="#C67E15" stroke="#FFFFFF" stroke-width="8" />
+  <path d="M336 348 L346 358 L364 338" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

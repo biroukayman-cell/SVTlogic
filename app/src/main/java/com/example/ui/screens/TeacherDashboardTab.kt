@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Quiz
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -51,6 +53,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +71,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.core.ClassGlobalQuestionStats
+import com.example.core.StudentClassQuestionStats
 import com.example.core.StudentQcmResultSummary
 import com.example.core.TeacherAnalyticsLogic
 import com.example.core.TeacherDashboardOverview
@@ -80,6 +85,9 @@ import com.example.data.model.QuizAttempt
 import com.example.data.model.RosterStudent
 import com.example.data.model.SvtClass
 import com.example.data.model.VideoTracking
+import com.example.ui.components.QuestionSuccessRatioBar
+import com.example.ui.components.StudentQuizAnswersReviewDialog
+import com.example.ui.components.StudentQuizReviewEntry
 import com.example.ui.components.SvtEmptyStateCard
 import com.example.ui.components.SvtHeroBannerCard
 import com.example.ui.theme.SvtCoralError
@@ -108,6 +116,7 @@ fun TeacherDashboardTab(
     val overview = remember(
         teacherClasses,
         teacherEnrollments,
+        teacherRoster,
         teacherQuizzes,
         teacherAttempts,
         teacherResources,
@@ -123,7 +132,8 @@ fun TeacherDashboardTab(
             resources = teacherResources,
             videoTrackings = teacherVideoTracking,
             announcements = teacherAnnouncements,
-            messages = teacherMessages
+            messages = teacherMessages,
+            roster = teacherRoster
         )
     }
 
@@ -311,10 +321,14 @@ private fun TeacherOverviewSection(
             }
         } else {
             items(overview.classSummaries, key = { it.svtClass.id }) { summary ->
+                var showStudentBreakdown by rememberSaveable(summary.svtClass.id) { mutableStateOf(false) }
+
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize()
                 ) {
                     Column(
                         modifier = Modifier
@@ -375,7 +389,213 @@ private fun TeacherOverviewSection(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+
+                        HorizontalDivider()
+
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(id = R.string.teacher_class_questions_stats_title),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = stringResource(
+                                        id = R.string.teacher_questions_success_rate,
+                                        summary.questionSuccessRatePct
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (summary.questionSuccessRatePct >= 50) SvtSuccess else SvtWarning
+                                )
+                            }
+
+                            QuestionSuccessRatioBar(
+                                succeededCount = summary.totalSucceededQuestions,
+                                failedCount = summary.totalFailedQuestions
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                QuestionCountPill(
+                                    text = stringResource(
+                                        id = R.string.teacher_questions_succeeded_count,
+                                        summary.totalSucceededQuestions
+                                    ),
+                                    color = SvtSuccess,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                QuestionCountPill(
+                                    text = stringResource(
+                                        id = R.string.teacher_questions_failed_count,
+                                        summary.totalFailedQuestions
+                                    ),
+                                    color = SvtCoralError,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            if (summary.studentQuestionStats.isNotEmpty()) {
+                                TextButton(
+                                    onClick = { showStudentBreakdown = !showStudentBreakdown },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("overview_class_students_toggle_${summary.svtClass.id}")
+                                ) {
+                                    Text(
+                                        text = stringResource(
+                                            id = R.string.teacher_class_student_questions_toggle,
+                                            summary.studentQuestionStats.size
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Icon(
+                                        imageVector = if (showStudentBreakdown) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                        contentDescription = null
+                                    )
+                                }
+
+                                AnimatedVisibility(visible = showStudentBreakdown) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        summary.studentQuestionStats.forEach { st ->
+                                            StudentQuestionBreakdownRow(studentStats = st)
+                                        }
+                                        OutlinedButton(
+                                            onClick = onOpenQcmResults,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.FactCheck,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(stringResource(id = R.string.teacher_student_all_answers_btn))
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuestionCountPill(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = color.copy(alpha = 0.13f),
+        shape = RoundedCornerShape(10.dp),
+        modifier = modifier
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = color,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun StudentQuestionBreakdownRow(
+    studentStats: StudentClassQuestionStats,
+    onInspectClick: (() -> Unit)? = null
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onInspectClick != null && studentStats.totalQuestionsAnswered > 0) {
+                    Modifier.clickable(onClick = onInspectClick)
+                } else {
+                    Modifier
+                }
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = studentStats.studentName,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (studentStats.massarNumber.isNotBlank()) {
+                        Text(
+                            text = studentStats.massarNumber,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "✓ ${studentStats.succeededQuestions}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = SvtSuccess
+                    )
+                    Text(
+                        text = "✗ ${studentStats.failedQuestions}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = SvtCoralError
+                    )
+                    Text(
+                        text = "(${studentStats.successRatePct}%)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            QuestionSuccessRatioBar(
+                succeededCount = studentStats.succeededQuestions,
+                failedCount = studentStats.failedQuestions
+            )
+            if (onInspectClick != null && studentStats.totalQuestionsAnswered > 0) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.teacher_student_answers_btn),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
@@ -449,6 +669,7 @@ private fun TeacherStudentQcmResultsSection(
     var filterClassId by rememberSaveable { mutableStateOf(initialClassFilterId) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var sortByPctDescending by rememberSaveable { mutableStateOf(true) }
+    var reviewTarget by remember { mutableStateOf<Pair<StudentQcmResultSummary, String?>?>(null) }
 
     val baseResults = remember(classes, enrollments, roster, quizzes, attempts, filterClassId) {
         TeacherAnalyticsLogic.computeStudentQcmResults(
@@ -459,6 +680,21 @@ private fun TeacherStudentQcmResultsSection(
             attempts = attempts,
             filterClassId = filterClassId
         )
+    }
+
+    val classGlobalStats = remember(classes, enrollments, roster, quizzes, attempts, filterClassId) {
+        TeacherAnalyticsLogic.computeClassGlobalQuestionStats(
+            classes = classes,
+            enrollments = enrollments,
+            roster = roster,
+            quizzes = quizzes,
+            attempts = attempts,
+            filterClassId = filterClassId
+        )
+    }
+
+    val summaryByClassAndStudent = remember(baseResults) {
+        baseResults.associateBy { "${it.classId}_${it.studentId}" }
     }
 
     val visibleResults = remember(baseResults, searchQuery, sortByPctDescending) {
@@ -534,6 +770,29 @@ private fun TeacherStudentQcmResultsSection(
             }
         }
 
+        if (classGlobalStats.isNotEmpty()) {
+            item {
+                Text(
+                    text = stringResource(id = R.string.teacher_class_global_stats_header),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.testTag("class_global_question_stats_header")
+                )
+            }
+            items(classGlobalStats, key = { "global_${it.classId}" }) { clsStat ->
+                ClassGlobalQuestionStatsCard(
+                    stats = clsStat,
+                    defaultExpanded = classGlobalStats.size == 1,
+                    onInspectStudent = { studentStat ->
+                        val summary = summaryByClassAndStudent["${clsStat.classId}_${studentStat.studentId}"]
+                        if (summary != null && summary.perQuizResults.any { it.attempt != null }) {
+                            reviewTarget = summary to null
+                        }
+                    }
+                )
+            }
+        }
+
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -581,14 +840,160 @@ private fun TeacherStudentQcmResultsSection(
             }
         } else {
             items(visibleResults, key = { "${it.classId}_${it.studentId}" }) { studentSummary ->
-                StudentQcmResultCard(summary = studentSummary)
+                StudentQcmResultCard(
+                    summary = studentSummary,
+                    onViewAllAnswers = {
+                        reviewTarget = studentSummary to null
+                    },
+                    onViewQuizAnswers = { quizId ->
+                        reviewTarget = studentSummary to quizId
+                    }
+                )
+            }
+        }
+    }
+
+    reviewTarget?.let { (studentSummary, initialQuizId) ->
+        val entries = studentSummary.perQuizResults.mapNotNull { entry ->
+            entry.attempt?.let { att ->
+                StudentQuizReviewEntry(quiz = entry.quiz, attempt = att)
+            }
+        }
+        val subtitle = listOfNotNull(
+            studentSummary.className.takeIf { it.isNotBlank() },
+            studentSummary.massarNumber.takeIf { it.isNotBlank() }
+        ).joinToString(" • ")
+
+        StudentQuizAnswersReviewDialog(
+            studentName = studentSummary.studentName,
+            studentSubtitle = subtitle,
+            entries = entries,
+            initialQuizId = initialQuizId,
+            onDismiss = { reviewTarget = null }
+        )
+    }
+}
+
+@Composable
+private fun ClassGlobalQuestionStatsCard(
+    stats: ClassGlobalQuestionStats,
+    defaultExpanded: Boolean,
+    onInspectStudent: (StudentClassQuestionStats) -> Unit
+) {
+    var expanded by rememberSaveable(stats.classId, defaultExpanded) { mutableStateOf(defaultExpanded) }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .testTag("class_global_stats_card_${stats.classId}")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stats.className,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = stringResource(
+                            id = R.string.teacher_questions_answered_total,
+                            stats.totalQuestionsAnswered,
+                            stats.activeStudentsCount,
+                            stats.totalStudents
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Surface(
+                    color = (if (stats.successRatePct >= 50) SvtSuccess else SvtWarning).copy(alpha = 0.14f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.teacher_questions_success_rate, stats.successRatePct),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (stats.successRatePct >= 50) SvtSuccess else SvtWarning,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            QuestionSuccessRatioBar(
+                succeededCount = stats.totalSucceededQuestions,
+                failedCount = stats.totalFailedQuestions
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                QuestionCountPill(
+                    text = stringResource(id = R.string.teacher_questions_succeeded_count, stats.totalSucceededQuestions),
+                    color = SvtSuccess,
+                    modifier = Modifier.weight(1f)
+                )
+                QuestionCountPill(
+                    text = stringResource(id = R.string.teacher_questions_failed_count, stats.totalFailedQuestions),
+                    color = SvtCoralError,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            if (stats.studentStats.isNotEmpty()) {
+                TextButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("class_global_stats_expand_${stats.classId}")
+                ) {
+                    Text(
+                        text = stringResource(
+                            id = R.string.teacher_class_student_questions_toggle,
+                            stats.studentStats.size
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = null
+                    )
+                }
+
+                AnimatedVisibility(visible = expanded) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        stats.studentStats.forEach { st ->
+                            StudentQuestionBreakdownRow(
+                                studentStats = st,
+                                onInspectClick = { onInspectStudent(st) }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun StudentQcmResultCard(summary: StudentQcmResultSummary) {
+private fun StudentQcmResultCard(
+    summary: StudentQcmResultSummary,
+    onViewAllAnswers: () -> Unit,
+    onViewQuizAnswers: (quizId: String) -> Unit
+) {
     var expanded by rememberSaveable(summary.classId, summary.studentId) { mutableStateOf(false) }
     val pctColor = when {
         summary.quizzesTakenCount == 0 -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -596,6 +1001,7 @@ private fun StudentQcmResultCard(summary: StudentQcmResultSummary) {
         summary.overallPercentage >= 45 -> SvtWarning
         else -> SvtCoralError
     }
+    val hasAnyAttempt = summary.perQuizResults.any { it.attempt != null }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -681,43 +1087,135 @@ private fun StudentQcmResultCard(summary: StudentQcmResultSummary) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                QuestionCountPill(
+                    text = stringResource(id = R.string.teacher_questions_succeeded_count, summary.succeededQuestionsCount),
+                    color = SvtSuccess,
+                    modifier = Modifier.weight(1f)
+                )
+                QuestionCountPill(
+                    text = stringResource(id = R.string.teacher_questions_failed_count, summary.failedQuestionsCount),
+                    color = SvtCoralError,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             AnimatedVisibility(visible = expanded && summary.perQuizResults.isNotEmpty()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     HorizontalDivider()
+                    if (hasAnyAttempt) {
+                        FilledTonalButton(
+                            onClick = onViewAllAnswers,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("view_student_all_answers_${summary.studentId}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.FactCheck,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(id = R.string.teacher_student_all_answers_btn))
+                        }
+                    }
                     summary.perQuizResults.forEach { entry ->
                         val att = entry.attempt
                         val itemPct = entry.percentage
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = entry.quiz.title,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            if (att != null && itemPct != null) {
-                                Text(
-                                    text = "${formatScoreValue(att.score)}/${formatScoreValue(att.maxScore)} ($itemPct%)",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (itemPct >= 50) SvtSuccess else SvtCoralError
-                                )
-                            } else {
-                                Text(
-                                    text = stringResource(id = R.string.teacher_qcm_not_taken),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = entry.quiz.title,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    if (att != null && itemPct != null) {
+                                        Text(
+                                            text = "${formatScoreValue(att.score)}/${formatScoreValue(att.maxScore)} ($itemPct%)",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (itemPct >= 50) SvtSuccess else SvtCoralError
+                                        )
+                                    } else {
+                                        Text(
+                                            text = stringResource(id = R.string.teacher_qcm_not_taken),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                if (att != null) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text(
+                                                text = stringResource(
+                                                    id = R.string.teacher_questions_succeeded_count,
+                                                    entry.succeededQuestionsCount
+                                                ),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = SvtSuccess,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = stringResource(
+                                                    id = R.string.teacher_questions_failed_count,
+                                                    entry.failedQuestionsCount
+                                                ),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = SvtCoralError,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                        TextButton(
+                                            onClick = { onViewQuizAnswers(entry.quiz.id) },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.testTag(
+                                                "view_student_quiz_answers_${summary.studentId}_${entry.quiz.id}"
+                                            )
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.FactCheck,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(
+                                                text = stringResource(id = R.string.teacher_student_answers_btn),
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

@@ -4,6 +4,7 @@ import com.example.data.model.Announcement
 import com.example.data.model.CourseResource
 import com.example.data.model.Enrollment
 import com.example.data.model.PrivateMessage
+import com.example.data.model.QuestionAnswerRecord
 import com.example.data.model.Quiz
 import com.example.data.model.QuizAttempt
 import com.example.data.model.QuizQuestion
@@ -71,7 +72,8 @@ class TeacherAnalyticsAndAuthTest {
             resources = resources,
             videoTrackings = trackings,
             announcements = announcements,
-            messages = messages
+            messages = messages,
+            roster = roster
         )
 
         assertEquals(2, overview.totalClasses)
@@ -91,6 +93,10 @@ class TeacherAnalyticsAndAuthTest {
         assertEquals(2, c1Summary.quizzesCount)
         assertEquals(3, c1Summary.attemptsCount)
         assertEquals(77, c1Summary.classAveragePct)
+        // Salma: 18 ok / 2 ko; Youssef: 5 ok / 5 ko -> total 23 ok / 7 ko (77%)
+        assertEquals(23, c1Summary.totalSucceededQuestions)
+        assertEquals(7, c1Summary.totalFailedQuestions)
+        assertEquals(77, c1Summary.questionSuccessRatePct)
     }
 
     @Test
@@ -114,15 +120,22 @@ class TeacherAnalyticsAndAuthTest {
         assertEquals(20.0, salma.totalMaxScore, 0.01)
         assertEquals(90, salma.overallPercentage)
         assertEquals(215L, salma.totalTimeSeconds)
+        assertEquals(18, salma.succeededQuestionsCount)
+        assertEquals(2, salma.failedQuestionsCount)
+        assertEquals(20, salma.totalQuestionsAnsweredCount)
 
         val youssef = allResults.first { it.studentId == "s2" }
         assertEquals(1, youssef.quizzesTakenCount)
         assertEquals(2, youssef.totalClassQuizzesCount)
         assertEquals(50, youssef.overallPercentage)
+        assertEquals(5, youssef.succeededQuestionsCount)
+        assertEquals(5, youssef.failedQuestionsCount)
 
         val omar = allResults.first { it.massarNumber == "K2002" }
         assertEquals(0, omar.quizzesTakenCount)
         assertEquals(0, omar.overallPercentage)
+        assertEquals(0, omar.succeededQuestionsCount)
+        assertEquals(0, omar.failedQuestionsCount)
 
         val c2Only = TeacherAnalyticsLogic.computeStudentQcmResults(
             classes = classes,
@@ -134,6 +147,69 @@ class TeacherAnalyticsAndAuthTest {
         )
         assertEquals(1, c2Only.size)
         assertEquals("c2", c2Only.first().classId)
+    }
+
+    @Test
+    fun `computeClassGlobalQuestionStats aggregates succeeded and failed questions from answer records`() {
+        val detailedAttempts = listOf(
+            QuizAttempt(
+                id = "a_det_1",
+                quizId = "q1",
+                classId = "c1",
+                studentId = "s1",
+                studentName = "Salma",
+                score = 2.0,
+                maxScore = 3.0,
+                answers = listOf(
+                    QuestionAnswerRecord(questionIndex = 0, selectedIndex = 0, isCorrect = true),
+                    QuestionAnswerRecord(questionIndex = 1, selectedIndex = 1, isCorrect = false),
+                    QuestionAnswerRecord(questionIndex = 2, selectedIndex = 2, isCorrect = true)
+                )
+            ),
+            QuizAttempt(
+                id = "a_det_2",
+                quizId = "q1",
+                classId = "c1",
+                studentId = "s2",
+                studentName = "Youssef",
+                score = 1.0,
+                maxScore = 3.0,
+                answers = listOf(
+                    QuestionAnswerRecord(questionIndex = 0, selectedIndex = 2, isCorrect = false),
+                    QuestionAnswerRecord(questionIndex = 1, selectedIndex = 0, isCorrect = true),
+                    QuestionAnswerRecord(questionIndex = 2, selectedIndex = 1, isCorrect = false)
+                )
+            )
+        )
+
+        val classStats = TeacherAnalyticsLogic.computeClassGlobalQuestionStats(
+            classes = classes,
+            enrollments = enrollments,
+            roster = roster,
+            quizzes = quizzes,
+            attempts = detailedAttempts,
+            filterClassId = "c1"
+        )
+
+        assertEquals(1, classStats.size)
+        val c1 = classStats.first()
+        assertEquals("c1", c1.classId)
+        assertEquals(2, c1.totalStudents)
+        assertEquals(2, c1.activeStudentsCount)
+        assertEquals(3, c1.totalSucceededQuestions)
+        assertEquals(3, c1.totalFailedQuestions)
+        assertEquals(6, c1.totalQuestionsAnswered)
+        assertEquals(50, c1.successRatePct)
+
+        val salmaStats = c1.studentStats.first { it.studentId == "s1" }
+        assertEquals(2, salmaStats.succeededQuestions)
+        assertEquals(1, salmaStats.failedQuestions)
+        assertEquals(67, salmaStats.successRatePct)
+
+        val youssefStats = c1.studentStats.first { it.studentId == "s2" }
+        assertEquals(1, youssefStats.succeededQuestions)
+        assertEquals(2, youssefStats.failedQuestions)
+        assertEquals(33, youssefStats.successRatePct)
     }
 
     @Test
