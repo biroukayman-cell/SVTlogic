@@ -53,8 +53,31 @@ object AppUpdateUrlHelper {
         return "https://drive.google.com/uc?export=download&confirm=t&id=$driveFileId"
     }
 
+    fun isSafeHttpsUpdateUrl(rawUrl: String): Boolean {
+        val cleaned = cleanRawUrl(rawUrl)
+        if (!cleaned.startsWith("https://", ignoreCase = true) || cleaned.length < 10) {
+            return false
+        }
+        val uri = runCatching { Uri.parse(cleaned) }.getOrNull() ?: return false
+        if (!uri.scheme.equals("https", ignoreCase = true)) return false
+        if (!uri.userInfo.isNullOrBlank()) return false
+        val host = uri.host?.lowercase()?.trimEnd('.') ?: return false
+        if (host.isBlank() || !host.contains('.')) return false
+        if (host == "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return false
+        if (host.startsWith("127.") || host.startsWith("10.") || host.startsWith("192.168.") ||
+            host.startsWith("169.254.") || host == "0.0.0.0" || host == "::1" || host.startsWith("172.")
+        ) {
+            val secondOctet = host.removePrefix("172.").substringBefore('.').toIntOrNull()
+            if (!host.startsWith("172.") || (secondOctet != null && secondOctet in 16..31)) {
+                return false
+            }
+        }
+        return true
+    }
+
     fun buildUpdateViewIntent(context: Context, rawUrl: String): Intent {
         val normalized = normalizeDownloadUrl(rawUrl)
+        require(isSafeHttpsUpdateUrl(normalized)) { "Unsafe update URL rejected" }
         val uri = Uri.parse(normalized)
         val baseIntent = Intent(Intent.ACTION_VIEW, uri).apply {
             addCategory(Intent.CATEGORY_BROWSABLE)
@@ -70,7 +93,7 @@ object AppUpdateUrlHelper {
 
     fun openUpdateUrl(context: Context, rawUrl: String): Boolean {
         val normalized = normalizeDownloadUrl(rawUrl)
-        if (!normalized.startsWith("https://", ignoreCase = true) || normalized.length < 10) {
+        if (!isSafeHttpsUpdateUrl(normalized)) {
             return false
         }
         val intent = buildUpdateViewIntent(context, normalized)

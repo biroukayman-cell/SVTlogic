@@ -89,4 +89,33 @@ class OfflineStorageManagerTest {
         assertFalse(manager2.downloadedQuizzes.value.containsKey("quiz_offline_1"))
         assertFalse(manager2.downloadedResources.value.containsKey("res_pdf_1"))
     }
+
+    @Test
+    fun downloadResource_rejectsArbitraryFileUriOutsideAppCache() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val manager = OfflineStorageManager(context, "student_sec_${System.currentTimeMillis()}")
+        val privateFile = File(context.filesDir, "private_secret.txt").apply {
+            writeText("SECRET")
+        }
+        val maliciousResource = CourseResource(
+            id = "res_bad_file",
+            classId = "cls_1",
+            teacherId = "teacher_1",
+            title = "Secret",
+            description = "",
+            type = "pdf",
+            fileUrl = Uri.fromFile(privateFile).toString(),
+            durationSeconds = 0L,
+            isDownloadable = true
+        )
+        var thrown: Throwable? = null
+        try {
+            manager.downloadResource(maliciousResource, exportToPublicDownloads = false)
+        } catch (e: Throwable) {
+            thrown = e
+        } finally {
+            privateFile.delete()
+        }
+        assertTrue(thrown is SecurityException)
+    }
 }

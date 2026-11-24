@@ -50,6 +50,7 @@ import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtSuccess
 import com.example.ui.theme.SvtWarning
 import com.example.ui.viewmodel.ClassAiAnalysisState
+import com.example.ui.components.SecureDialogWindowEffect
 
 @Composable
 fun ClassAiAnalysisDialog(
@@ -90,6 +91,7 @@ fun ClassAiAnalysisDialog(
             }
         },
         text = {
+            SecureDialogWindowEffect()
             when (state) {
                 is ClassAiAnalysisState.Loading -> {
                     Column(

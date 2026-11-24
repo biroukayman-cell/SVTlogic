@@ -1,10 +1,13 @@
 package com.example.core
 
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.Build
+import android.os.PersistableBundle
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.google.zxing.BarcodeFormat
@@ -89,7 +92,19 @@ object QrCodeUtils {
         return runCatching {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                 ?: return false
-            clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+            val clip = ClipData.newPlainText(label, text).apply {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    val sensitiveExtra = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        ClipDescription.EXTRA_IS_SENSITIVE
+                    } else {
+                        "android.content.extra.IS_SENSITIVE"
+                    }
+                    description.extras = PersistableBundle().apply {
+                        putBoolean(sensitiveExtra, true)
+                    }
+                }
+            }
+            clipboard.setPrimaryClip(clip)
             true
         }.getOrDefault(false)
     }

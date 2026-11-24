@@ -5,15 +5,19 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="sharedpref" path="bioterre_secondary_security.xml" />
+        <exclude domain="sharedpref" path="bioterre_biometric_auth.xml" />
+        <exclude domain="sharedpref" path="bioterre_auth_draft.xml" />
+        <exclude domain="sharedpref" path="bioterre_device_lock.xml" />
+        <exclude domain="file" path="offline_svt" />
+        <exclude domain="file" path="exports" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="sharedpref" path="bioterre_secondary_security.xml" />
+        <exclude domain="sharedpref" path="bioterre_biometric_auth.xml" />
+        <exclude domain="sharedpref" path="bioterre_auth_draft.xml" />
+        <exclude domain="sharedpref" path="bioterre_device_lock.xml" />
+        <exclude domain="file" path="offline_svt" />
+        <exclude domain="file" path="exports" />
     </device-transfer>
-    -->
 </data-extraction-rules>

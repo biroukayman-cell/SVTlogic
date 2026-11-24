@@ -2,6 +2,7 @@ package com.example
 
 import android.content.Context
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivityResultRegistryOwner
@@ -47,6 +48,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.core.AppLanguage
 import com.example.core.AuthSessionDraft
+import com.example.core.BiometricAuthHelper
 import com.example.core.DeviceSessionManager
 import com.example.core.LanguagePreferences
 import com.example.core.NetworkConnectivityObserver
@@ -99,6 +101,12 @@ internal fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Anti-spying: block screenshots, screen recording spyware & recents previews
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
 
         // Step 1: Configure App Check with launch intent before any UI, ViewModels, or Firebase operations
         configureAppCheck(this, intent)
@@ -345,6 +353,7 @@ private fun AuthenticatedSvtFlow(
             if (!newPassword.isNullOrBlank()) {
                 try {
                     currentUser.updatePassword(newPassword).await()
+                    BiometricAuthHelper.updatePasswordIfSaved(activityContext, currentUser.uid, newPassword)
                     mustChange = false
                 } catch (e: Exception) {
                     onboardingLocalError = e.localizedMessage

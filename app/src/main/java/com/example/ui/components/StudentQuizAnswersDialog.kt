@@ -165,6 +165,7 @@ fun StudentQuizAnswersReviewDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
+            SecureDialogWindowEffect()
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = stringResource(id = R.string.teacher_answers_dialog_title, studentName),

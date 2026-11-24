@@ -81,4 +81,25 @@ class SecurityLockManagerTest {
         assertEquals(PinVerifyResult.Success, afterLockout)
         assertEquals(0, SecurityLockManager.getRemainingLockoutSeconds(context, "user_alpha", baseTime + 31_000L))
     }
+
+    @Test
+    fun setPin_storesPbkdf2V2Hash_andLegacySha256UpgradesOnVerify() {
+        assertTrue(SecurityLockManager.setPin(context, "user_alpha", "7391"))
+        val prefs = context.getSharedPreferences("bioterre_secondary_security", Context.MODE_PRIVATE)
+        val storedV2 = prefs.getString("pin_hash_user_alpha", "").orEmpty()
+        assertTrue(storedV2.startsWith("v2$"))
+
+        // Simulate a legacy SHA-256 PIN entry from an older app build
+        val legacySalt = "legacySaltB64"
+        val legacyHash = SecurityLockManager.hashPinWithSalt("6420", legacySalt)
+        prefs.edit()
+            .putString("pin_salt_user_beta", legacySalt)
+            .putString("pin_hash_user_beta", legacyHash)
+            .commit()
+
+        assertEquals(PinVerifyResult.Success, SecurityLockManager.verifyPin(context, "user_beta", "6420"))
+        val upgraded = prefs.getString("pin_hash_user_beta", "").orEmpty()
+        assertTrue("Legacy hash must upgrade transparently to PBKDF2 v2", upgraded.startsWith("v2$"))
+        assertEquals(PinVerifyResult.Success, SecurityLockManager.verifyPin(context, "user_beta", "6420"))
+    }
 }

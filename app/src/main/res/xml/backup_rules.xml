@@ -6,8 +6,10 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="sharedpref" path="bioterre_secondary_security.xml" />
+    <exclude domain="sharedpref" path="bioterre_biometric_auth.xml" />
+    <exclude domain="sharedpref" path="bioterre_auth_draft.xml" />
+    <exclude domain="sharedpref" path="bioterre_device_lock.xml" />
+    <exclude domain="file" path="offline_svt" />
+    <exclude domain="file" path="exports" />
 </full-backup-content>

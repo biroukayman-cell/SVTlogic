@@ -164,7 +164,7 @@ service cloud.firestore {
              data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 128 &&
              data.studentId is string && data.studentId.size() >= 1 && data.studentId.size() <= 128 &&
              data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 100 &&
-             data.score is number && data.score >= 0 && data.score <= 1000 &&
+             data.score is number && data.score >= 0 && data.score <= data.maxScore &&
              data.maxScore is number && data.maxScore >= 1 && data.maxScore <= 1000 &&
              data.totalDurationSeconds is int && data.totalDurationSeconds >= 0 && data.totalDurationSeconds <= 86400 &&
              data.answers is list && data.answers.size() >= 1 && data.answers.size() <= 20 &&
@@ -180,6 +180,7 @@ service cloud.firestore {
              data.description is string && data.description.size() <= 1000 &&
              data.type is string && data.type in ['pdf', 'word', 'image', 'video'] &&
              data.fileUrl is string && data.fileUrl.size() >= 1 && data.fileUrl.size() <= 1000 &&
+             data.fileUrl.matches('^(https://.+|firestore://resource_chunks/[a-zA-Z0-9_-]+.*)') &&
              data.durationSeconds is int && data.durationSeconds >= 0 && data.durationSeconds <= 86400 &&
              data.approvedStudentIds is list && data.approvedStudentIds.size() <= 100 &&
              (data.approvedStudentIds.size() == 0 || data.approvedStudentIds[0] is string) &&
@@ -208,7 +209,7 @@ service cloud.firestore {
              data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 128 &&
              data.title is string && data.title.size() >= 2 && data.title.size() <= 200 &&
              data.content is string && data.content.size() >= 1 && data.content.size() <= 4000 &&
-             (!('attachmentUrl' in data) || data.attachmentUrl == null || (data.attachmentUrl is string && data.attachmentUrl.size() <= 1000)) &&
+             (!('attachmentUrl' in data) || data.attachmentUrl == null || (data.attachmentUrl is string && data.attachmentUrl.size() <= 1000 && (data.attachmentUrl == '' || data.attachmentUrl.matches('^https://.+')))) &&
              data.approvedStudentIds is list && data.approvedStudentIds.size() <= 100 &&
              (data.approvedStudentIds.size() == 0 || data.approvedStudentIds[0] is string) &&
              isValidTimestamp(data.createdAt) &&

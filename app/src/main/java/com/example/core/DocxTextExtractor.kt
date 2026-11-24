@@ -8,14 +8,20 @@ import java.io.FileInputStream
 import java.io.InputStream
 import java.util.zip.ZipInputStream
 
+import java.io.ByteArrayOutputStream
+
 data class ExtractedWordDocument(
     val paragraphs: List<String>
 )
 
 object DocxTextExtractor {
 
+    private const val MAX_ARCHIVE_BYTES = 15 * 1024 * 1024
+    private const val MAX_XML_ENTRY_BYTES = 8 * 1024 * 1024
+    private const val MAX_ZIP_ENTRIES = 250
+
     fun extractFromFile(file: File): ExtractedWordDocument? {
-        if (!file.exists() || file.length() <= 0L) return null
+        if (!file.exists() || file.length() <= 0L || file.length() > MAX_ARCHIVE_BYTES) return null
         return runCatching {
             FileInputStream(file).use { fis ->
                 extractFromStream(fis)
@@ -24,7 +30,7 @@ object DocxTextExtractor {
     }
 
     fun extractFromStream(input: InputStream): ExtractedWordDocument? {
-        val bytes = input.readBytes()
+        val bytes = readBoundedBytes(input, MAX_ARCHIVE_BYTES) ?: return null
         if (bytes.isEmpty()) return null
 
         val documentXml = extractEntryFromZip(bytes, "word/document.xml") ?: return null
@@ -34,16 +40,32 @@ object DocxTextExtractor {
 
     private fun extractEntryFromZip(zipBytes: ByteArray, entryName: String): ByteArray? {
         ZipInputStream(ByteArrayInputStream(zipBytes)).use { zis ->
+            var entriesCount = 0
             var entry = zis.nextEntry
-            while (entry != null) {
+            while (entry != null && entriesCount < MAX_ZIP_ENTRIES) {
+                entriesCount++
                 if (entry.name.equals(entryName, ignoreCase = true)) {
-                    return zis.readBytes()
+                    return readBoundedBytes(zis, MAX_XML_ENTRY_BYTES)
                 }
                 zis.closeEntry()
                 entry = zis.nextEntry
             }
         }
         return null
+    }
+
+    private fun readBoundedBytes(input: InputStream, maxBytes: Int): ByteArray? {
+        val out = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val read = input.read(buffer)
+            if (read == -1) break
+            total += read
+            if (total > maxBytes) return null
+            out.write(buffer, 0, read)
+        }
+        return out.toByteArray()
     }
 
     private fun parseDocumentXml(xmlBytes: ByteArray): List<String> {

@@ -1,15 +1,19 @@
 package com.example.data.ai
 
+import android.util.Base64
 import android.util.Log
 import com.example.core.AppLanguage
 import com.example.core.ClassAiAnalysisInput
 import com.example.data.model.QuizQuestion
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.Schema
 import com.google.firebase.ai.type.generationConfig
+import com.google.firebase.appcheck.FirebaseAppCheck
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 
@@ -170,6 +174,7 @@ class SvtAiRepository {
         """.trimIndent()
 
         try {
+            ensureAppCheckTokenReady(forceRefresh = false)
             return generateWithModel(primaryModel, prompt)
         } catch (e: TimeoutCancellationException) {
             Log.e(TAG, "Primary AI model timed out", e)
@@ -177,7 +182,22 @@ class SvtAiRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (primaryError: Exception) {
-            Log.w(TAG, "Primary model ($PRIMARY_MODEL) failed, trying fallback ($FALLBACK_MODEL)", primaryError)
+            Log.w(TAG, "Primary model ($PRIMARY_MODEL) failed, checking App Check & fallback ($FALLBACK_MODEL)", primaryError)
+            if (isAppCheckOrTokenError(primaryError)) {
+                try {
+                    ensureAppCheckTokenReady(forceRefresh = true)
+                    return generateWithModel(primaryModel, prompt)
+                } catch (e: TimeoutCancellationException) {
+                    Log.e(TAG, "Refreshed primary AI model timed out", e)
+                    throw IllegalStateException("AI request timed out after 60s. Please retry.", e)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (refreshError: Exception) {
+                    if (isAppCheckOrTokenError(refreshError)) {
+                        throw (refreshError as? AiAppCheckException) ?: AiAppCheckException(refreshError)
+                    }
+                }
+            }
             return try {
                 generateWithModel(fallbackModel, prompt)
             } catch (e: TimeoutCancellationException) {
@@ -188,7 +208,10 @@ class SvtAiRepository {
             } catch (fallbackError: Exception) {
                 Log.e(TAG, "Fallback AI model failed", fallbackError)
                 if (isAppCheckOrTokenError(fallbackError) || isAppCheckOrTokenError(primaryError)) {
-                    throw AiAppCheckException(fallbackError)
+                    val cause = (fallbackError as? AiAppCheckException)
+                        ?: (primaryError as? AiAppCheckException)
+                        ?: AiAppCheckException(fallbackError)
+                    throw cause
                 }
                 throw fallbackError
             }
@@ -218,6 +241,7 @@ class SvtAiRepository {
         """.trimIndent()
 
         try {
+            ensureAppCheckTokenReady(forceRefresh = false)
             return lookupDefinitionWithModel(definitionPrimaryModel, prompt)
         } catch (e: TimeoutCancellationException) {
             Log.e(TAG, "Primary definition model timed out", e)
@@ -225,7 +249,22 @@ class SvtAiRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (primaryError: Exception) {
-            Log.w(TAG, "Primary definition model failed, trying fallback", primaryError)
+            Log.w(TAG, "Primary definition model failed, checking App Check & fallback", primaryError)
+            if (isAppCheckOrTokenError(primaryError)) {
+                try {
+                    ensureAppCheckTokenReady(forceRefresh = true)
+                    return lookupDefinitionWithModel(definitionPrimaryModel, prompt)
+                } catch (e: TimeoutCancellationException) {
+                    Log.e(TAG, "Refreshed definition model timed out", e)
+                    throw IllegalStateException("Search timed out after 60s. Please retry.", e)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (refreshError: Exception) {
+                    if (isAppCheckOrTokenError(refreshError)) {
+                        throw (refreshError as? AiAppCheckException) ?: AiAppCheckException(refreshError)
+                    }
+                }
+            }
             return try {
                 lookupDefinitionWithModel(definitionFallbackModel, prompt)
             } catch (e: TimeoutCancellationException) {
@@ -236,7 +275,10 @@ class SvtAiRepository {
             } catch (fallbackError: Exception) {
                 Log.e(TAG, "Fallback definition model failed", fallbackError)
                 if (isAppCheckOrTokenError(fallbackError) || isAppCheckOrTokenError(primaryError)) {
-                    throw AiAppCheckException(fallbackError)
+                    val cause = (fallbackError as? AiAppCheckException)
+                        ?: (primaryError as? AiAppCheckException)
+                        ?: AiAppCheckException(fallbackError)
+                    throw cause
                 }
                 throw fallbackError
             }
@@ -364,6 +406,7 @@ class SvtAiRepository {
         """.trimIndent()
 
         try {
+            ensureAppCheckTokenReady(forceRefresh = false)
             return analyzeClassWithModel(classAnalysisPrimaryModel, prompt)
         } catch (e: TimeoutCancellationException) {
             Log.e(TAG, "Primary class analysis model timed out", e)
@@ -371,7 +414,22 @@ class SvtAiRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (primaryError: Exception) {
-            Log.w(TAG, "Primary class analysis model failed, trying fallback", primaryError)
+            Log.w(TAG, "Primary class analysis model failed, checking App Check & fallback", primaryError)
+            if (isAppCheckOrTokenError(primaryError)) {
+                try {
+                    ensureAppCheckTokenReady(forceRefresh = true)
+                    return analyzeClassWithModel(classAnalysisPrimaryModel, prompt)
+                } catch (e: TimeoutCancellationException) {
+                    Log.e(TAG, "Refreshed class analysis model timed out", e)
+                    throw IllegalStateException("AI request timed out after 60s. Please retry.", e)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (refreshError: Exception) {
+                    if (isAppCheckOrTokenError(refreshError)) {
+                        throw (refreshError as? AiAppCheckException) ?: AiAppCheckException(refreshError)
+                    }
+                }
+            }
             return try {
                 analyzeClassWithModel(classAnalysisFallbackModel, prompt)
             } catch (e: TimeoutCancellationException) {
@@ -382,7 +440,10 @@ class SvtAiRepository {
             } catch (fallbackError: Exception) {
                 Log.e(TAG, "Fallback class analysis model failed", fallbackError)
                 if (isAppCheckOrTokenError(fallbackError) || isAppCheckOrTokenError(primaryError)) {
-                    throw AiAppCheckException(fallbackError)
+                    val cause = (fallbackError as? AiAppCheckException)
+                        ?: (primaryError as? AiAppCheckException)
+                        ?: AiAppCheckException(fallbackError)
+                    throw cause
                 }
                 throw fallbackError
             }
@@ -424,10 +485,57 @@ class SvtAiRepository {
         )
     }
 
+    private suspend fun ensureAppCheckTokenReady(forceRefresh: Boolean) {
+        val hasFirebase = try {
+            FirebaseApp.getInstance()
+            true
+        } catch (_: Exception) {
+            false
+        }
+        if (!hasFirebase) return
+
+        val appCheck = try {
+            FirebaseAppCheck.getInstance()
+        } catch (e: Exception) {
+            throw AiAppCheckException(e)
+        }
+
+        val tokenResult = try {
+            withTimeout(12_000L) {
+                appCheck.getAppCheckToken(forceRefresh).await()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw AiAppCheckException(e)
+        }
+
+        val rawToken = tokenResult.token
+        if (rawToken.isBlank()) {
+            throw AiAppCheckException(IllegalStateException("App Check token is empty"))
+        }
+        extractDummyTokenError(rawToken)?.let { embeddedError ->
+            throw AiAppCheckException(
+                IllegalStateException("App Check / reCAPTCHA verification failed: $embeddedError")
+            )
+        }
+    }
+
     companion object {
         private const val TAG = "SvtAiRepository"
         private const val PRIMARY_MODEL = "gemini-3.8-flash"
         private const val FALLBACK_MODEL = "gemini-3.5-flash-lite"
+
+        internal fun extractDummyTokenError(token: String): String? {
+            val trimmed = token.trim()
+            if (trimmed.isEmpty() || trimmed.count { it == '.' } >= 2) return null
+            return runCatching {
+                val decoded = Base64.decode(trimmed, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+                    .toString(Charsets.UTF_8)
+                val obj = JSONObject(decoded)
+                obj.optString("error", "").trim().takeIf { it.isNotEmpty() }
+            }.getOrNull()
+        }
 
         fun isAppCheckOrTokenError(error: Throwable): Boolean {
             return generateSequence(error) { it.cause }.any { cause ->

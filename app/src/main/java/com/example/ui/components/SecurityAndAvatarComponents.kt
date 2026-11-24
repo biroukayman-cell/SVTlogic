@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import android.graphics.Bitmap
+import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,6 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +69,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogWindowProvider
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.core.AvatarStorageHelper
@@ -75,6 +79,24 @@ import com.example.core.PinVerifyResult
 import com.example.core.SecurityLockManager
 import com.example.core.findFragmentActivity
 import kotlinx.coroutines.delay
+
+@Composable
+fun SecureDialogWindowEffect() {
+    val view = LocalView.current
+    SideEffect {
+        var parent = view.parent
+        while (parent != null) {
+            if (parent is DialogWindowProvider) {
+                parent.window.setFlags(
+                    WindowManager.LayoutParams.FLAG_SECURE,
+                    WindowManager.LayoutParams.FLAG_SECURE
+                )
+                break
+            }
+            parent = parent.parent
+        }
+    }
+}
 
 @Composable
 fun ProfileAvatarImage(
@@ -559,6 +581,7 @@ fun SetupSecurityPinDialog(
             )
         },
         text = {
+            SecureDialogWindowEffect()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

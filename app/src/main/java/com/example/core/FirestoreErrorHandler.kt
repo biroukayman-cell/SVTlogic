@@ -1,6 +1,7 @@
 package com.example.core
 
 import android.util.Log
+import com.example.BuildConfig
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
@@ -14,6 +15,16 @@ enum class OperationType(val value: String) {
     LIST("list"),
     GET("get"),
     WRITE("write"),
+}
+
+private fun maskEmailForLogs(email: String?): String? {
+    val clean = email?.trim().orEmpty()
+    if (clean.isEmpty()) return null
+    val atIdx = clean.indexOf('@')
+    if (atIdx <= 1) return "***"
+    val prefix = clean.substring(0, 2)
+    val domain = clean.substring(atIdx)
+    return "$prefix***$domain"
 }
 
 fun handleFirestoreError(
@@ -35,13 +46,13 @@ fun handleFirestoreError(
     val providerInfoList = currentUser?.providerData?.map { provider ->
         JSONObject().apply {
             put("providerId", provider.providerId)
-            put("email", provider.email)
+            put("email", maskEmailForLogs(provider.email))
         }
     } ?: emptyList()
 
     val authInfoJson = JSONObject().apply {
-        put("userId", currentUser?.uid)
-        put("email", currentUser?.email)
+        put("userId", currentUser?.uid?.take(8)?.plus("…"))
+        put("email", maskEmailForLogs(currentUser?.email))
         put("emailVerified", currentUser?.isEmailVerified)
         put("tenantId", currentUser?.tenantId)
         put("providerInfo", JSONArray(providerInfoList))
@@ -51,10 +62,16 @@ fun handleFirestoreError(
         put("error", rootError.message ?: rootError.toString())
         put("operationType", operationType.value)
         put("path", path)
-        put("authInfo", authInfoJson)
+        if (BuildConfig.DEBUG) {
+            put("authInfo", authInfoJson)
+        }
     }
 
     val jsonString = errorInfoJson.toString()
-    Log.e("FirestoreError", "Firestore Error: $jsonString")
+    if (BuildConfig.DEBUG) {
+        Log.e("FirestoreError", "Firestore Error: $jsonString")
+    } else {
+        Log.e("FirestoreError", "Firestore ${operationType.value} failed on ${path ?: "unknown"}")
+    }
     return jsonString
 }

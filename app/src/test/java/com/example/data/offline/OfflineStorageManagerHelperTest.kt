@@ -1,12 +1,16 @@
 package com.example.data.offline
 
+import android.util.Base64
 import com.example.data.ai.SvtAiRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class OfflineStorageManagerHelperTest {
 
     @Test
@@ -107,5 +111,33 @@ class OfflineStorageManagerHelperTest {
 
         val timeoutError = java.net.SocketTimeoutException("Read timed out")
         assertFalse(SvtAiRepository.isAppCheckOrTokenError(timeoutError))
+    }
+
+    @Test
+    fun chunkIdAndRemoteHttpsValidation_rejectsTraversalAndPrivateHosts() {
+        assertNull(OfflineStorageManager.parseChunkResourceId("firestore://resource_chunks/.."))
+        assertNull(OfflineStorageManager.parseChunkResourceId("firestore://resource_chunks/bad id!"))
+
+        assertFalse(OfflineStorageManager.isSafeRemoteHttpsUrl("http://example.org/cours.pdf"))
+        assertFalse(OfflineStorageManager.isSafeRemoteHttpsUrl("https://localhost/cours.pdf"))
+        assertFalse(OfflineStorageManager.isSafeRemoteHttpsUrl("https://127.0.0.1/cours.pdf"))
+        assertFalse(OfflineStorageManager.isSafeRemoteHttpsUrl("https://169.254.169.254/latest/meta-data"))
+        assertFalse(OfflineStorageManager.isSafeRemoteHttpsUrl("https://10.0.0.5/secret.pdf"))
+        assertFalse(OfflineStorageManager.isSafeRemoteHttpsUrl("https://172.16.0.2/secret.pdf"))
+        assertFalse(OfflineStorageManager.isSafeRemoteHttpsUrl("https://192.168.0.1/secret.pdf"))
+        assertTrue(OfflineStorageManager.isSafeRemoteHttpsUrl("https://drive.google.com/uc?export=download&id=123"))
+    }
+
+    @Test
+    fun extractDummyTokenError_parsesErrorPayloadAndIgnoresValidJwt() {
+        val dummyJson = """{"error":"reCAPTCHA attestation failed"}"""
+        val dummyToken = Base64.encodeToString(
+            dummyJson.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        )
+        assertEquals("reCAPTCHA attestation failed", SvtAiRepository.extractDummyTokenError(dummyToken))
+
+        val validThreePartJwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature"
+        assertNull(SvtAiRepository.extractDummyTokenError(validThreePartJwt))
     }
 }

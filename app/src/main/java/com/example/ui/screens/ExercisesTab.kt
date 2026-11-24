@@ -749,6 +749,7 @@ private fun TimedQuizPlayerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
+            com.example.ui.components.SecureDialogWindowEffect()
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -954,6 +955,7 @@ private fun QuizResultDetailDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
+            com.example.ui.components.SecureDialogWindowEffect()
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(id = R.string.quiz_result_title))
                 Text(
@@ -1081,6 +1083,7 @@ private fun TeacherQuizStatsDialog(
         onDismissRequest = onDismiss,
         title = { Text("${stringResource(id = R.string.quiz_stats_title)} — ${quiz.title}") },
         text = {
+            com.example.ui.components.SecureDialogWindowEffect()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

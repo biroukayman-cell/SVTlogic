@@ -157,12 +157,18 @@ object StudentCredentialsPdfExporter {
             }
 
             val exportsDir = File(context.filesDir, "exports").apply { mkdirs() }
-            val safeName = svtClass.name.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(32)
-            val pdfFile = File(exportsDir, "BioTerre_${safeName}_Acces_Eleves.pdf")
-            FileOutputStream(pdfFile).use { out ->
-                document.writeTo(out)
+            exportsDir.listFiles()?.forEach { oldFile ->
+                runCatching { if (oldFile.isFile) oldFile.delete() }
             }
-            document.close()
+            val safeName = svtClass.name.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(32).ifBlank { "Classe" }
+            val pdfFile = File(exportsDir, "BioTerre_${safeName}_Acces_Eleves.pdf")
+            try {
+                FileOutputStream(pdfFile).use { out ->
+                    document.writeTo(out)
+                }
+            } finally {
+                document.close()
+            }
 
             val uri = FileProvider.getUriForFile(
                 context,

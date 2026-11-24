@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Base64
 import java.security.MessageDigest
 import java.security.SecureRandom
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 
 object SecurityLockManager {
     private const val PREFS_NAME = "bioterre_secondary_security"
@@ -11,6 +13,9 @@ object SecurityLockManager {
     private const val KEY_PREFIX_SALT = "pin_salt_"
     private const val KEY_PREFIX_FAILS = "pin_fails_"
     private const val KEY_PREFIX_LOCKOUT_UNTIL = "pin_lockout_until_"
+    private const val HASH_V2_PREFIX = "v2$"
+    private const val PBKDF2_ITERATIONS = 100_000
+    private const val PBKDF2_KEY_BITS = 256
 
     const val MIN_PIN_LENGTH = 4
     const val MAX_PIN_LENGTH = 6
@@ -36,15 +41,14 @@ object SecurityLockManager {
         val saltBytes = ByteArray(16)
         secureRandom.nextBytes(saltBytes)
         val saltB64 = Base64.encodeToString(saltBytes, Base64.NO_WRAP)
-        val hashB64 = hashPinWithSalt(pin, saltB64)
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val hashV2 = hashPinV2(pin, saltB64)
+        return context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString("$KEY_PREFIX_SALT$userId", saltB64)
-            .putString("$KEY_PREFIX_HASH$userId", hashB64)
+            .putString("$KEY_PREFIX_HASH$userId", hashV2)
             .putInt("$KEY_PREFIX_FAILS$userId", 0)
             .putLong("$KEY_PREFIX_LOCKOUT_UNTIL$userId", 0L)
-            .apply()
-        return true
+            .commit()
     }
 
     fun verifyPin(
@@ -65,13 +69,21 @@ object SecurityLockManager {
 
         val saltB64 = prefs.getString("$KEY_PREFIX_SALT$userId", null).orEmpty()
         val expectedHash = prefs.getString("$KEY_PREFIX_HASH$userId", null).orEmpty()
-        val candidateHash = hashPinWithSalt(candidatePin, saltB64)
+        val isV2 = expectedHash.startsWith(HASH_V2_PREFIX)
+        val candidateHash = if (isV2) {
+            hashPinV2(candidatePin, saltB64)
+        } else {
+            hashPinWithSalt(candidatePin, saltB64)
+        }
 
         return if (MessageDigest.isEqual(expectedHash.toByteArray(Charsets.UTF_8), candidateHash.toByteArray(Charsets.UTF_8))) {
-            prefs.edit()
+            val editor = prefs.edit()
                 .putInt("$KEY_PREFIX_FAILS$userId", 0)
                 .putLong("$KEY_PREFIX_LOCKOUT_UNTIL$userId", 0L)
-                .apply()
+            if (!isV2) {
+                editor.putString("$KEY_PREFIX_HASH$userId", hashPinV2(candidatePin, saltB64))
+            }
+            editor.commit()
             PinVerifyResult.Success
         } else {
             val fails = prefs.getInt("$KEY_PREFIX_FAILS$userId", 0) + 1
@@ -80,12 +92,12 @@ object SecurityLockManager {
                 prefs.edit()
                     .putInt("$KEY_PREFIX_FAILS$userId", 0)
                     .putLong("$KEY_PREFIX_LOCKOUT_UNTIL$userId", until)
-                    .apply()
+                    .commit()
                 PinVerifyResult.LockedOut((LOCKOUT_DURATION_MS / 1000L).toInt())
             } else {
                 prefs.edit()
                     .putInt("$KEY_PREFIX_FAILS$userId", fails)
-                    .apply()
+                    .commit()
                 PinVerifyResult.Invalid(attemptsRemaining = MAX_FAILED_ATTEMPTS - fails)
             }
         }
@@ -99,7 +111,7 @@ object SecurityLockManager {
             .remove("$KEY_PREFIX_HASH$userId")
             .remove("$KEY_PREFIX_FAILS$userId")
             .remove("$KEY_PREFIX_LOCKOUT_UNTIL$userId")
-            .apply()
+            .commit()
     }
 
     fun getRemainingLockoutSeconds(
@@ -112,6 +124,18 @@ object SecurityLockManager {
         val lockoutUntil = prefs.getLong("$KEY_PREFIX_LOCKOUT_UNTIL$userId", 0L)
         if (lockoutUntil <= nowMillis) return 0
         return ((lockoutUntil - nowMillis + 999L) / 1000L).toInt().coerceAtLeast(1)
+    }
+
+    internal fun hashPinV2(pin: String, salt: String): String {
+        val saltBytes = "$salt:bioterre_svt".toByteArray(Charsets.UTF_8)
+        val spec = PBEKeySpec(pin.toCharArray(), saltBytes, PBKDF2_ITERATIONS, PBKDF2_KEY_BITS)
+        return try {
+            val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            val derived = factory.generateSecret(spec).encoded
+            HASH_V2_PREFIX + Base64.encodeToString(derived, Base64.NO_WRAP)
+        } finally {
+            spec.clearPassword()
+        }
     }
 
     internal fun hashPinWithSalt(pin: String, salt: String): String {

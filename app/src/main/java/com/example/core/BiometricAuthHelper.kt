@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.provider.Settings
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.util.Log
@@ -152,6 +153,11 @@ object BiometricAuthHelper {
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
             val plain = cipher.doFinal(encrypted).toString(Charsets.UTF_8)
             decodeCredentialJson(plain)
+        } catch (_: KeyPermanentlyInvalidatedException) {
+            Log.w(TAG, "Biometric keystore key invalidated; clearing stale credential")
+            clearSavedCredential(context)
+            deleteSecretKeyQuietly()
+            null
         } catch (e: Exception) {
             Log.e(TAG, "Failed to decrypt biometric credential", e)
             null
@@ -171,7 +177,7 @@ object BiometricAuthHelper {
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_DISPLAY_NAME, displayName)
-            .apply()
+            .commit()
     }
 
     fun clearSavedCredential(context: Context) {
@@ -282,8 +288,19 @@ object BiometricAuthHelper {
     }
 
     private fun getExistingSecretKey(): SecretKey? {
-        val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
-        return keyStore.getKey(KEY_ALIAS, null) as? SecretKey
+        return runCatching {
+            val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
+            keyStore.getKey(KEY_ALIAS, null) as? SecretKey
+        }.getOrNull()
+    }
+
+    private fun deleteSecretKeyQuietly() {
+        runCatching {
+            val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
+            if (keyStore.containsAlias(KEY_ALIAS)) {
+                keyStore.deleteEntry(KEY_ALIAS)
+            }
+        }
     }
 
     private fun getOrCreateSecretKey(): SecretKey {

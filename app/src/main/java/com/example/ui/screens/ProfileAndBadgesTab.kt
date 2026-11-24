@@ -2996,6 +2996,7 @@ private fun ChangePasswordDialog(
             )
         },
         text = {
+            com.example.ui.components.SecureDialogWindowEffect()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3268,6 +3269,7 @@ private fun ExcelImportPreviewDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(id = R.string.roster_preview_title, rows.size)) },
         text = {
+            com.example.ui.components.SecureDialogWindowEffect()
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = stringResource(id = R.string.roster_preview_desc, svtClass.name),
@@ -3325,6 +3327,7 @@ private fun ManualRosterStudentDialog(
         onDismissRequest = onDismiss,
         title = { Text("${stringResource(id = R.string.roster_manual_title)} — ${svtClass.name}") },
         text = {
+            com.example.ui.components.SecureDialogWindowEffect()
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = fullName,
@@ -3436,6 +3439,7 @@ private fun ClassQrDialog(
             )
         },
         text = {
+            com.example.ui.components.SecureDialogWindowEffect()
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),

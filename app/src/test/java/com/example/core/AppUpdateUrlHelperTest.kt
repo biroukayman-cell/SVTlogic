@@ -60,4 +60,20 @@ class AppUpdateUrlHelperTest {
             driveIntent.data.toString()
         )
     }
+
+    @Test
+    fun unsafeUrls_areRejectedByValidationAndOpenUpdateUrl() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        assertFalse(AppUpdateUrlHelper.isSafeHttpsUpdateUrl("http://example.org/app.apk"))
+        assertFalse(AppUpdateUrlHelper.isSafeHttpsUpdateUrl("file:///data/local/tmp/app.apk"))
+        assertFalse(AppUpdateUrlHelper.isSafeHttpsUpdateUrl("javascript:alert(1)"))
+        assertFalse(AppUpdateUrlHelper.isSafeHttpsUpdateUrl("https://localhost/app.apk"))
+        assertFalse(AppUpdateUrlHelper.isSafeHttpsUpdateUrl("https://127.0.0.1/app.apk"))
+        assertFalse(AppUpdateUrlHelper.isSafeHttpsUpdateUrl("https://192.168.1.10/app.apk"))
+        assertFalse(AppUpdateUrlHelper.isSafeHttpsUpdateUrl("https://user:pass@example.org/app.apk"))
+
+        assertFalse(AppUpdateUrlHelper.openUpdateUrl(context, "http://example.org/app.apk"))
+        assertFalse(AppUpdateUrlHelper.openUpdateUrl(context, "https://127.0.0.1/app.apk"))
+        assertTrue(AppUpdateUrlHelper.isSafeHttpsUpdateUrl("https://github.com/org/repo/releases/download/v1.0/app.apk"))
+    }
 }

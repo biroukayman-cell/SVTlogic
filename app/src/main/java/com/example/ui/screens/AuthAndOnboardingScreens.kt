@@ -171,6 +171,10 @@ fun signOutUser(
 ) {
     scope.launch {
         AuthSessionDraft.clear(context)
+        runCatching {
+            java.io.File(context.filesDir, "exports").deleteRecursively()
+            java.io.File(context.cacheDir, "picked_uploads").deleteRecursively()
+        }
         Firebase.auth.signOut()
         onSignOutComplete()
     }
@@ -3053,6 +3057,7 @@ private fun StudentForgotPasswordDialog(
         onDismissRequest = { if (!isSending) onDismiss() },
         title = { Text(stringResource(id = R.string.password_forgot_title)) },
         text = {
+            com.example.ui.components.SecureDialogWindowEffect()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3178,6 +3183,7 @@ private fun TeacherForgotPasswordDialog(
         onDismissRequest = { if (!isSending) onDismiss() },
         title = { Text(stringResource(id = R.string.password_forgot_title)) },
         text = {
+            com.example.ui.components.SecureDialogWindowEffect()
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = stringResource(id = R.string.password_forgot_teacher_desc),

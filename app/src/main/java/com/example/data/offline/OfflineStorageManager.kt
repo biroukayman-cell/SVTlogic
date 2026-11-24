@@ -192,7 +192,9 @@ class OfflineStorageManager(
         val existing = _downloadedResources.value[resource.id]
         if (existing != null) {
             val f = File(existing.localFilePath)
-            if (f.exists() && f.length() > 0L) return@withContext f
+            if (isFileInsideDir(f, resourcesFilesDir) && f.exists() && f.length() > 0L) {
+                return@withContext f
+            }
         }
         val downloaded = downloadResource(resource, exportToPublicDownloads = false)
         File(downloaded.localFilePath)
@@ -226,18 +228,28 @@ class OfflineStorageManager(
                             _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
                         }
                     }
-                    "http", "https" -> {
+                    "https" -> {
                         downloadHttpFile(normalizedUrl, tempFile) { fraction ->
                             _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
                         }
                     }
-                    "content", "file" -> {
+                    "content" -> {
+                        copyUriFile(uri, tempFile) { fraction ->
+                            _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
+                        }
+                    }
+                    "file" -> {
+                        val localPath = uri.path ?: throw SecurityException("Missing local file path")
+                        val candidateFile = File(localPath)
+                        if (!isFileInsideDir(candidateFile, appContext.cacheDir)) {
+                            throw SecurityException("Untrusted file:// URI outside app cache rejected")
+                        }
                         copyUriFile(uri, tempFile) { fraction ->
                             _downloadingProgress.value = _downloadingProgress.value + (resource.id to fraction.coerceIn(0.05f, 0.99f))
                         }
                     }
                     else -> {
-                        throw IllegalArgumentException("Unsupported URI scheme for offline download: ${resource.fileUrl}")
+                        throw IllegalArgumentException("Unsupported or insecure URI scheme for offline download: ${resource.fileUrl}")
                     }
                 }
 
@@ -445,11 +457,14 @@ class OfflineStorageManager(
         var connection: HttpURLConnection? = null
         try {
             while (redirects < 5) {
+                if (!isSafeRemoteHttpsUrl(currentUrl)) {
+                    throw SecurityException("Blocked non-HTTPS or unsafe remote host")
+                }
                 val url = URL(currentUrl)
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 15000
                     readTimeout = 30000
-                    instanceFollowRedirects = true
+                    instanceFollowRedirects = false
                     requestMethod = "GET"
                 }
                 val code = conn.responseCode
@@ -457,7 +472,11 @@ class OfflineStorageManager(
                     val loc = conn.getHeaderField("Location")
                     conn.disconnect()
                     if (loc.isNullOrBlank()) throw IllegalStateException("Redirect without location ($code)")
-                    currentUrl = loc
+                    val nextUrl = URL(url, loc).toString()
+                    if (!isSafeRemoteHttpsUrl(nextUrl)) {
+                        throw SecurityException("Blocked unsafe redirect target")
+                    }
+                    currentUrl = nextUrl
                     redirects++
                 } else {
                     connection = conn
@@ -470,6 +489,9 @@ class OfflineStorageManager(
                 throw IllegalStateException("HTTP error $code while downloading resource")
             }
             val totalBytes = conn.contentLengthLong
+            if (totalBytes > MAX_HTTP_DOWNLOAD_BYTES) {
+                throw IllegalStateException("Remote resource exceeds max download limit")
+            }
             conn.inputStream.use { input ->
                 FileOutputStream(target).use { output ->
                     val buffer = ByteArray(16 * 1024)
@@ -477,8 +499,11 @@ class OfflineStorageManager(
                     while (true) {
                         val read = input.read(buffer)
                         if (read == -1) break
-                        output.write(buffer, 0, read)
                         downloaded += read
+                        if (downloaded > MAX_HTTP_DOWNLOAD_BYTES) {
+                            throw IllegalStateException("Remote resource exceeds max download limit")
+                        }
+                        output.write(buffer, 0, read)
                         if (totalBytes > 0L) {
                             onProgress(downloaded.toFloat() / totalBytes.toFloat())
                         }
@@ -556,6 +581,35 @@ class OfflineStorageManager(
         const val FIRESTORE_CHUNK_SCHEME = "firestore"
         const val FIRESTORE_CHUNK_HOST = "resource_chunks"
         const val PUBLIC_DOWNLOAD_SUBDIR = "BioTerre SVT"
+        private const val MAX_HTTP_DOWNLOAD_BYTES = 100L * 1024L * 1024L
+        private val CHUNK_ID_REGEX = Regex("^[a-zA-Z0-9_-]{1,128}$")
+
+        internal fun isFileInsideDir(candidate: File, parentDir: File): Boolean {
+            return runCatching {
+                val parentPath = parentDir.canonicalPath.trimEnd(File.separatorChar) + File.separatorChar
+                val candidatePath = candidate.canonicalPath
+                candidatePath.startsWith(parentPath)
+            }.getOrDefault(false)
+        }
+
+        internal fun isSafeRemoteHttpsUrl(rawUrl: String): Boolean {
+            val url = runCatching { URL(rawUrl.trim()) }.getOrNull() ?: return false
+            if (!url.protocol.equals("https", ignoreCase = true)) return false
+            if (!url.userInfo.isNullOrBlank()) return false
+            val host = url.host?.lowercase(Locale.US)?.trimEnd('.') ?: return false
+            if (host.isBlank() || !host.contains('.')) return false
+            if (host == "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return false
+            if (host == "0.0.0.0" || host == "::1" || host.startsWith("127.") ||
+                host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("169.254.")
+            ) {
+                return false
+            }
+            if (host.startsWith("172.")) {
+                val secondOctet = host.removePrefix("172.").substringBefore('.').toIntOrNull()
+                if (secondOctet != null && secondOctet in 16..31) return false
+            }
+            return true
+        }
 
         suspend fun stagePickedUriToCache(
             context: Context,
@@ -641,7 +695,7 @@ class OfflineStorageManager(
             if (!trimmed.startsWith(prefix, ignoreCase = true)) return null
             val remainder = trimmed.substring(prefix.length)
             val idPart = remainder.substringBefore('?').substringBefore('/').trim()
-            return idPart.takeIf { it.isNotEmpty() }
+            return idPart.takeIf { CHUNK_ID_REGEX.matches(it) }
         }
 
         fun normalizeDownloadUrl(rawUrl: String): String {
@@ -715,7 +769,8 @@ class OfflineStorageManager(
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
                 val path = obj.optString("localFilePath")
-                if (path.isNotBlank() && File(path).exists()) {
+                val file = File(path)
+                if (path.isNotBlank() && isFileInsideDir(file, resourcesFilesDir) && file.exists()) {
                     val rec = DownloadedResource(
                         resourceId = obj.getString("resourceId"),
                         classId = obj.optString("classId"),

@@ -5,6 +5,7 @@ import android.net.Uri
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.text.Normalizer
 import java.util.Locale
@@ -29,6 +30,10 @@ enum class ExcelParseErrorReason {
 
 object ExcelRosterParser {
 
+    private const val MAX_FILE_BYTES = 15 * 1024 * 1024
+    private const val MAX_XML_ENTRY_BYTES = 8 * 1024 * 1024
+    private const val MAX_ZIP_ENTRIES = 250
+
     fun parseUri(context: Context, uri: Uri): ExcelParseResult {
         return try {
             context.contentResolver.openInputStream(uri)?.use { stream ->
@@ -41,7 +46,8 @@ object ExcelRosterParser {
 
     fun parseStream(inputStream: InputStream): ExcelParseResult {
         return try {
-            val bytes = inputStream.readBytes()
+            val bytes = readBoundedBytes(inputStream, MAX_FILE_BYTES)
+                ?: return ExcelParseResult.Error(ExcelParseErrorReason.READ_FAILED)
             if (bytes.isEmpty()) {
                 return ExcelParseResult.Error(ExcelParseErrorReason.EMPTY_OR_NO_STUDENTS)
             }
@@ -93,14 +99,20 @@ object ExcelRosterParser {
         val sheetEntries = linkedMapOf<String, ByteArray>()
 
         ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
+            var entryCount = 0
             var entry = zis.nextEntry
-            while (entry != null) {
+            while (entry != null && entryCount < MAX_ZIP_ENTRIES) {
+                entryCount++
                 val name = entry.name.lowercase(Locale.US)
                 if (!entry.isDirectory) {
                     when {
-                        name == "xl/sharedstrings.xml" -> sharedStringsXml = zis.readBytes()
+                        name == "xl/sharedstrings.xml" -> {
+                            sharedStringsXml = readBoundedBytes(zis, MAX_XML_ENTRY_BYTES)
+                                ?: throw IllegalStateException("XLSX sharedStrings exceeds size limit")
+                        }
                         name.startsWith("xl/worksheets/sheet") && name.endsWith(".xml") -> {
-                            sheetEntries[name] = zis.readBytes()
+                            sheetEntries[name] = readBoundedBytes(zis, MAX_XML_ENTRY_BYTES)
+                                ?: throw IllegalStateException("XLSX worksheet exceeds size limit")
                         }
                     }
                 }
@@ -115,6 +127,20 @@ object ExcelRosterParser {
             ?: return emptyList()
 
         return parseWorksheetXml(firstSheet, sharedStrings)
+    }
+
+    private fun readBoundedBytes(input: InputStream, maxBytes: Int): ByteArray? {
+        val out = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val read = input.read(buffer)
+            if (read == -1) break
+            total += read
+            if (total > maxBytes) return null
+            out.write(buffer, 0, read)
+        }
+        return out.toByteArray()
     }
 
     private fun parseSharedStrings(xmlBytes: ByteArray): List<String> {
