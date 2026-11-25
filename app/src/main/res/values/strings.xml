@@ -753,6 +753,27 @@
     <string name="teacher_ai_analysis_offline_error">Connexion Internet requise pour lancer l\'analyse par IA.</string>
     <string name="teacher_ai_analysis_error">Impossible de générer l\'analyse IA : %1$s</string>
     <string name="teacher_ai_analysis_appcheck_error">Vérification App Check / reCAPTCHA refusée pour l\'analyse IA (%1$s). Vérifiez la connexion Internet et les services Google Play.</string>
+    <string name="teacher_ai_download_pdf">Télécharger PDF</string>
+    <string name="teacher_ai_pdf_saved">PDF enregistré dans Téléchargements : %1$s</string>
+    <string name="teacher_ai_pdf_saved_generic">PDF enregistré avec succès.</string>
+    <string name="teacher_ai_pdf_error">Impossible de générer le PDF : %1$s</string>
+    <string name="teacher_ai_pdf_share_chooser">Ouvrir ou partager l\'analyse PDF</string>
+
+    <!-- Synthèse des erreurs fréquentes par QCM (Gemini) -->
+    <string name="teacher_quiz_ai_errors_section_header">Synthèse des erreurs fréquentes par QCM (Gemini)</string>
+    <string name="teacher_quiz_ai_errors_section_desc">Générez avec Gemini un résumé des erreurs récurrentes des élèves pour chaque QCM afin d\'orienter la remédiation.</string>
+    <string name="teacher_quiz_ai_errors_btn">Synthèse erreurs (Gemini)</string>
+    <string name="teacher_quiz_ai_errors_dialog_title">Erreurs fréquentes — %1$s</string>
+    <string name="teacher_quiz_ai_errors_loading">Synthèse des erreurs fréquentes par Gemini en cours…</string>
+    <string name="teacher_quiz_ai_errors_summary_title">Synthèse globale du QCM</string>
+    <string name="teacher_quiz_ai_errors_list_title">Erreurs fréquentes des élèves</string>
+    <string name="teacher_quiz_ai_errors_causes_title">Causes et confusions probables</string>
+    <string name="teacher_quiz_ai_errors_remediation_title">Pistes de remédiation ciblées</string>
+    <string name="teacher_quiz_ai_errors_no_attempts">Aucune copie d\'élève enregistrée pour ce QCM pour le moment.</string>
+    <string name="teacher_quiz_ai_errors_offline_error">Connexion Internet requise pour générer la synthèse Gemini.</string>
+    <string name="teacher_quiz_ai_errors_error">Impossible de générer la synthèse des erreurs : %1$s</string>
+    <string name="teacher_quiz_ai_errors_meta">%1$d copie(s) • Moyenne : %2$d%% • Taux d\'erreur : %3$d%%</string>
+    <string name="teacher_quiz_ai_errors_empty_list">Aucun QCM publié pour cette sélection.</string>
     <string name="notifications_sort_date">Par date</string>
     <string name="notifications_sort_priority">Par priorité</string>
     <string name="notification_priority_high">Haute</string>

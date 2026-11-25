@@ -133,6 +133,50 @@ data class ClassAiAnalysisInput(
     val videoCompletionRatePct: Int
 )
 
+data class TeacherQuizDashboardSummary(
+    val quiz: Quiz,
+    val className: String,
+    val attemptsCount: Int,
+    val averagePct: Int,
+    val totalSucceededAnswers: Int,
+    val totalFailedAnswers: Int,
+    val errorRatePct: Int
+)
+
+data class QuizWrongOptionFrequency(
+    val optionText: String,
+    val count: Int
+)
+
+data class QuizFrequentErrorQuestionMetric(
+    val questionNumber: Int,
+    val questionText: String,
+    val correctOptionText: String,
+    val explanation: String,
+    val totalResponses: Int,
+    val correctCount: Int,
+    val incorrectCount: Int,
+    val errorRatePct: Int,
+    val commonWrongOptions: List<QuizWrongOptionFrequency>,
+    val avgTimeSpentSeconds: Int
+)
+
+data class QuizErrorSummaryInput(
+    val quizId: String,
+    val quizTitle: String,
+    val chapterSvt: String,
+    val classId: String,
+    val className: String,
+    val level: String,
+    val totalQuestions: Int,
+    val attemptsCount: Int,
+    val averagePct: Int,
+    val totalSucceededAnswers: Int,
+    val totalFailedAnswers: Int,
+    val averageDurationSeconds: Int,
+    val questionErrorMetrics: List<QuizFrequentErrorQuestionMetric>
+)
+
 object TeacherAnalyticsLogic {
 
     /**
@@ -644,6 +688,149 @@ object TeacherAnalyticsLogic {
             weakestQuestions = weakestQuestions,
             totalResourcesCount = classResources.size,
             videoCompletionRatePct = videoCompletionPct
+        )
+    }
+
+    fun computeTeacherQuizDashboardSummaries(
+        classes: List<SvtClass>,
+        quizzes: List<Quiz>,
+        attempts: List<QuizAttempt>,
+        filterClassId: String? = null
+    ): List<TeacherQuizDashboardSummary> {
+        val classNamesById = classes.associate { it.id to it.name }
+        val scopedQuizzes = if (filterClassId.isNullOrBlank()) {
+            quizzes
+        } else {
+            quizzes.filter { it.classId == filterClassId }
+        }
+        return scopedQuizzes.map { quiz ->
+            val qAttempts = attempts.filter { it.quizId == quiz.id }
+            val pcts = qAttempts.mapNotNull { att ->
+                if (att.maxScore > 0.0) ((att.score / att.maxScore) * 100.0).coerceIn(0.0, 100.0) else null
+            }
+            val avgPct = if (pcts.isEmpty()) 0 else pcts.average().roundToInt()
+            var totalOk = 0
+            var totalKo = 0
+            qAttempts.forEach { att ->
+                val (ok, ko) = extractAttemptQuestionCounts(att, quiz)
+                totalOk += ok
+                totalKo += ko
+            }
+            val totalAnswers = totalOk + totalKo
+            val errorRatePct = if (totalAnswers > 0) {
+                ((totalKo.toDouble() / totalAnswers.toDouble()) * 100.0).roundToInt().coerceIn(0, 100)
+            } else {
+                0
+            }
+            TeacherQuizDashboardSummary(
+                quiz = quiz,
+                className = classNamesById[quiz.classId].orEmpty(),
+                attemptsCount = qAttempts.size,
+                averagePct = avgPct,
+                totalSucceededAnswers = totalOk,
+                totalFailedAnswers = totalKo,
+                errorRatePct = errorRatePct
+            )
+        }.sortedWith(
+            compareByDescending<TeacherQuizDashboardSummary> { it.totalFailedAnswers }
+                .thenByDescending { it.attemptsCount }
+                .thenBy { it.quiz.title.lowercase() }
+        )
+    }
+
+    fun buildQuizFrequentErrorsInput(
+        quiz: Quiz,
+        svtClass: SvtClass?,
+        attempts: List<QuizAttempt>
+    ): QuizErrorSummaryInput {
+        val quizAttempts = attempts.filter { it.quizId == quiz.id }
+        val pcts = quizAttempts.mapNotNull { att ->
+            if (att.maxScore > 0.0) ((att.score / att.maxScore) * 100.0).coerceIn(0.0, 100.0) else null
+        }
+        val avgPct = if (pcts.isEmpty()) 0 else pcts.average().roundToInt()
+        val avgDurationSeconds = if (quizAttempts.isEmpty()) {
+            0
+        } else {
+            quizAttempts.map { it.totalDurationSeconds }.average().roundToInt()
+        }
+
+        var totalOk = 0
+        var totalKo = 0
+        quizAttempts.forEach { att ->
+            val (ok, ko) = extractAttemptQuestionCounts(att, quiz)
+            totalOk += ok
+            totalKo += ko
+        }
+
+        val questionMetrics = quiz.questions.mapIndexed { qIdx, question ->
+            val records = quizAttempts.mapNotNull { att ->
+                att.answers.firstOrNull { it.questionIndex == qIdx }
+            }
+            val totalResponses = records.size
+            val correctCount = records.count { it.isCorrect }
+            val incorrectCount = totalResponses - correctCount
+            val errorRatePct = if (totalResponses > 0) {
+                ((incorrectCount.toDouble() / totalResponses.toDouble()) * 100.0)
+                    .roundToInt()
+                    .coerceIn(0, 100)
+            } else {
+                0
+            }
+            val wrongOptions = records
+                .filter { !it.isCorrect }
+                .groupBy { rec ->
+                    if (rec.selectedIndex in question.options.indices) {
+                        question.options[rec.selectedIndex]
+                    } else {
+                        "Aucune réponse"
+                    }
+                }
+                .map { (optText, list) ->
+                    QuizWrongOptionFrequency(optionText = optText, count = list.size)
+                }
+                .sortedWith(
+                    compareByDescending<QuizWrongOptionFrequency> { it.count }
+                        .thenBy { it.optionText.lowercase() }
+                )
+
+            val avgTime = if (records.isEmpty()) {
+                0
+            } else {
+                records.map { it.timeSpentSeconds }.average().roundToInt()
+            }
+
+            QuizFrequentErrorQuestionMetric(
+                questionNumber = qIdx + 1,
+                questionText = question.questionText,
+                correctOptionText = question.options.getOrNull(question.correctIndex).orEmpty(),
+                explanation = question.explanation,
+                totalResponses = totalResponses,
+                correctCount = correctCount,
+                incorrectCount = incorrectCount,
+                errorRatePct = errorRatePct,
+                commonWrongOptions = wrongOptions,
+                avgTimeSpentSeconds = avgTime
+            )
+        }.sortedWith(
+            compareByDescending<QuizFrequentErrorQuestionMetric> { it.errorRatePct }
+                .thenByDescending { it.incorrectCount }
+                .thenBy { it.questionNumber }
+        )
+
+        return QuizErrorSummaryInput(
+            quizId = quiz.id,
+            quizTitle = quiz.title,
+            chapterSvt = quiz.chapterSvt,
+            classId = quiz.classId,
+            className = svtClass?.name.orEmpty(),
+            level = svtClass?.level.orEmpty(),
+            totalQuestions = quiz.questions.size,
+            attemptsCount = quizAttempts.size,
+            averagePct = avgPct,
+            totalSucceededAnswers = totalOk,
+            totalFailedAnswers = totalKo,
+            averageDurationSeconds = avgDurationSeconds,
+            questionErrorMetrics = questionMetrics
         )
     }
 }

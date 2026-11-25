@@ -88,6 +88,7 @@ import com.example.data.model.SvtClass
 import com.example.data.model.VideoTracking
 import com.example.ui.components.ClassAiAnalysisDialog
 import com.example.ui.components.QuestionSuccessRatioBar
+import com.example.ui.components.QuizFrequentErrorsDashboardCard
 import com.example.ui.components.StudentQuizAnswersReviewDialog
 import com.example.ui.components.StudentQuizReviewEntry
 import com.example.ui.components.SvtEmptyStateCard
@@ -117,6 +118,7 @@ fun TeacherDashboardTab(
     classAiAnalysisState: ClassAiAnalysisState = ClassAiAnalysisState.Idle,
     onAnalyzeClassWithAi: (SvtClass) -> Unit = {},
     onDismissAiAnalysis: () -> Unit = {},
+    onAnalyzeQuizErrorsWithAi: (Quiz) -> Unit = {},
     onNavigateToTab: (SvtTab) -> Unit
 ) {
     val overview = remember(
@@ -198,7 +200,8 @@ fun TeacherDashboardTab(
                     quizzes = teacherQuizzes,
                     attempts = teacherAttempts,
                     initialClassFilterId = selectedClassId,
-                    onAnalyzeClassWithAi = onAnalyzeClassWithAi
+                    onAnalyzeClassWithAi = onAnalyzeClassWithAi,
+                    onAnalyzeQuizErrorsWithAi = onAnalyzeQuizErrorsWithAi
                 )
             }
         }
@@ -713,7 +716,8 @@ private fun TeacherStudentQcmResultsSection(
     quizzes: List<Quiz>,
     attempts: List<QuizAttempt>,
     initialClassFilterId: String?,
-    onAnalyzeClassWithAi: (SvtClass) -> Unit
+    onAnalyzeClassWithAi: (SvtClass) -> Unit,
+    onAnalyzeQuizErrorsWithAi: (Quiz) -> Unit
 ) {
     var filterClassId by rememberSaveable { mutableStateOf(initialClassFilterId) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -736,6 +740,15 @@ private fun TeacherStudentQcmResultsSection(
             classes = classes,
             enrollments = enrollments,
             roster = roster,
+            quizzes = quizzes,
+            attempts = attempts,
+            filterClassId = filterClassId
+        )
+    }
+
+    val quizSummaries = remember(classes, quizzes, attempts, filterClassId) {
+        TeacherAnalyticsLogic.computeTeacherQuizDashboardSummaries(
+            classes = classes,
             quizzes = quizzes,
             attempts = attempts,
             filterClassId = filterClassId
@@ -840,6 +853,40 @@ private fun TeacherStudentQcmResultsSection(
                             reviewTarget = summary to null
                         }
                     }
+                )
+            }
+        }
+
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = stringResource(id = R.string.teacher_quiz_ai_errors_section_header),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.testTag("teacher_quiz_ai_errors_section_header")
+                )
+                Text(
+                    text = stringResource(id = R.string.teacher_quiz_ai_errors_section_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (quizSummaries.isEmpty()) {
+            item {
+                SvtEmptyStateCard(title = stringResource(id = R.string.teacher_quiz_ai_errors_empty_list))
+            }
+        } else {
+            items(quizSummaries, key = { "quiz_err_${it.quiz.id}" }) { quizSummary ->
+                QuizFrequentErrorsDashboardCard(
+                    summary = quizSummary,
+                    onAnalyzeErrorsWithAi = { onAnalyzeQuizErrorsWithAi(quizSummary.quiz) }
                 )
             }
         }

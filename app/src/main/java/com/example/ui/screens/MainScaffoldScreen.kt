@@ -177,6 +177,7 @@ fun MainDashboardScreen(
     val aiQuizState by viewModel.aiQuizState.collectAsStateWithLifecycle()
     val labSvtSearchState by viewModel.labSvtSearchState.collectAsStateWithLifecycle()
     val classAiAnalysisState by viewModel.classAiAnalysisState.collectAsStateWithLifecycle()
+    val quizAiErrorsState by viewModel.quizAiErrorsState.collectAsStateWithLifecycle()
     val unlockedBadges by viewModel.newlyUnlockedBadges.collectAsStateWithLifecycle()
     val isUploadingResource by viewModel.isUploadingResource.collectAsStateWithLifecycle()
     val appUpdates by viewModel.appUpdates.collectAsStateWithLifecycle()
@@ -446,6 +447,9 @@ fun MainDashboardScreen(
                                     viewModel.analyzeClassWithAi(cls, currentLanguage)
                                 },
                                 onDismissAiAnalysis = { viewModel.resetClassAiAnalysis() },
+                                onAnalyzeQuizErrorsWithAi = { quiz ->
+                                    viewModel.analyzeQuizErrorsWithAi(quiz, currentLanguage)
+                                },
                                 onNavigateToTab = { targetTab -> currentTab = targetTab }
                             )
 
@@ -499,6 +503,9 @@ fun MainDashboardScreen(
                                         teacherDashboardSection = 1
                                         currentTab = SvtTab.DASHBOARD
                                     }
+                                } else null,
+                                onAnalyzeQuizErrorsWithAi = if (isTeacher) {
+                                    { quiz -> viewModel.analyzeQuizErrorsWithAi(quiz, currentLanguage) }
                                 } else null,
                                 currentLanguage = currentLanguage
                             )
@@ -752,6 +759,18 @@ fun MainDashboardScreen(
                 }
             }
         }
+    }
+
+    if (isTeacher) {
+        com.example.ui.components.QuizAiErrorsDialog(
+            state = quizAiErrorsState,
+            onRetry = { quizId ->
+                teacherQuizzes.firstOrNull { it.id == quizId }?.let { quiz ->
+                    viewModel.analyzeQuizErrorsWithAi(quiz, currentLanguage)
+                }
+            },
+            onDismiss = { viewModel.resetQuizAiErrors() }
+        )
     }
 
     if (showNotificationsSheet) {

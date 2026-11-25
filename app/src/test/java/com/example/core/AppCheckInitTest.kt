@@ -48,4 +48,11 @@ class AppCheckInitTest {
         )
         assertEquals(AppCheckProviderMode.RECAPTCHA, mode)
     }
+
+    @Test
+    fun `diagnostic tag includes provider mode and version code`() {
+        val tag = appCheckDiagnosticTag()
+        assert(tag.contains("mode="))
+        assert(tag.contains("v="))
+    }
 }

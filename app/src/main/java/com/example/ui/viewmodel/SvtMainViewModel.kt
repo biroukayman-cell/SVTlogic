@@ -18,9 +18,11 @@ import com.example.core.NotificationHelper
 import com.example.core.SvtBackgroundNotificationWorker
 import com.example.core.SvtLabLogic
 import com.example.core.TeacherAnalyticsLogic
+import com.example.core.appCheckDiagnosticTag
 import com.example.data.ai.AiAppCheckException
 import com.example.data.ai.ClassAiAnalysisReport
 import com.example.data.ai.GeneratedQuizDraft
+import com.example.data.ai.QuizErrorsAiReport
 import com.example.data.ai.SvtAiRepository
 import com.example.data.badges.SvtBadgeDefinition
 import com.example.data.model.Announcement
@@ -108,6 +110,26 @@ sealed interface ClassAiAnalysisState {
         val className: String,
         val message: String
     ) : ClassAiAnalysisState
+}
+
+sealed interface QuizAiErrorsState {
+    data object Idle : QuizAiErrorsState
+    data class Loading(val quizId: String, val quizTitle: String) : QuizAiErrorsState
+    data class Success(
+        val quizId: String,
+        val quizTitle: String,
+        val className: String,
+        val attemptsCount: Int,
+        val averagePct: Int,
+        val totalSucceededAnswers: Int,
+        val totalFailedAnswers: Int,
+        val report: QuizErrorsAiReport
+    ) : QuizAiErrorsState
+    data class Error(
+        val quizId: String,
+        val quizTitle: String,
+        val message: String
+    ) : QuizAiErrorsState
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -481,6 +503,10 @@ class SvtMainViewModel(
     val classAiAnalysisState: StateFlow<ClassAiAnalysisState> = _classAiAnalysisState.asStateFlow()
     private var classAiAnalysisJob: Job? = null
 
+    private val _quizAiErrorsState = MutableStateFlow<QuizAiErrorsState>(QuizAiErrorsState.Idle)
+    val quizAiErrorsState: StateFlow<QuizAiErrorsState> = _quizAiErrorsState.asStateFlow()
+    private var quizAiErrorsJob: Job? = null
+
     private val _isImportingRoster = MutableStateFlow(false)
     val isImportingRoster: StateFlow<Boolean> = _isImportingRoster.asStateFlow()
 
@@ -528,6 +554,12 @@ class SvtMainViewModel(
         classAiAnalysisJob?.cancel()
         classAiAnalysisJob = null
         _classAiAnalysisState.value = ClassAiAnalysisState.Idle
+    }
+
+    fun resetQuizAiErrors() {
+        quizAiErrorsJob?.cancel()
+        quizAiErrorsJob = null
+        _quizAiErrorsState.value = QuizAiErrorsState.Idle
     }
 
     fun clearLabSvtSearch() {
@@ -1377,11 +1409,11 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AiAppCheckException) {
-                val detail = e.cause?.localizedMessage ?: e.localizedMessage.orEmpty()
+                val rawDetail = e.cause?.localizedMessage ?: e.localizedMessage.orEmpty()
+                val diag = appCheckDiagnosticTag()
+                val detail = if (rawDetail.isNotBlank()) "$rawDetail • $diag" else diag
                 val base = context.getString(R.string.quiz_ai_error_appcheck)
-                _aiQuizState.value = AiQuizState.Error(
-                    if (detail.isNotBlank()) "$base\n($detail)" else base
-                )
+                _aiQuizState.value = AiQuizState.Error("$base\n($detail)")
             } catch (e: Exception) {
                 _aiQuizState.value = AiQuizState.Error(e.localizedMessage ?: "AI generation error")
             }
@@ -1419,7 +1451,8 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AiAppCheckException) {
-                val detail = e.cause?.localizedMessage ?: e.localizedMessage ?: "App Check"
+                val rawDetail = e.cause?.localizedMessage ?: e.localizedMessage ?: "App Check"
+                val detail = "$rawDetail • ${appCheckDiagnosticTag()}"
                 _classAiAnalysisState.value = ClassAiAnalysisState.Error(
                     classId = svtClass.id,
                     className = svtClass.name,
@@ -1431,6 +1464,67 @@ class SvtMainViewModel(
                     className = svtClass.name,
                     message = context.getString(
                         R.string.teacher_ai_analysis_error,
+                        e.localizedMessage ?: "Error"
+                    )
+                )
+            }
+        }
+    }
+
+    fun analyzeQuizErrorsWithAi(quiz: Quiz, language: AppLanguage) {
+        if (!isOnline.value) {
+            _quizAiErrorsState.value = QuizAiErrorsState.Error(
+                quizId = quiz.id,
+                quizTitle = quiz.title,
+                message = context.getString(R.string.teacher_quiz_ai_errors_offline_error)
+            )
+            return
+        }
+        val svtClass = teacherClasses.value.firstOrNull { it.id == quiz.classId }
+        val analysisInput = TeacherAnalyticsLogic.buildQuizFrequentErrorsInput(
+            quiz = quiz,
+            svtClass = svtClass,
+            attempts = teacherAttempts.value
+        )
+        if (analysisInput.attemptsCount == 0) {
+            _quizAiErrorsState.value = QuizAiErrorsState.Error(
+                quizId = quiz.id,
+                quizTitle = quiz.title,
+                message = context.getString(R.string.teacher_quiz_ai_errors_no_attempts)
+            )
+            return
+        }
+        quizAiErrorsJob?.cancel()
+        quizAiErrorsJob = viewModelScope.launch {
+            _quizAiErrorsState.value = QuizAiErrorsState.Loading(quiz.id, quiz.title)
+            try {
+                val report = aiRepository.analyzeQuizFrequentErrors(analysisInput, language)
+                _quizAiErrorsState.value = QuizAiErrorsState.Success(
+                    quizId = quiz.id,
+                    quizTitle = quiz.title,
+                    className = analysisInput.className,
+                    attemptsCount = analysisInput.attemptsCount,
+                    averagePct = analysisInput.averagePct,
+                    totalSucceededAnswers = analysisInput.totalSucceededAnswers,
+                    totalFailedAnswers = analysisInput.totalFailedAnswers,
+                    report = report
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AiAppCheckException) {
+                val rawDetail = e.cause?.localizedMessage ?: e.localizedMessage ?: "App Check"
+                val detail = "$rawDetail • ${appCheckDiagnosticTag()}"
+                _quizAiErrorsState.value = QuizAiErrorsState.Error(
+                    quizId = quiz.id,
+                    quizTitle = quiz.title,
+                    message = context.getString(R.string.teacher_ai_analysis_appcheck_error, detail)
+                )
+            } catch (e: Exception) {
+                _quizAiErrorsState.value = QuizAiErrorsState.Error(
+                    quizId = quiz.id,
+                    quizTitle = quiz.title,
+                    message = context.getString(
+                        R.string.teacher_quiz_ai_errors_error,
                         e.localizedMessage ?: "Error"
                     )
                 )

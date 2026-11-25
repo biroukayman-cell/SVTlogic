@@ -13,8 +13,11 @@ private const val TAG = "AppCheckInit"
 
 private const val DEBUG_TOKEN_EXTRA = "FIREBASE_APPCHECK_DEBUG_TOKEN"
 private const val DEBUG_STORE_PREFIX = "com.google.firebase.appcheck.debug.store."
+private const val TOKEN_STORE_PREFIX = "com.google.firebase.appcheck.store."
 private const val DEBUG_SECRET_KEY = "com.google.firebase.appcheck.debug.DEBUG_SECRET"
 private const val HARNESS_DEBUG_TOKEN_KEY = "aistudio_harness_debug_token_configured"
+private const val LAST_MODE_PREFS_NAME = "bioterre_appcheck_meta"
+private const val LAST_MODE_KEY = "last_appcheck_mode_"
 private const val RECAPTCHA_SITE_KEY_RES = "recaptcha_site_key"
 
 internal enum class AppCheckProviderMode {
@@ -22,6 +25,23 @@ internal enum class AppCheckProviderMode {
     RECAPTCHA,
     DEBUG_FALLBACK,
     NONE
+}
+
+@Volatile
+internal var activeAppCheckMode: AppCheckProviderMode = AppCheckProviderMode.NONE
+    private set
+
+internal fun appCheckDiagnosticTag(): String {
+    return "mode=${activeAppCheckMode.name}, v=${BuildConfig.VERSION_CODE}"
+}
+
+internal fun clearAppCheckTokenStore(context: Context, persistenceKey: String) {
+    runCatching {
+        context.getSharedPreferences("$TOKEN_STORE_PREFIX$persistenceKey", Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .commit()
+    }
 }
 
 internal fun resolveAppCheckMode(
@@ -72,14 +92,26 @@ fun configureAppCheck(context: Context, intent: Intent?) {
         )
         val siteKey = if (resId != 0) context.getString(resId).trim() else ""
 
-        when (
-            resolveAppCheckMode(
-                isDebugBuild = BuildConfig.DEBUG,
-                intentDebugToken = debugToken,
-                hasPersistedHarnessToken = hasPersistedHarnessToken,
-                recaptchaSiteKey = siteKey
-            )
-        ) {
+        val resolvedMode = resolveAppCheckMode(
+            isDebugBuild = BuildConfig.DEBUG,
+            intentDebugToken = debugToken,
+            hasPersistedHarnessToken = hasPersistedHarnessToken,
+            recaptchaSiteKey = siteKey
+        )
+        activeAppCheckMode = resolvedMode
+
+        val metaPrefs = context.getSharedPreferences(LAST_MODE_PREFS_NAME, Context.MODE_PRIVATE)
+        val metaKey = "$LAST_MODE_KEY$persistenceKey"
+        val previousModeName = metaPrefs.getString(metaKey, null)
+        if (previousModeName != resolvedMode.name) {
+            clearAppCheckTokenStore(context, persistenceKey)
+            if (resolvedMode == AppCheckProviderMode.RECAPTCHA && !hasPersistedHarnessToken) {
+                prefs.edit().clear().commit()
+            }
+            metaPrefs.edit().putString(metaKey, resolvedMode.name).commit()
+        }
+
+        when (resolvedMode) {
             AppCheckProviderMode.DEBUG_HARNESS -> {
                 FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
                     DebugAppCheckProviderFactory.getInstance()

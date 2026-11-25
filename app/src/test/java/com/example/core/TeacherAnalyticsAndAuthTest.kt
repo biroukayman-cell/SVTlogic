@@ -376,4 +376,85 @@ class TeacherAnalyticsAndAuthTest {
         assertEquals("Rôle des mitochondries", input.strongestQuestions.first().questionText)
         assertEquals("Bilan ATP de la fermentation", input.weakestQuestions.first().questionText)
     }
+
+    @Test
+    fun `computeTeacherQuizDashboardSummaries and buildQuizFrequentErrorsInput rank most frequent wrong answers`() {
+        val quiz = Quiz(
+            id = "q_err_1",
+            classId = "c1",
+            teacherId = "t1",
+            title = "QCM Glycémie",
+            chapterSvt = "Régulation hormonale",
+            questions = listOf(
+                QuizQuestion(
+                    questionText = "Hormone hypoglycémiante ?",
+                    options = listOf("Glucagon", "Insuline", "Adrénaline", "Cortisol"),
+                    correctIndex = 1,
+                    explanation = "L'insuline abaisse la glycémie."
+                ),
+                QuizQuestion(
+                    questionText = "Cellules sécrétrices d'insuline ?",
+                    options = listOf("Alpha", "Bêta", "Hépatocytes", "Neurones"),
+                    correctIndex = 1,
+                    explanation = "Cellules bêta des îlots de Langerhans."
+                )
+            )
+        )
+        val qAttempts = listOf(
+            QuizAttempt(
+                id = "qa1",
+                quizId = "q_err_1",
+                classId = "c1",
+                studentId = "s1",
+                score = 1.0,
+                maxScore = 2.0,
+                totalDurationSeconds = 50L,
+                answers = listOf(
+                    QuestionAnswerRecord(questionIndex = 0, selectedIndex = 0, isCorrect = false, timeSpentSeconds = 20L),
+                    QuestionAnswerRecord(questionIndex = 1, selectedIndex = 1, isCorrect = true, timeSpentSeconds = 30L)
+                )
+            ),
+            QuizAttempt(
+                id = "qa2",
+                quizId = "q_err_1",
+                classId = "c1",
+                studentId = "s2",
+                score = 0.0,
+                maxScore = 2.0,
+                totalDurationSeconds = 70L,
+                answers = listOf(
+                    QuestionAnswerRecord(questionIndex = 0, selectedIndex = 0, isCorrect = false, timeSpentSeconds = 30L),
+                    QuestionAnswerRecord(questionIndex = 1, selectedIndex = 2, isCorrect = false, timeSpentSeconds = 40L)
+                )
+            )
+        )
+
+        val summaries = TeacherAnalyticsLogic.computeTeacherQuizDashboardSummaries(
+            classes = classes,
+            quizzes = listOf(quiz, quizzes.last()),
+            attempts = qAttempts,
+            filterClassId = "c1"
+        )
+        assertEquals(1, summaries.size)
+        val summary = summaries.first()
+        assertEquals(2, summary.attemptsCount)
+        assertEquals(25, summary.averagePct)
+        assertEquals(1, summary.totalSucceededAnswers)
+        assertEquals(3, summary.totalFailedAnswers)
+        assertEquals(75, summary.errorRatePct)
+
+        val input = TeacherAnalyticsLogic.buildQuizFrequentErrorsInput(
+            quiz = quiz,
+            svtClass = classes.first(),
+            attempts = qAttempts
+        )
+        assertEquals(2, input.attemptsCount)
+        assertEquals(60, input.averageDurationSeconds)
+        assertEquals(2, input.questionErrorMetrics.size)
+        val hardest = input.questionErrorMetrics.first()
+        assertEquals(1, hardest.questionNumber)
+        assertEquals(100, hardest.errorRatePct)
+        assertEquals("Glucagon", hardest.commonWrongOptions.first().optionText)
+        assertEquals(2, hardest.commonWrongOptions.first().count)
+    }
 }

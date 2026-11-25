@@ -65,6 +65,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -164,6 +165,7 @@ fun ExercisesTab(
     ) -> Unit,
     onDeleteQuiz: (Quiz) -> Unit = {},
     onOpenQcmResults: (() -> Unit)? = null,
+    onAnalyzeQuizErrorsWithAi: ((Quiz) -> Unit)? = null,
     currentLanguage: AppLanguage = AppLanguage.FR,
     isGuestMode: Boolean = false,
     onGuestBlocked: () -> Unit = {}
@@ -593,6 +595,9 @@ fun ExercisesTab(
             attempts = quizAttempts,
             roster = teacherRoster,
             enrollments = teacherEnrollments,
+            onAnalyzeErrorsWithAi = onAnalyzeQuizErrorsWithAi?.let { callback ->
+                { callback(quiz) }
+            },
             onDismiss = { statsQuizId = null }
         )
     }
@@ -1058,6 +1063,7 @@ private fun TeacherQuizStatsDialog(
     attempts: List<QuizAttempt>,
     roster: List<RosterStudent>,
     enrollments: List<Enrollment>,
+    onAnalyzeErrorsWithAi: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     var selectedAttemptForReview by remember { mutableStateOf<QuizAttempt?>(null) }
@@ -1134,6 +1140,22 @@ private fun TeacherQuizStatsDialog(
                     text = stringResource(id = R.string.quiz_stats_attempts, attempts.size),
                     style = MaterialTheme.typography.labelMedium
                 )
+                if (attempts.isNotEmpty() && onAnalyzeErrorsWithAi != null) {
+                    FilledTonalButton(
+                        onClick = onAnalyzeErrorsWithAi,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("quiz_stats_ai_errors_button_${quiz.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(id = R.string.teacher_quiz_ai_errors_btn))
+                    }
+                }
                 if (attempts.isNotEmpty()) {
                     Text(
                         text = stringResource(id = R.string.quiz_stats_by_student),

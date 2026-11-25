@@ -753,6 +753,27 @@
     <string name="teacher_ai_analysis_offline_error">Internet connection is required to run AI class analysis.</string>
     <string name="teacher_ai_analysis_error">Failed to generate AI analysis: %1$s</string>
     <string name="teacher_ai_analysis_appcheck_error">App Check / reCAPTCHA verification failed for AI analysis (%1$s). Check your Internet connection and Google Play Services.</string>
+    <string name="teacher_ai_download_pdf">Download PDF</string>
+    <string name="teacher_ai_pdf_saved">PDF saved to Downloads: %1$s</string>
+    <string name="teacher_ai_pdf_saved_generic">PDF saved successfully.</string>
+    <string name="teacher_ai_pdf_error">Failed to export PDF: %1$s</string>
+    <string name="teacher_ai_pdf_share_chooser">Open or share analysis PDF</string>
+
+    <!-- Frequent Errors Synthesis by Quiz (Gemini) -->
+    <string name="teacher_quiz_ai_errors_section_header">Frequent Errors Synthesis by Quiz (Gemini)</string>
+    <string name="teacher_quiz_ai_errors_section_desc">Use Gemini to summarize recurring student errors for each quiz and target remediation.</string>
+    <string name="teacher_quiz_ai_errors_btn">Errors synthesis (Gemini)</string>
+    <string name="teacher_quiz_ai_errors_dialog_title">Frequent Errors — %1$s</string>
+    <string name="teacher_quiz_ai_errors_loading">Generating frequent errors synthesis with Gemini…</string>
+    <string name="teacher_quiz_ai_errors_summary_title">Overall Quiz Synthesis</string>
+    <string name="teacher_quiz_ai_errors_list_title">Frequent Student Errors</string>
+    <string name="teacher_quiz_ai_errors_causes_title">Likely Misconceptions</string>
+    <string name="teacher_quiz_ai_errors_remediation_title">Targeted Remediation</string>
+    <string name="teacher_quiz_ai_errors_no_attempts">No student attempts recorded for this quiz yet.</string>
+    <string name="teacher_quiz_ai_errors_offline_error">Internet connection is required to generate the Gemini synthesis.</string>
+    <string name="teacher_quiz_ai_errors_error">Failed to generate frequent errors synthesis: %1$s</string>
+    <string name="teacher_quiz_ai_errors_meta">%1$d attempt(s) • Avg: %2$d%% • Error rate: %3$d%%</string>
+    <string name="teacher_quiz_ai_errors_empty_list">No quizzes published for this selection.</string>
     <string name="notifications_sort_date">By date</string>
     <string name="notifications_sort_priority">By priority</string>
     <string name="notification_priority_high">High</string>

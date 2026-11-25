@@ -753,6 +753,27 @@
     <string name="teacher_ai_analysis_offline_error">يلزم الاتصال بالإنترنت لتشغيل التحليل بالذكاء الاصطناعي.</string>
     <string name="teacher_ai_analysis_error">تعذر إنشاء التحليل بالذكاء الاصطناعي: %1$s</string>
     <string name="teacher_ai_analysis_appcheck_error">تعذر التحقق من App Check / reCAPTCHA لتحليل الذكاء الاصطناعي (%1$s). تحقق من الاتصال بالإنترنت وخدمات Google Play.</string>
+    <string name="teacher_ai_download_pdf">تحميل PDF</string>
+    <string name="teacher_ai_pdf_saved">تم حفظ ملف PDF في التنزيلات: %1$s</string>
+    <string name="teacher_ai_pdf_saved_generic">تم حفظ ملف PDF بنجاح.</string>
+    <string name="teacher_ai_pdf_error">تعذر إنشاء ملف PDF: %1$s</string>
+    <string name="teacher_ai_pdf_share_chooser">فتح أو مشاركة تحليل PDF</string>
+
+    <!-- ملخص الأخطاء الشائعة لكل اختبار (Gemini) -->
+    <string name="teacher_quiz_ai_errors_section_header">ملخص الأخطاء الشائعة لكل اختبار (Gemini)</string>
+    <string name="teacher_quiz_ai_errors_section_desc">أنشئ بواسطة Gemini ملخصاً للأخطاء المتكررة لدى التلاميذ لكل اختبار لتوجيه المعالجة التربوية.</string>
+    <string name="teacher_quiz_ai_errors_btn">ملخص الأخطاء (Gemini)</string>
+    <string name="teacher_quiz_ai_errors_dialog_title">الأخطاء الشائعة — %1$s</string>
+    <string name="teacher_quiz_ai_errors_loading">جارٍ إنشاء ملخص الأخطاء الشائعة بواسطة Gemini…</string>
+    <string name="teacher_quiz_ai_errors_summary_title">الملخص العام للاختبار</string>
+    <string name="teacher_quiz_ai_errors_list_title">الأخطاء الشائعة لدى التلاميذ</string>
+    <string name="teacher_quiz_ai_errors_causes_title">الأسباب والالتباسات المحتملة</string>
+    <string name="teacher_quiz_ai_errors_remediation_title">سبل المعالجة التربوية المستهدفة</string>
+    <string name="teacher_quiz_ai_errors_no_attempts">لا توجد أي مشاركة للتلاميذ في هذا الاختبار حالياً.</string>
+    <string name="teacher_quiz_ai_errors_offline_error">يلزم الاتصال بالإنترنت لإنشاء ملخص Gemini.</string>
+    <string name="teacher_quiz_ai_errors_error">تعذر إنشاء ملخص الأخطاء الشائعة: %1$s</string>
+    <string name="teacher_quiz_ai_errors_meta">%1$d محاولة • المعدل: %2$d%% • نسبة الخطأ: %3$d%%</string>
+    <string name="teacher_quiz_ai_errors_empty_list">لا توجد اختبارات منشورة لهذا الاختيار.</string>
     <string name="notifications_sort_date">حسب التاريخ</string>
     <string name="notifications_sort_priority">حسب الأولوية</string>
     <string name="notification_priority_high">عالية</string>
