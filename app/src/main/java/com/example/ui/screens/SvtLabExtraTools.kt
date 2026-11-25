@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Card
@@ -39,9 +40,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -410,13 +413,23 @@ fun SvtInteractiveToolsLabSection(
                         modifier = Modifier.testTag("svt_tool_chip_earth")
                     )
                 }
+                item {
+                    FilterChip(
+                        selected = selectedToolIdx == 3,
+                        onClick = { selectedToolIdx = 3 },
+                        leadingIcon = { Icon(Icons.Filled.Timeline, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                        label = { Text(stringResource(id = R.string.svt_tool_chip_nervous_muscular)) },
+                        modifier = Modifier.testTag("svt_tool_chip_nervous_muscular")
+                    )
+                }
             }
         }
 
         when (selectedToolIdx) {
             0 -> item { AtpMetabolismToolCard() }
             1 -> item { GeneticsAndBloodToolCard() }
-            else -> item { EcologyAndSeismicToolCard(showSeismic = SvtDomain.GEOLOGY in allowedDomains) }
+            2 -> item { EcologyAndSeismicToolCard(showSeismic = SvtDomain.GEOLOGY in allowedDomains) }
+            else -> item { NervousMuscularToolCard() }
         }
     }
 }
@@ -830,6 +843,179 @@ private fun EcologyAndSeismicToolCard(showSeismic: Boolean) {
                             modifier = Modifier.padding(12.dp)
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NervousMuscularToolCard() {
+    var stimulusMv by rememberSaveable { mutableFloatStateOf(-40f) }
+    var atpPct by rememberSaveable { mutableFloatStateOf(80f) }
+    var isMyelinated by rememberSaveable { mutableStateOf(true) }
+    var calciumAvailable by rememberSaveable { mutableStateOf(true) }
+
+    val result = remember(stimulusMv, atpPct, isMyelinated, calciumAvailable) {
+        SvtLabLogic.computeNerveAndMuscleResponse(
+            stimulusMv = stimulusMv.toInt(),
+            isMyelinated = isMyelinated,
+            atpLevelPct = atpPct.toInt(),
+            calciumAvailable = calciumAvailable
+        )
+    }
+
+    val stateColor = when (result.contractionState) {
+        SvtLabLogic.MuscleContractionState.CONTRACTING -> SvtSuccess
+        SvtLabLogic.MuscleContractionState.SUBTHRESHOLD -> SvtOceanSecondary
+        SvtLabLogic.MuscleContractionState.NO_CALCIUM_BLOCKED -> SvtWarning
+        SvtLabLogic.MuscleContractionState.FATIGUED_NO_ATP -> SvtCoralError
+    }
+
+    val stateLabelRes = when (result.contractionState) {
+        SvtLabLogic.MuscleContractionState.CONTRACTING -> R.string.svt_tool_neuro_state_contracting
+        SvtLabLogic.MuscleContractionState.SUBTHRESHOLD -> R.string.svt_tool_neuro_state_subthreshold
+        SvtLabLogic.MuscleContractionState.NO_CALCIUM_BLOCKED -> R.string.svt_tool_neuro_state_no_ca
+        SvtLabLogic.MuscleContractionState.FATIGUED_NO_ATP -> R.string.svt_tool_neuro_state_no_atp
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.testTag("nervous_muscular_tool_card")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Timeline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(id = R.string.svt_tool_neuro_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = stringResource(id = R.string.svt_tool_neuro_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Text(
+                text = stringResource(
+                    id = R.string.svt_tool_neuro_stimulus,
+                    result.stimulusMv,
+                    result.thresholdMv
+                ),
+                style = MaterialTheme.typography.labelLarge
+            )
+            Slider(
+                value = stimulusMv,
+                onValueChange = { stimulusMv = it },
+                valueRange = -80f..50f,
+                modifier = Modifier.testTag("neuro_stimulus_slider")
+            )
+
+            Text(
+                text = stringResource(id = R.string.svt_tool_neuro_atp, atpPct.toInt()),
+                style = MaterialTheme.typography.labelLarge
+            )
+            Slider(
+                value = atpPct,
+                onValueChange = { atpPct = it },
+                valueRange = 0f..100f,
+                modifier = Modifier.testTag("neuro_atp_slider")
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(id = R.string.svt_tool_neuro_myelin),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = isMyelinated,
+                    onCheckedChange = { isMyelinated = it },
+                    modifier = Modifier.testTag("neuro_myelin_switch")
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(id = R.string.svt_tool_neuro_calcium),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = calciumAvailable,
+                    onCheckedChange = { calciumAvailable = it },
+                    modifier = Modifier.testTag("neuro_calcium_switch")
+                )
+            }
+
+            Surface(
+                color = stateColor.copy(alpha = 0.14f),
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = if (result.actionPotentialTriggered) {
+                            stringResource(
+                                id = R.string.svt_tool_neuro_ap_yes,
+                                String.format(Locale.US, "%.1f", result.conductionVelocityMs)
+                            )
+                        } else {
+                            stringResource(
+                                id = R.string.svt_tool_neuro_ap_no,
+                                result.stimulusMv,
+                                result.thresholdMv
+                            )
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Text(
+                        text = stringResource(id = stateLabelRes, result.sarcomereShorteningPct),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = stateColor
+                    )
+
+                    LinearProgressIndicator(
+                        progress = { (result.sarcomereShorteningPct / 35f).coerceIn(0f, 1f) },
+                        color = stateColor,
+                        trackColor = stateColor.copy(alpha = 0.20f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(7.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                    )
                 }
             }
         }

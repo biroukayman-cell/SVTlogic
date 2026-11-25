@@ -206,11 +206,58 @@ private val BotanicalDarkColorScheme = darkColorScheme(
     error = SvtCoralError
 )
 
+private val NervousMuscularLightColorScheme = lightColorScheme(
+    primary = NeuroPrimary,
+    onPrimary = NeuroOnPrimary,
+    primaryContainer = NeuroPrimaryContainer,
+    onPrimaryContainer = NeuroOnPrimaryContainer,
+    secondary = NeuroSecondary,
+    onSecondary = NeuroOnSecondary,
+    secondaryContainer = NeuroSecondaryContainer,
+    onSecondaryContainer = NeuroOnSecondaryContainer,
+    tertiary = NeuroTertiary,
+    onTertiary = NeuroOnTertiary,
+    tertiaryContainer = NeuroTertiaryContainer,
+    onTertiaryContainer = NeuroOnTertiaryContainer,
+    background = NeuroLightBg,
+    onBackground = Color(0xFF101B2D),
+    surface = Color.White,
+    onSurface = Color(0xFF101B2D),
+    surfaceVariant = NeuroLightSurfaceVariant,
+    onSurfaceVariant = Color(0xFF3E4C63),
+    outline = Color(0xFF6F7E96),
+    error = SvtCoralError
+)
+
+private val NervousMuscularDarkColorScheme = darkColorScheme(
+    primary = NeuroDarkPrimary,
+    onPrimary = NeuroDarkOnPrimary,
+    primaryContainer = NeuroDarkPrimaryContainer,
+    onPrimaryContainer = NeuroDarkOnPrimaryContainer,
+    secondary = NeuroDarkSecondary,
+    onSecondary = NeuroDarkOnSecondary,
+    secondaryContainer = NeuroDarkSecondaryContainer,
+    onSecondaryContainer = NeuroDarkOnSecondaryContainer,
+    tertiary = Color(0xFF80DEEA),
+    onTertiary = Color(0xFF00363D),
+    tertiaryContainer = Color(0xFF004F58),
+    onTertiaryContainer = NeuroTertiaryContainer,
+    background = NeuroDarkBg,
+    onBackground = Color(0xFFDCE6F7),
+    surface = NeuroDarkSurface,
+    onSurface = Color(0xFFDCE6F7),
+    surfaceVariant = NeuroDarkSurfaceVariant,
+    onSurfaceVariant = Color(0xFFA9B7D0),
+    outline = Color(0xFF70809C),
+    error = SvtCoralError
+)
+
 fun AppThemePalette.previewSwatchColors(): Pair<Color, Color> = when (this) {
     AppThemePalette.EMERALD -> SvtEmeraldPrimary to SvtOceanSecondary
     AppThemePalette.OCEAN -> OceanPrimary to OceanSecondary
     AppThemePalette.EARTH -> EarthPrimary to EarthSecondary
     AppThemePalette.BOTANICAL -> BotanicalPrimary to BotanicalSecondary
+    AppThemePalette.NERVOUS_MUSCULAR -> NeuroPrimary to NeuroSecondary
 }
 
 private fun resolveColorScheme(palette: AppThemePalette, isDark: Boolean): ColorScheme {
@@ -219,6 +266,7 @@ private fun resolveColorScheme(palette: AppThemePalette, isDark: Boolean): Color
         AppThemePalette.OCEAN -> if (isDark) OceanDarkColorScheme else OceanLightColorScheme
         AppThemePalette.EARTH -> if (isDark) EarthDarkColorScheme else EarthLightColorScheme
         AppThemePalette.BOTANICAL -> if (isDark) BotanicalDarkColorScheme else BotanicalLightColorScheme
+        AppThemePalette.NERVOUS_MUSCULAR -> if (isDark) NervousMuscularDarkColorScheme else NervousMuscularLightColorScheme
     }
 }
 

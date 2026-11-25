@@ -14,7 +14,9 @@ import com.example.data.model.Announcement
 import com.example.data.model.AppUpdateRelease
 import com.example.data.model.ClassCode
 import com.example.data.model.CourseResource
+import com.example.data.model.CustomGlossaryEntry
 import com.example.data.model.Enrollment
+import com.example.data.model.Establishment
 import com.example.data.model.PrivateMessage
 import com.example.data.model.QuestionAnswerRecord
 import com.example.data.model.Quiz
@@ -505,17 +507,150 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .collect { emit(it) }
     }
 
+    // ---------------------------------------------------------
+    // 1b. Establishments (Teacher Schools / Centers)
+    // ---------------------------------------------------------
+    fun observeTeacherEstablishments(teacherId: String): Flow<List<Establishment>> = flow {
+        val path = "establishments"
+        db.collection("establishments")
+            .whereEqualTo("teacherId", teacherId)
+            .snapshots()
+            .map { snapshot ->
+                snapshot.toObjects(Establishment::class.java, ServerTimestampBehavior.ESTIMATE)
+                    .sortedBy { it.name.lowercase(Locale.getDefault()) }
+            }
+            .logFirestoreErrors(OperationType.LIST, path, teacherId)
+            .collect { emit(it) }
+    }
+
+    suspend fun createEstablishment(
+        teacherName: String,
+        name: String,
+        city: String = ""
+    ): Establishment {
+        val uid = requireUserId()
+        val estId = "est_${UUID.randomUUID().toString().take(8)}"
+        val cleanTeacher = teacherName.trim().ifBlank { "Professeur" }.take(120)
+        val cleanName = name.trim().take(120)
+        val cleanCity = city.trim().take(100)
+        require(cleanName.length >= 2) { "Establishment name must be at least 2 characters" }
+        val docRef = db.collection("establishments").document(estId)
+        val payload = mapOf(
+            "teacherId" to uid,
+            "teacherName" to cleanTeacher,
+            "name" to cleanName,
+            "city" to cleanCity,
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        try {
+            docRef.set(payload).await()
+            return Establishment(
+                id = estId,
+                teacherId = uid,
+                teacherName = cleanTeacher,
+                name = cleanName,
+                city = cleanCity
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun updateEstablishment(
+        establishmentId: String,
+        name: String,
+        city: String = ""
+    ) {
+        val uid = requireUserId()
+        val cleanName = name.trim().take(120)
+        val cleanCity = city.trim().take(100)
+        require(establishmentId.isNotBlank() && cleanName.length >= 2) {
+            "Establishment name must be at least 2 characters"
+        }
+        val docRef = db.collection("establishments").document(establishmentId)
+        try {
+            val batch = db.batch()
+            batch.update(
+                docRef,
+                mapOf(
+                    "name" to cleanName,
+                    "city" to cleanCity,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            )
+            val linkedClasses = db.collection("classes")
+                .whereEqualTo("teacherId", uid)
+                .whereEqualTo("establishmentId", establishmentId)
+                .get()
+                .await()
+            for (clsDoc in linkedClasses.documents) {
+                batch.update(
+                    clsDoc.reference,
+                    mapOf(
+                        "establishmentName" to cleanName,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+            }
+            batch.commit().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun deleteEstablishment(establishmentId: String) {
+        val uid = requireUserId()
+        if (establishmentId.isBlank()) return
+        val docRef = db.collection("establishments").document(establishmentId)
+        try {
+            val batch = db.batch()
+            batch.delete(docRef)
+            val linkedClasses = db.collection("classes")
+                .whereEqualTo("teacherId", uid)
+                .whereEqualTo("establishmentId", establishmentId)
+                .get()
+                .await()
+            for (clsDoc in linkedClasses.documents) {
+                batch.update(
+                    clsDoc.reference,
+                    mapOf(
+                        "establishmentId" to "",
+                        "establishmentName" to "",
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+            }
+            batch.commit().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docRef.path)
+            throw e
+        }
+    }
+
     suspend fun createClass(
         teacherName: String,
         name: String,
         level: String,
-        academicYear: String
+        academicYear: String,
+        establishmentId: String = "",
+        establishmentName: String = ""
     ): SvtClass {
         val uid = requireUserId()
         val classId = "cls_${UUID.randomUUID().toString().take(8)}"
         val qrToken = "SVT-${UUID.randomUUID().toString().replace("-", "").take(8).uppercase(Locale.US)}"
         val classRef = db.collection("classes").document(classId)
         val codeRef = db.collection("class_codes").document(qrToken)
+        val cleanEstId = establishmentId.trim().take(128)
+        val cleanEstName = if (cleanEstId.isNotEmpty()) establishmentName.trim().take(120) else ""
 
         val classPayload = mapOf(
             "teacherId" to uid,
@@ -524,6 +659,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
             "academicYear" to academicYear.trim(),
             "level" to level.trim(),
             "qrToken" to qrToken,
+            "establishmentId" to cleanEstId,
+            "establishmentName" to cleanEstName,
             "visibleLabDomains" to SvtClass.DEFAULT_LAB_DOMAINS,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
@@ -550,12 +687,72 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 academicYear = academicYear.trim(),
                 level = level.trim(),
                 qrToken = qrToken,
+                establishmentId = cleanEstId,
+                establishmentName = cleanEstName,
                 visibleLabDomains = SvtClass.DEFAULT_LAB_DOMAINS
             )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.CREATE, classRef.path)
+            throw e
+        }
+    }
+
+    suspend fun updateClassDetails(
+        svtClass: SvtClass,
+        name: String,
+        level: String,
+        academicYear: String,
+        establishmentId: String,
+        establishmentName: String
+    ) {
+        requireUserId()
+        val cleanName = name.trim().take(120)
+        val cleanLevel = level.trim().take(80)
+        val cleanYear = academicYear.trim().take(40)
+        val cleanEstId = establishmentId.trim().take(128)
+        val cleanEstName = if (cleanEstId.isNotEmpty()) establishmentName.trim().take(120) else ""
+        require(svtClass.id.isNotBlank() && cleanName.length >= 2) {
+            "Class name must be at least 2 characters"
+        }
+        val classRef = db.collection("classes").document(svtClass.id)
+        try {
+            val codeRef = if (svtClass.qrToken.isNotBlank()) {
+                db.collection("class_codes").document(svtClass.qrToken)
+            } else {
+                null
+            }
+            val codeExists = codeRef?.let { ref ->
+                runCatching { ref.get().await().exists() }.getOrDefault(false)
+            } == true
+
+            val batch = db.batch()
+            batch.update(
+                classRef,
+                mapOf(
+                    "name" to cleanName,
+                    "level" to cleanLevel,
+                    "academicYear" to cleanYear,
+                    "establishmentId" to cleanEstId,
+                    "establishmentName" to cleanEstName,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            )
+            if (codeRef != null && codeExists) {
+                batch.update(
+                    codeRef,
+                    mapOf(
+                        "className" to cleanName,
+                        "academicYear" to cleanYear
+                    )
+                )
+            }
+            batch.commit().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, classRef.path)
             throw e
         }
     }
@@ -787,6 +984,20 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 }
             }
 
+            val glossaryDocs = db.collection("glossary_entries")
+                .whereEqualTo("teacherId", uid)
+                .get()
+                .await()
+            for (doc in glossaryDocs.documents) {
+                batch.update(
+                    doc.reference,
+                    mapOf(
+                        "approvedStudentIds" to FieldValue.arrayUnion(enrollment.studentId),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+            }
+
             val notifRef = db.collection("student_notifications").document()
             batch.set(
                 notifRef,
@@ -851,6 +1062,20 @@ class SvtRepository(private val db: FirebaseFirestore) {
                         )
                     )
                 }
+            }
+
+            val glossaryDocs = db.collection("glossary_entries")
+                .whereEqualTo("teacherId", uid)
+                .get()
+                .await()
+            for (doc in glossaryDocs.documents) {
+                batch.update(
+                    doc.reference,
+                    mapOf(
+                        "approvedStudentIds" to FieldValue.arrayRemove(studentId),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
             }
 
             val studentOwnedCollections = listOf(
@@ -1768,6 +1993,116 @@ class SvtRepository(private val db: FirebaseFirestore) {
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.UPDATE, "private_messages")
+        }
+    }
+
+    suspend fun deletePrivateMessage(messageId: String) {
+        requireUserId()
+        if (messageId.isBlank()) return
+        val docRef = db.collection("private_messages").document(messageId)
+        try {
+            docRef.delete().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docRef.path)
+            throw e
+        }
+    }
+
+    // ---------------------------------------------------------
+    // 7b. Teacher Custom Glossary Notions
+    // ---------------------------------------------------------
+    fun observeTeacherGlossaryEntries(teacherId: String): Flow<List<CustomGlossaryEntry>> = flow {
+        db.collection("glossary_entries")
+            .whereEqualTo("teacherId", teacherId)
+            .snapshots()
+            .map { snapshot ->
+                snapshot.toObjects(CustomGlossaryEntry::class.java, ServerTimestampBehavior.ESTIMATE)
+                    .sortedBy { it.term.lowercase(Locale.getDefault()) }
+            }
+            .logFirestoreErrors(OperationType.LIST, "glossary_entries", teacherId)
+            .collect { emit(it) }
+    }
+
+    fun observeStudentGlossaryEntries(studentId: String): Flow<List<CustomGlossaryEntry>> = flow {
+        db.collection("glossary_entries")
+            .whereArrayContains("approvedStudentIds", studentId)
+            .snapshots()
+            .map { snapshot ->
+                snapshot.toObjects(CustomGlossaryEntry::class.java, ServerTimestampBehavior.ESTIMATE)
+                    .sortedBy { it.term.lowercase(Locale.getDefault()) }
+            }
+            .logFirestoreErrors(OperationType.LIST, "glossary_entries", studentId)
+            .collect { emit(it) }
+    }
+
+    suspend fun createCustomGlossaryEntry(
+        teacherName: String,
+        domain: String,
+        term: String,
+        definition: String,
+        keyHint: String,
+        keywords: List<String>,
+        approvedStudentIds: List<String>
+    ): CustomGlossaryEntry {
+        val uid = requireUserId()
+        val entryId = "gloss_${UUID.randomUUID().toString().take(8)}"
+        val cleanTeacher = teacherName.trim().ifBlank { "Professeur" }.take(120)
+        val cleanDomain = domain.trim().takeIf { it in SvtClass.DEFAULT_LAB_DOMAINS } ?: "NERVOUS_MUSCULAR"
+        val cleanTerm = term.trim().take(120)
+        val cleanDef = definition.trim().take(1500)
+        val cleanHint = keyHint.trim().take(400)
+        val cleanKeywords = keywords.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(15)
+        val cleanStudents = approvedStudentIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(500)
+        require(cleanTerm.length >= 2 && cleanDef.length >= 4) {
+            "Term and definition are required"
+        }
+        val docRef = db.collection("glossary_entries").document(entryId)
+        val payload = mapOf(
+            "teacherId" to uid,
+            "teacherName" to cleanTeacher,
+            "domain" to cleanDomain,
+            "term" to cleanTerm,
+            "definition" to cleanDef,
+            "keyHint" to cleanHint,
+            "keywords" to cleanKeywords,
+            "approvedStudentIds" to cleanStudents,
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        try {
+            docRef.set(payload).await()
+            return CustomGlossaryEntry(
+                id = entryId,
+                teacherId = uid,
+                teacherName = cleanTeacher,
+                domain = cleanDomain,
+                term = cleanTerm,
+                definition = cleanDef,
+                keyHint = cleanHint,
+                keywords = cleanKeywords,
+                approvedStudentIds = cleanStudents
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, docRef.path)
+            throw e
+        }
+    }
+
+    suspend fun deleteCustomGlossaryEntry(entryId: String) {
+        requireUserId()
+        if (entryId.isBlank()) return
+        val docRef = db.collection("glossary_entries").document(entryId)
+        try {
+            docRef.delete().await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docRef.path)
+            throw e
         }
     }
 

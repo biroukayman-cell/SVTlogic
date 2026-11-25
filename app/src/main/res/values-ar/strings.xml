@@ -810,4 +810,86 @@
     <string name="biometric_disabled_toast">تم إيقاف تسجيل الدخول بالبصمة.</string>
     <string name="biometric_credentials_expired">تم تغيير كلمة المرور. سجل الدخول مرة واحدة بكلمة المرور لتحديث البصمة.</string>
     <string name="biometric_unlock_button">فتح القفل بالبصمة</string>
+
+    <!-- تنظيم فضاء الأستاذ: المؤسسات، اللوائح المرتبة، المعجم، الرسائل، والجهاز العصبي والعضلي -->
+    <string name="teacher_dashboard_manage_tab">المؤسسات والأقسام</string>
+    <string name="teacher_profile_tab_overview">الملف الشخصي</string>
+    <string name="teacher_profile_tab_institutions">المؤسسات والأقسام</string>
+    <string name="teacher_profile_tab_security">الأمان والتطبيق</string>
+    <string name="teacher_profile_tab_legal">القانون والإدارة</string>
+
+    <string name="establishments_section_title">المؤسسات التعليمية</string>
+    <string name="establishments_section_subtitle">أنشئ مؤسساتك التعليمية واكتب اسم كل مؤسسة وأضف داخلها أقسامك.</string>
+    <string name="establishment_all_filter">الكل (%1$d)</string>
+    <string name="establishment_unassigned_filter">بدون مؤسسة (%1$d)</string>
+    <string name="establishment_new_button">مؤسسة جديدة</string>
+    <string name="establishment_create_dialog_title">إنشاء مؤسسة</string>
+    <string name="establishment_edit_dialog_title">تعديل المؤسسة</string>
+    <string name="establishment_name_label">اسم المؤسسة (مثال: ثانوية ابن سينا)</string>
+    <string name="establishment_city_label">المدينة / المديرية (اختياري)</string>
+    <string name="establishment_name_required">أدخل اسم مؤسسة من حرفين على الأقل.</string>
+    <string name="establishment_created_success">تم إنشاء المؤسسة «%1$s».</string>
+    <string name="establishment_updated_success">تم تحديث المؤسسة «%1$s».</string>
+    <string name="establishment_deleted_success">تم حذف المؤسسة «%1$s».</string>
+    <string name="establishment_delete_confirm_title">حذف المؤسسة؟</string>
+    <string name="establishment_delete_confirm_body">سيتم حذف المؤسسة «%1$s» مع الإبقاء على أقسامها دون مؤسسة مرتبطة.</string>
+    <string name="establishment_empty_state">لا توجد مؤسسة مضافة بعد. أنشئ مؤسسة لتنظيم أقسامك داخلها.</string>
+    <string name="establishment_classes_count">%1$d قسم</string>
+    <string name="establishment_add_class_inside">إضافة قسم هنا</string>
+    <string name="establishment_none_chip">بدون مؤسسة</string>
+    <string name="class_establishment_picker_label">المؤسسة المرتبطة</string>
+    <string name="class_edit_button">تعديل</string>
+    <string name="class_edit_dialog_title">تعديل القسم</string>
+    <string name="class_updated_success">تم تحديث القسم «%1$s».</string>
+    <string name="class_unassigned_badge">بدون مؤسسة</string>
+
+    <string name="student_list_sort_name">الاسم أ←ي</string>
+    <string name="student_list_sort_score">النقطة ↓</string>
+    <string name="student_list_sort_massar">مسار</string>
+    <string name="student_list_scroll_up">تمرير اللائحة للأعلى</string>
+    <string name="student_list_scroll_down">تمرير اللائحة للأسفل</string>
+    <string name="student_list_range_indicator">%1$d–%2$d / %3$d</string>
+
+    <string name="message_delete_action">حذف الرسالة</string>
+    <string name="message_delete_confirm_title">حذف هذه الرسالة؟</string>
+    <string name="message_delete_confirm_body">سيتم حذف هذه الرسالة نهائياً من المحادثة.</string>
+    <string name="message_deleted_success">تم حذف الرسالة.</string>
+
+    <string name="teacher_kpi_participation">مشاركة QCM</string>
+    <string name="teacher_kpi_participation_sub">%1$d / %2$d نشط • المعدل %3$s</string>
+    <string name="teacher_attention_card_title">تتبع وتنبيهات القسم</string>
+    <string name="teacher_attention_struggling_title">تلاميذ بحاجة للدعم (&lt; 50%%)</string>
+    <string name="teacher_attention_inactive_title">تلاميذ بدون أي QCM منجز</string>
+    <string name="teacher_attention_all_good">جميع التلاميذ النشطين حققوا 50%% فأكثر!</string>
+    <string name="teacher_attention_message_btn">مراسلة</string>
+    <string name="teacher_pending_alert_banner">%1$d طلب(ات) انضمام في انتظار المصادقة</string>
+    <string name="teacher_pending_alert_action">تسيير</string>
+
+    <string name="glossary_add_notion_btn">إضافة مفهوم</string>
+    <string name="glossary_add_dialog_title">مفهوم جديد في المعجم</string>
+    <string name="glossary_notion_domain_label">محور علوم الحياة والأرض</string>
+    <string name="glossary_notion_term_label">المصطلح / المفهوم (مثال: الصفيحة المحركة)</string>
+    <string name="glossary_notion_def_label">تعريف علمي واضح</string>
+    <string name="glossary_notion_hint_label">خلاصة / نصيحة للامتحان (اختياري)</string>
+    <string name="glossary_notion_keywords_label">كلمات مفتاحية مفصولة بفاصلة</string>
+    <string name="glossary_prof_badge">الأستاذ</string>
+    <string name="glossary_delete_notion_cd">حذف هذا المفهوم</string>
+    <string name="glossary_add_validation_error">المصطلح (حرفان+) والتعريف (4 أحرف+) مطلوبان.</string>
+    <string name="glossary_added_success">تمت إضافة «%1$s» إلى المعجم.</string>
+    <string name="glossary_deleted_success">تم حذف المفهوم من المعجم.</string>
+
+    <string name="theme_palette_nervous_muscular">الجهاز العصبي والعضلي</string>
+    <string name="svt_tool_chip_nervous_muscular">العصبي والعضلي</string>
+    <string name="svt_tool_neuro_title">محاكي السيالة العصبية والتقلص العضلي</string>
+    <string name="svt_tool_neuro_desc">اختبر قانون الكل أو اللاشيء، التوصيل النخاعيني وانزلاق خييطات الأكتين والميوزين.</string>
+    <string name="svt_tool_neuro_stimulus">شدة الإهاجة: %1$d mV (العتبة: %2$d mV)</string>
+    <string name="svt_tool_neuro_myelin">ليف نخاعيني (توصيل قافز)</string>
+    <string name="svt_tool_neuro_calcium">توفر أيونات Ca²⁺</string>
+    <string name="svt_tool_neuro_atp">مخزون ATP: %1$d%%</string>
+    <string name="svt_tool_neuro_ap_yes">جهد عمل (+30 mV) • %1$s م/ث</string>
+    <string name="svt_tool_neuro_ap_no">دون العتبة (%1$d mV) • لا جهد عمل (0 م/ث)</string>
+    <string name="svt_tool_neuro_state_contracting">تقلص نشيط: قناطر الأكتوميوزين • الساركومير -%1$d%%</string>
+    <string name="svt_tool_neuro_state_subthreshold">كمون الراحة (-70 mV): الإهاجة غير كافية لفتح قنوات Na⁺</string>
+    <string name="svt_tool_neuro_state_no_ca">توقف عند السينابس/التروبونين: نقص Ca²⁺</string>
+    <string name="svt_tool_neuro_state_no_atp">تعب عضلي: نقص ATP لدوران رؤوس الميوزين</string>
 </resources>

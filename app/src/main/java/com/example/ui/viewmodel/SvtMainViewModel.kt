@@ -26,7 +26,9 @@ import com.example.data.badges.SvtBadgeDefinition
 import com.example.data.model.Announcement
 import com.example.data.model.AppUpdateRelease
 import com.example.data.model.CourseResource
+import com.example.data.model.CustomGlossaryEntry
 import com.example.data.model.Enrollment
+import com.example.data.model.Establishment
 import com.example.data.model.PrivateMessage
 import com.example.data.model.QuestionAnswerRecord
 import com.example.data.model.Quiz
@@ -293,6 +295,18 @@ class SvtMainViewModel(
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
+    val teacherEstablishments: StateFlow<List<Establishment>> = roleFlow.flatMapLatest { role ->
+        if (role == "teacher") repository.observeTeacherEstablishments(currentUserId)
+            .catch { emit(emptyList()) }
+        else flowOf(emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    val teacherCustomGlossary: StateFlow<List<CustomGlossaryEntry>> = roleFlow.flatMapLatest { role ->
+        if (role == "teacher") repository.observeTeacherGlossaryEntries(currentUserId)
+            .catch { emit(emptyList()) }
+        else flowOf(emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
     // Student streams
     val studentRoster: StateFlow<RosterStudent?> = repository.observeStudentRoster(currentUserId)
         .catch { emit(null) }
@@ -420,6 +434,11 @@ class SvtMainViewModel(
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
+    val studentCustomGlossary: StateFlow<List<CustomGlossaryEntry>> = isApprovedStudent.flatMapLatest { approved ->
+        if (approved) repository.observeStudentGlossaryEntries(currentUserId).catch { emit(emptyList()) }
+        else flowOf(emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
     val studentNotifications: StateFlow<List<StudentNotification>> = roleFlow.flatMapLatest { role ->
         if (role == "student") repository.observeStudentNotifications(currentUserId)
             .catch { emit(emptyList()) }
@@ -439,6 +458,19 @@ class SvtMainViewModel(
             else -> flowOf(emptyList())
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+
+    private val _selectedEstablishmentId = MutableStateFlow<String?>(null)
+    val selectedEstablishmentId: StateFlow<String?> = combine(
+        teacherEstablishments,
+        _selectedEstablishmentId
+    ) { establishments, chosen ->
+        when {
+            chosen == null -> null
+            chosen == TeacherAnalyticsLogic.UNASSIGNED_ESTABLISHMENT_FILTER -> chosen
+            establishments.any { it.id == chosen } -> chosen
+            else -> null
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
     private val _selectedClassId = MutableStateFlow<String?>(null)
     val selectedClassId: StateFlow<String?> = combine(teacherClasses, _selectedClassId) { classes, chosen ->
@@ -1152,11 +1184,125 @@ class SvtMainViewModel(
         }
     }
 
-    fun createClass(teacherName: String, name: String, level: String, academicYear: String) {
+    fun selectEstablishment(establishmentId: String?) {
+        _selectedEstablishmentId.value = establishmentId
+    }
+
+    fun createEstablishment(
+        uiContext: Context,
+        teacherName: String,
+        name: String,
+        city: String = "",
+        onCreated: (Establishment) -> Unit = {}
+    ) {
+        val cleanName = name.trim()
+        if (cleanName.length < 2) {
+            _actionError.value = uiContext.getString(R.string.establishment_name_required)
+            return
+        }
         viewModelScope.launch {
             try {
-                val created = repository.createClass(teacherName, name, level, academicYear)
+                val created = repository.createEstablishment(teacherName, cleanName, city)
+                _selectedEstablishmentId.value = created.id
+                _statusMessage.value = uiContext.getString(R.string.establishment_created_success, created.name)
+                onCreated(created)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun updateEstablishment(
+        uiContext: Context,
+        establishmentId: String,
+        name: String,
+        city: String = ""
+    ) {
+        val cleanName = name.trim()
+        if (cleanName.length < 2) {
+            _actionError.value = uiContext.getString(R.string.establishment_name_required)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                repository.updateEstablishment(establishmentId, cleanName, city)
+                _statusMessage.value = uiContext.getString(R.string.establishment_updated_success, cleanName)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun deleteEstablishment(uiContext: Context, establishment: Establishment) {
+        viewModelScope.launch {
+            try {
+                repository.deleteEstablishment(establishment.id)
+                if (_selectedEstablishmentId.value == establishment.id) {
+                    _selectedEstablishmentId.value = null
+                }
+                _statusMessage.value = uiContext.getString(R.string.establishment_deleted_success, establishment.name)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun createClass(
+        teacherName: String,
+        name: String,
+        level: String,
+        academicYear: String,
+        establishmentId: String = "",
+        establishmentName: String = ""
+    ) {
+        viewModelScope.launch {
+            try {
+                val created = repository.createClass(
+                    teacherName = teacherName,
+                    name = name,
+                    level = level,
+                    academicYear = academicYear,
+                    establishmentId = establishmentId,
+                    establishmentName = establishmentName
+                )
                 _selectedClassId.value = created.id
+                if (created.establishmentId.isNotBlank()) {
+                    _selectedEstablishmentId.value = created.establishmentId
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun updateClassDetails(
+        uiContext: Context,
+        svtClass: SvtClass,
+        name: String,
+        level: String,
+        academicYear: String,
+        establishmentId: String,
+        establishmentName: String
+    ) {
+        viewModelScope.launch {
+            try {
+                repository.updateClassDetails(
+                    svtClass = svtClass,
+                    name = name,
+                    level = level,
+                    academicYear = academicYear,
+                    establishmentId = establishmentId,
+                    establishmentName = establishmentName
+                )
+                _statusMessage.value = uiContext.getString(R.string.class_updated_success, name.trim())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -2013,6 +2159,83 @@ class SvtMainViewModel(
     fun markThreadRead(messages: List<PrivateMessage>) {
         viewModelScope.launch {
             repository.markMessagesAsRead(messages)
+        }
+    }
+
+    fun deletePrivateMessageAsTeacher(uiContext: Context, message: PrivateMessage) {
+        val profile = (profileState.value as? ProfileGateState.Ready)?.profile ?: return
+        if (profile.role != "teacher") return
+        viewModelScope.launch {
+            try {
+                repository.deletePrivateMessage(message.id)
+                _statusMessage.value = uiContext.getString(R.string.message_deleted_success)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun addCustomGlossaryEntry(
+        uiContext: Context,
+        domain: SvtDomain,
+        term: String,
+        definition: String,
+        keyHint: String,
+        keywordsRaw: String
+    ) {
+        val profile = (profileState.value as? ProfileGateState.Ready)?.profile ?: return
+        if (profile.role != "teacher") return
+        val cleanTerm = term.trim()
+        val cleanDef = definition.trim()
+        if (cleanTerm.length < 2 || cleanDef.length < 4) {
+            _actionError.value = uiContext.getString(R.string.glossary_add_validation_error)
+            return
+        }
+        val keywords = keywordsRaw
+            .split(',', ';', '\n')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .take(15)
+        val approvedIds = teacherEnrollments.value
+            .filter { it.status == "approved" }
+            .map { it.studentId }
+            .distinct()
+            .take(500)
+        viewModelScope.launch {
+            try {
+                repository.createCustomGlossaryEntry(
+                    teacherName = profile.fullName,
+                    domain = domain.name,
+                    term = cleanTerm,
+                    definition = cleanDef,
+                    keyHint = keyHint,
+                    keywords = keywords,
+                    approvedStudentIds = approvedIds
+                )
+                _statusMessage.value = uiContext.getString(R.string.glossary_added_success, cleanTerm)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
+        }
+    }
+
+    fun deleteCustomGlossaryEntry(uiContext: Context, entry: CustomGlossaryEntry) {
+        val profile = (profileState.value as? ProfileGateState.Ready)?.profile ?: return
+        if (profile.role != "teacher") return
+        viewModelScope.launch {
+            try {
+                repository.deleteCustomGlossaryEntry(entry.id)
+                _statusMessage.value = uiContext.getString(R.string.glossary_deleted_success)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _actionError.value = e.localizedMessage
+            }
         }
     }
 

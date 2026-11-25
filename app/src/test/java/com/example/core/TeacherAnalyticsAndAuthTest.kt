@@ -457,4 +457,58 @@ class TeacherAnalyticsAndAuthTest {
         assertEquals("Glucagon", hardest.commonWrongOptions.first().optionText)
         assertEquals(2, hardest.commonWrongOptions.first().count)
     }
+
+    @Test
+    fun `filterClassesByEstablishment supports all, unassigned, and specific establishment IDs`() {
+        val mixedClasses = listOf(
+            SvtClass(id = "c1", teacherId = "t1", name = "2BAC A", establishmentId = "est_1", establishmentName = "Lycée Ibn Sina"),
+            SvtClass(id = "c2", teacherId = "t1", name = "2BAC B", establishmentId = "est_2", establishmentName = "Lycée Al Khawarizmi"),
+            SvtClass(id = "c3", teacherId = "t1", name = "1BAC C", establishmentId = "")
+        )
+
+        assertEquals(3, TeacherAnalyticsLogic.filterClassesByEstablishment(mixedClasses, null).size)
+        assertEquals(3, TeacherAnalyticsLogic.filterClassesByEstablishment(mixedClasses, "  ").size)
+
+        val est1 = TeacherAnalyticsLogic.filterClassesByEstablishment(mixedClasses, "est_1")
+        assertEquals(listOf("c1"), est1.map { it.id })
+
+        val unassigned = TeacherAnalyticsLogic.filterClassesByEstablishment(
+            mixedClasses,
+            TeacherAnalyticsLogic.UNASSIGNED_ESTABLISHMENT_FILTER
+        )
+        assertEquals(listOf("c3"), unassigned.map { it.id })
+    }
+
+    @Test
+    fun `computeAdvancedMetrics computes participation rate, average quiz duration, struggling and inactive students`() {
+        val advEnrollments = listOf(
+            Enrollment(id = "e1", studentId = "s1", classId = "c1", studentName = "Salma", massarNumber = "J1001", status = "approved"),
+            Enrollment(id = "e2", studentId = "s2", classId = "c1", studentName = "Youssef", massarNumber = "J1002", status = "approved"),
+            Enrollment(id = "e3", studentId = "s3", classId = "c1", studentName = "Karim", massarNumber = "J1003", status = "approved")
+        )
+        val advAttempts = listOf(
+            QuizAttempt(id = "a1", quizId = "q1", classId = "c1", studentId = "s1", studentName = "Salma", score = 9.0, maxScore = 10.0, totalDurationSeconds = 100L),
+            QuizAttempt(id = "a2", quizId = "q1", classId = "c1", studentId = "s2", studentName = "Youssef", score = 3.0, maxScore = 10.0, totalDurationSeconds = 200L)
+        )
+
+        val metrics = TeacherAnalyticsLogic.computeAdvancedMetrics(
+            classes = classes,
+            enrollments = advEnrollments,
+            roster = emptyList(),
+            quizzes = quizzes,
+            attempts = advAttempts,
+            filterClassId = "c1"
+        )
+
+        // 2 active out of 3 tracked students -> 67%
+        assertEquals(3, metrics.totalTrackedStudents)
+        assertEquals(2, metrics.activeStudentsCount)
+        assertEquals(67, metrics.participationRatePct)
+        assertEquals(150, metrics.averageQuizDurationSeconds)
+        assertEquals(1, metrics.strongStudentsCount)
+        assertEquals(listOf("s2"), metrics.strugglingStudents.map { it.studentId })
+        assertEquals(listOf("s3"), metrics.inactiveStudents.map { it.studentId })
+        assertTrue(metrics.inactiveStudents.first().isInactive)
+    }
 }
+

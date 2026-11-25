@@ -18,7 +18,8 @@ enum class AppThemePalette(val key: String) {
     EMERALD("emerald"),
     OCEAN("ocean"),
     EARTH("earth"),
-    BOTANICAL("botanical");
+    BOTANICAL("botanical"),
+    NERVOUS_MUSCULAR("nervous_muscular");
 
     companion object {
         fun fromKey(key: String?): AppThemePalette {

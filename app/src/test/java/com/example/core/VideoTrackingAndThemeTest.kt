@@ -114,6 +114,8 @@ class VideoTrackingAndThemeTest {
         assertEquals(AppThemePalette.OCEAN, AppThemePalette.fromKey("ocean"))
         assertEquals(AppThemePalette.EARTH, AppThemePalette.fromKey("earth"))
         assertEquals(AppThemePalette.BOTANICAL, AppThemePalette.fromKey("botanical"))
+        assertEquals(AppThemePalette.NERVOUS_MUSCULAR, AppThemePalette.fromKey("nervous_muscular"))
         assertEquals(AppThemePalette.EMERALD, AppThemePalette.fromKey(null))
     }
 }
+

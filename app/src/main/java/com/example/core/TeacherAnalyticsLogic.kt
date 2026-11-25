@@ -833,4 +833,123 @@ object TeacherAnalyticsLogic {
             questionErrorMetrics = questionMetrics
         )
     }
+
+    const val UNASSIGNED_ESTABLISHMENT_FILTER = "__UNASSIGNED__"
+
+    fun filterClassesByEstablishment(
+        classes: List<SvtClass>,
+        establishmentId: String?
+    ): List<SvtClass> {
+        return when {
+            establishmentId.isNullOrBlank() -> classes
+            establishmentId == UNASSIGNED_ESTABLISHMENT_FILTER ->
+                classes.filter { it.establishmentId.isBlank() }
+            else -> classes.filter { it.establishmentId == establishmentId }
+        }
+    }
+
+    data class TeacherAttentionStudent(
+        val studentId: String,
+        val studentName: String,
+        val massarNumber: String,
+        val classId: String,
+        val className: String,
+        val overallPercentage: Int,
+        val quizzesTakenCount: Int,
+        val totalClassQuizzesCount: Int,
+        val isInactive: Boolean
+    )
+
+    data class TeacherAdvancedMetrics(
+        val participationRatePct: Int,
+        val activeStudentsCount: Int,
+        val totalTrackedStudents: Int,
+        val averageQuizDurationSeconds: Int,
+        val strugglingStudents: List<TeacherAttentionStudent>,
+        val inactiveStudents: List<TeacherAttentionStudent>,
+        val strongStudentsCount: Int
+    )
+
+    fun computeAdvancedMetrics(
+        classes: List<SvtClass>,
+        enrollments: List<Enrollment>,
+        roster: List<RosterStudent>,
+        quizzes: List<Quiz>,
+        attempts: List<QuizAttempt>,
+        filterClassId: String? = null
+    ): TeacherAdvancedMetrics {
+        val studentResults = computeStudentQcmResults(
+            classes = classes,
+            enrollments = enrollments,
+            roster = roster,
+            quizzes = quizzes,
+            attempts = attempts,
+            filterClassId = filterClassId
+        )
+        val totalStudents = studentResults.size
+        val active = studentResults.filter { it.quizzesTakenCount > 0 }
+        val participationPct = if (totalStudents > 0) {
+            ((active.size.toDouble() / totalStudents.toDouble()) * 100.0).roundToInt().coerceIn(0, 100)
+        } else {
+            0
+        }
+
+        val targetClassIds = if (filterClassId.isNullOrBlank()) {
+            classes.map { it.id }.toSet()
+        } else {
+            setOf(filterClassId)
+        }
+        val scopedAttempts = attempts.filter { it.classId in targetClassIds && it.totalDurationSeconds > 0L }
+        val avgDurationSec = if (scopedAttempts.isEmpty()) {
+            0
+        } else {
+            scopedAttempts.map { it.totalDurationSeconds }.average().roundToInt()
+        }
+
+        val struggling = active
+            .filter { it.overallPercentage < 50 }
+            .sortedWith(compareBy<StudentQcmResultSummary> { it.overallPercentage }.thenBy { it.studentName.lowercase() })
+            .map {
+                TeacherAttentionStudent(
+                    studentId = it.studentId,
+                    studentName = it.studentName,
+                    massarNumber = it.massarNumber,
+                    classId = it.classId,
+                    className = it.className,
+                    overallPercentage = it.overallPercentage,
+                    quizzesTakenCount = it.quizzesTakenCount,
+                    totalClassQuizzesCount = it.totalClassQuizzesCount,
+                    isInactive = false
+                )
+            }
+
+        val inactive = studentResults
+            .filter { it.quizzesTakenCount == 0 && it.totalClassQuizzesCount > 0 }
+            .sortedWith(compareBy<StudentQcmResultSummary> { it.className.lowercase() }.thenBy { it.studentName.lowercase() })
+            .map {
+                TeacherAttentionStudent(
+                    studentId = it.studentId,
+                    studentName = it.studentName,
+                    massarNumber = it.massarNumber,
+                    classId = it.classId,
+                    className = it.className,
+                    overallPercentage = 0,
+                    quizzesTakenCount = 0,
+                    totalClassQuizzesCount = it.totalClassQuizzesCount,
+                    isInactive = true
+                )
+            }
+
+        val strongCount = active.count { it.overallPercentage >= 70 }
+
+        return TeacherAdvancedMetrics(
+            participationRatePct = participationPct,
+            activeStudentsCount = active.size,
+            totalTrackedStudents = totalStudents,
+            averageQuizDurationSeconds = avgDurationSec,
+            strugglingStudents = struggling,
+            inactiveStudents = inactive,
+            strongStudentsCount = strongCount
+        )
+    }
 }

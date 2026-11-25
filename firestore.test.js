@@ -1086,6 +1086,142 @@ test("Teacher registration requires fields + pending approval, admin biroukayman
   );
 });
 
+test("Private messaging deletion: ONLY teacher can delete messages, student cannot delete", async () => {
+  const teacherDb = testEnv.authenticatedContext(TEACHER_UID).firestore();
+  const studentADb = testEnv.authenticatedContext(STUDENT_A_UID).firestore();
+  const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
+  const now = serverNow();
 
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().collection("private_messages").doc("msg_del_1").set({
+      classId: "class_1",
+      teacherId: TEACHER_UID,
+      studentId: STUDENT_A_UID,
+      studentName: "Amina",
+      senderId: STUDENT_A_UID,
+      senderRole: "student",
+      content: "Question de cours",
+      isRead: false,
+      createdAt: now,
+    });
+  });
 
+  // Neither Student A nor Student B can delete the message
+  await assertFails(studentADb.collection("private_messages").doc("msg_del_1").delete());
+  await assertFails(studentBDb.collection("private_messages").doc("msg_del_1").delete());
 
+  // Teacher CAN delete the message
+  await assertSucceeds(teacherDb.collection("private_messages").doc("msg_del_1").delete());
+});
+
+test("Establishments & custom glossary entries: teacher owns establishments/glossary, approved students read glossary only", async () => {
+  const teacherDb = testEnv.authenticatedContext(TEACHER_UID).firestore();
+  const otherTeacherDb = testEnv.authenticatedContext("other_teacher_2").firestore();
+  const studentADb = testEnv.authenticatedContext(STUDENT_A_UID).firestore();
+  const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
+  const now = serverNow();
+
+  await seedApprovedTeacher(TEACHER_UID);
+  await seedApprovedTeacher("other_teacher_2");
+
+  // Teacher creates an establishment
+  await assertSucceeds(
+    teacherDb.collection("establishments").doc("est_1").set({
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      name: "Lycée Ibn Rochd",
+      city: "Casablanca",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Student cannot create or read teacher establishments
+  await assertFails(studentADb.collection("establishments").doc("est_1").get());
+  await assertFails(
+    studentADb.collection("establishments").doc("est_fake").set({
+      teacherId: STUDENT_A_UID,
+      teacherName: "Amina",
+      name: "Fake School",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  // Another teacher cannot read or modify est_1
+  await assertFails(otherTeacherDb.collection("establishments").doc("est_1").get());
+  await assertFails(
+    otherTeacherDb.collection("establishments").doc("est_1").update({
+      name: "Hijacked",
+      updatedAt: now,
+    })
+  );
+
+  // Teacher creates a class inside establishment and updates class name / establishment
+  await assertSucceeds(
+    teacherDb.collection("classes").doc("cls_est_1").set({
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      name: "2Bac PC 1",
+      academicYear: "2026-2027",
+      level: "2ème Bac",
+      qrToken: "SVT_EST_1",
+      establishmentId: "est_1",
+      establishmentName: "Lycée Ibn Rochd",
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(
+    teacherDb.collection("class_codes").doc("SVT_EST_1").set({
+      classId: "cls_est_1",
+      className: "2Bac PC 1",
+      academicYear: "2026-2027",
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      createdAt: now,
+    })
+  );
+  await assertSucceeds(
+    teacherDb.collection("classes").doc("cls_est_1").update({
+      name: "2Bac PC 1 - Bio",
+      establishmentId: "est_1",
+      establishmentName: "Lycée Ibn Rochd",
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(
+    teacherDb.collection("class_codes").doc("SVT_EST_1").update({
+      className: "2Bac PC 1 - Bio",
+    })
+  );
+
+  // Teacher creates a custom glossary notion shared with approved Student A
+  await assertSucceeds(
+    teacherDb.collection("glossary_entries").doc("gloss_1").set({
+      teacherId: TEACHER_UID,
+      teacherName: "Prof. Karim",
+      domain: "NERVOUS_MUSCULAR",
+      term: "Plaque motrice",
+      definition: "Synapse neuromusculaire entre un motoneurone et une fibre musculaire striée.",
+      keyHint: "Acétylcholine + Ca²⁺ déclenchent le potentiel d'action musculaire.",
+      keywords: ["synapse", "muscle", "acetylcholine"],
+      approvedStudentIds: [STUDENT_A_UID],
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  // Approved Student A can list glossary entries with aligned query; unapproved Student B cannot
+  await assertSucceeds(
+    studentADb.collection("glossary_entries")
+      .where("approvedStudentIds", "array-contains", STUDENT_A_UID)
+      .get()
+  );
+  await assertFails(
+    studentBDb.collection("glossary_entries")
+      .where("approvedStudentIds", "array-contains", STUDENT_A_UID)
+      .get()
+  );
+  await assertFails(studentBDb.collection("glossary_entries").doc("gloss_1").get());
+  await assertFails(studentADb.collection("glossary_entries").doc("gloss_1").delete());
+});

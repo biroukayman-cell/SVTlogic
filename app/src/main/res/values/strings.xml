@@ -810,4 +810,86 @@
     <string name="biometric_disabled_toast">Connexion par empreinte digitale désactivée.</string>
     <string name="biometric_credentials_expired">Votre mot de passe a changé. Reconnectez-vous une fois avec votre mot de passe pour réactiver l\'empreinte digitale.</string>
     <string name="biometric_unlock_button">Déverrouiller par empreinte</string>
+
+    <!-- Organisation Professeur : Établissements, Listes ordonnées, Glossaire Prof, Messagerie & Système nerveux/musculaire -->
+    <string name="teacher_dashboard_manage_tab">Établissements &amp; Classes</string>
+    <string name="teacher_profile_tab_overview">Profil</string>
+    <string name="teacher_profile_tab_institutions">Établissements &amp; Classes</string>
+    <string name="teacher_profile_tab_security">Sécurité &amp; App</string>
+    <string name="teacher_profile_tab_legal">Légal &amp; Admin</string>
+
+    <string name="establishments_section_title">Établissements scolaires</string>
+    <string name="establishments_section_subtitle">Créez vos établissements, saisissez leur nom et rattachez-y vos classes.</string>
+    <string name="establishment_all_filter">Tous (%1$d)</string>
+    <string name="establishment_unassigned_filter">Sans établissement (%1$d)</string>
+    <string name="establishment_new_button">Nouvel établissement</string>
+    <string name="establishment_create_dialog_title">Créer un établissement</string>
+    <string name="establishment_edit_dialog_title">Modifier l\'établissement</string>
+    <string name="establishment_name_label">Nom de l\'établissement (ex: Lycée Ibn Sina)</string>
+    <string name="establishment_city_label">Ville / Académie (optionnel)</string>
+    <string name="establishment_name_required">Saisissez un nom d\'établissement d\'au moins 2 caractères.</string>
+    <string name="establishment_created_success">Établissement « %1$s » créé.</string>
+    <string name="establishment_updated_success">Établissement « %1$s » mis à jour.</string>
+    <string name="establishment_deleted_success">Établissement « %1$s » supprimé.</string>
+    <string name="establishment_delete_confirm_title">Supprimer l\'établissement ?</string>
+    <string name="establishment_delete_confirm_body">L\'établissement « %1$s » sera supprimé. Ses classes resteront conservées sans établissement rattaché.</string>
+    <string name="establishment_empty_state">Aucun établissement créé. Créez un établissement pour y organiser vos classes.</string>
+    <string name="establishment_classes_count">%1$d classe(s)</string>
+    <string name="establishment_add_class_inside">Ajouter une classe ici</string>
+    <string name="establishment_none_chip">Aucun établissement</string>
+    <string name="class_establishment_picker_label">Établissement de rattachement</string>
+    <string name="class_edit_button">Modifier</string>
+    <string name="class_edit_dialog_title">Modifier la classe</string>
+    <string name="class_updated_success">Classe « %1$s » mise à jour.</string>
+    <string name="class_unassigned_badge">Sans établissement</string>
+
+    <string name="student_list_sort_name">Nom A→Z</string>
+    <string name="student_list_sort_score">Score ↓</string>
+    <string name="student_list_sort_massar">Massar</string>
+    <string name="student_list_scroll_up">Défiler la liste vers le haut</string>
+    <string name="student_list_scroll_down">Défiler la liste vers le bas</string>
+    <string name="student_list_range_indicator">%1$d–%2$d / %3$d</string>
+
+    <string name="message_delete_action">Supprimer le message</string>
+    <string name="message_delete_confirm_title">Supprimer ce message ?</string>
+    <string name="message_delete_confirm_body">Ce message sera définitivement supprimé de la conversation.</string>
+    <string name="message_deleted_success">Message supprimé.</string>
+
+    <string name="teacher_kpi_participation">Participation QCM</string>
+    <string name="teacher_kpi_participation_sub">%1$d / %2$d actifs • Moy. %3$s</string>
+    <string name="teacher_attention_card_title">Suivi &amp; Alertes de classe</string>
+    <string name="teacher_attention_struggling_title">Élèves en difficulté (&lt; 50%%)</string>
+    <string name="teacher_attention_inactive_title">Élèves sans QCM effectué</string>
+    <string name="teacher_attention_all_good">Tous les élèves actifs ont au moins 50%% de réussite !</string>
+    <string name="teacher_attention_message_btn">Contacter</string>
+    <string name="teacher_pending_alert_banner">%1$d demande(s) d\'inscription en attente de validation</string>
+    <string name="teacher_pending_alert_action">Gérer</string>
+
+    <string name="glossary_add_notion_btn">Ajouter une notion</string>
+    <string name="glossary_add_dialog_title">Nouvelle notion du glossaire</string>
+    <string name="glossary_notion_domain_label">Thème SVT</string>
+    <string name="glossary_notion_term_label">Terme / Notion (ex: Plaque motrice)</string>
+    <string name="glossary_notion_def_label">Définition scientifique claire</string>
+    <string name="glossary_notion_hint_label">Point clé / Astuce bac (optionnel)</string>
+    <string name="glossary_notion_keywords_label">Mots-clés séparés par des virgules</string>
+    <string name="glossary_prof_badge">Prof</string>
+    <string name="glossary_delete_notion_cd">Supprimer cette notion</string>
+    <string name="glossary_add_validation_error">Le terme (2+ car.) et la définition (4+ car.) sont obligatoires.</string>
+    <string name="glossary_added_success">Notion « %1$s » ajoutée au glossaire.</string>
+    <string name="glossary_deleted_success">Notion supprimée du glossaire.</string>
+
+    <string name="theme_palette_nervous_muscular">Système nerveux &amp; musculaire</string>
+    <string name="svt_tool_chip_nervous_muscular">Système nerveux &amp; musculaire</string>
+    <string name="svt_tool_neuro_title">Simulateur Influx nerveux &amp; Contraction musculaire</string>
+    <string name="svt_tool_neuro_desc">Testez la loi du tout ou rien, la conduction myélinisée et le glissement actine–myosine du sarcomère.</string>
+    <string name="svt_tool_neuro_stimulus">Intensité de stimulation : %1$d mV (Seuil : %2$d mV)</string>
+    <string name="svt_tool_neuro_myelin">Fibre myélinisée (conduction saltatoire)</string>
+    <string name="svt_tool_neuro_calcium">Disponibilité des ions Ca²⁺</string>
+    <string name="svt_tool_neuro_atp">Réserve en ATP : %1$d%%</string>
+    <string name="svt_tool_neuro_ap_yes">Potentiel d\'action (+30 mV) • %1$s m/s</string>
+    <string name="svt_tool_neuro_ap_no">Sous-liminaire (%1$d mV) • Pas de PA (0 m/s)</string>
+    <string name="svt_tool_neuro_state_contracting">Contraction active : ponts actomyosine • Sarcomère -%1$d%%</string>
+    <string name="svt_tool_neuro_state_subthreshold">Repos (-70 mV) : stimulation insuffisante pour ouvrir les canaux Na⁺</string>
+    <string name="svt_tool_neuro_state_no_ca">Blocage synaptique/troponine : manque de Ca²⁺</string>
+    <string name="svt_tool_neuro_state_no_atp">Fatigue musculaire : manque d\'ATP pour le pivotement de la myosine</string>
 </resources>

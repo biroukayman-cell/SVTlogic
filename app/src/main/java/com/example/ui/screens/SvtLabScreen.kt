@@ -35,12 +35,14 @@ import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.NavigateBefore
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Biotech
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Lightbulb
@@ -97,9 +99,13 @@ import com.example.core.AppLanguage
 import com.example.core.BiologicalScaleHint
 import com.example.core.QrCodeUtils
 import com.example.core.SvtLabLogic
+import com.example.data.model.CustomGlossaryEntry
 import com.example.data.model.SvtClass
+import com.example.data.svt.LocalizedSvtText
 import com.example.data.svt.SvtDomain
+import com.example.data.svt.SvtGlossaryEntry
 import com.example.data.svt.SvtKnowledgeCatalog
+import com.example.ui.components.AddGlossaryNotionDialog
 import com.example.ui.components.SvtFactOfTheDayBanner
 import com.example.ui.components.SvtHeroBannerCard
 import com.example.ui.theme.SvtCoralError
@@ -222,6 +228,9 @@ fun SvtLabTabScreen(
     onSearchLabSvtTerm: (String) -> Unit,
     onClearLabSvtSearch: () -> Unit,
     onUpdateClassLabDomains: (classId: String, domains: List<String>) -> Unit,
+    customGlossaryEntries: List<CustomGlossaryEntry> = emptyList(),
+    onAddCustomGlossaryEntry: (SvtDomain, String, String, String, String) -> Unit = { _, _, _, _, _ -> },
+    onDeleteCustomGlossaryEntry: (CustomGlossaryEntry) -> Unit = {},
     isGuestMode: Boolean = false,
     onGuestBlocked: () -> Unit = {}
 ) {
@@ -356,6 +365,7 @@ fun SvtLabTabScreen(
             ) { tab ->
                 when (tab) {
                     SvtLabTab.GLOSSARY -> GlossaryLabSection(
+                        isTeacher = isTeacher,
                         isOnline = isOnline,
                         isGuestMode = isGuestMode,
                         onGuestBlocked = onGuestBlocked,
@@ -363,7 +373,10 @@ fun SvtLabTabScreen(
                         allowedDomains = effectiveDomains,
                         labSvtSearchState = labSvtSearchState,
                         onSearchLabSvtTerm = onSearchLabSvtTerm,
-                        onClearLabSvtSearch = onClearLabSvtSearch
+                        onClearLabSvtSearch = onClearLabSvtSearch,
+                        customGlossaryEntries = customGlossaryEntries,
+                        onAddCustomGlossaryEntry = onAddCustomGlossaryEntry,
+                        onDeleteCustomGlossaryEntry = onDeleteCustomGlossaryEntry
                     )
                     SvtLabTab.MIND_MAPS -> SvtMindMapsLabSection(
                         currentLanguage = currentLanguage,
@@ -418,6 +431,7 @@ private fun SvtDomainFilterRow(
 
 @Composable
 private fun GlossaryLabSection(
+    isTeacher: Boolean = false,
     isOnline: Boolean,
     isGuestMode: Boolean = false,
     onGuestBlocked: () -> Unit = {},
@@ -425,11 +439,16 @@ private fun GlossaryLabSection(
     allowedDomains: Set<SvtDomain>,
     labSvtSearchState: LabSvtSearchState,
     onSearchLabSvtTerm: (String) -> Unit,
-    onClearLabSvtSearch: () -> Unit
+    onClearLabSvtSearch: () -> Unit,
+    customGlossaryEntries: List<CustomGlossaryEntry> = emptyList(),
+    onAddCustomGlossaryEntry: (SvtDomain, String, String, String, String) -> Unit = { _, _, _, _, _ -> },
+    onDeleteCustomGlossaryEntry: (CustomGlossaryEntry) -> Unit = {}
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     var query by rememberSaveable { mutableStateOf("") }
     var selectedDomainName by rememberSaveable { mutableStateOf<String?>(null) }
+    var showAddNotionDialog by remember { mutableStateOf(false) }
+
     val availableDomains = remember(allowedDomains) {
         SvtDomain.entries.filter { it in allowedDomains }
     }
@@ -443,10 +462,30 @@ private fun GlossaryLabSection(
         }
     }
 
+    val customByEntryId = remember(customGlossaryEntries) {
+        customGlossaryEntries.associateBy { "custom_${it.id}" }
+    }
+
+    val mergedGlossaryEntries = remember(customGlossaryEntries) {
+        val mappedCustom = customGlossaryEntries.map { entry ->
+            val domain = SvtDomain.entries.firstOrNull { it.name == entry.domain }
+                ?: SvtDomain.NERVOUS_MUSCULAR
+            SvtGlossaryEntry(
+                id = "custom_${entry.id}",
+                domain = domain,
+                term = LocalizedSvtText(entry.term, entry.term, entry.term),
+                definition = LocalizedSvtText(entry.definition, entry.definition, entry.definition),
+                keyHint = LocalizedSvtText(entry.keyHint, entry.keyHint, entry.keyHint),
+                keywords = entry.keywords
+            )
+        }
+        mappedCustom + SvtKnowledgeCatalog.glossaryEntries
+    }
+
     val isSearching = query.isNotBlank()
-    val filtered = remember(query, selectedDomain, allowedDomains, currentLanguage) {
+    val filtered = remember(mergedGlossaryEntries, query, selectedDomain, allowedDomains, currentLanguage) {
         SvtLabLogic.filterGlossaryEntries(
-            entries = SvtKnowledgeCatalog.glossaryEntries,
+            entries = mergedGlossaryEntries,
             rawQuery = query,
             language = currentLanguage,
             allowedDomains = allowedDomains,
@@ -552,6 +591,21 @@ private fun GlossaryLabSection(
                 selectedDomain = selectedDomain,
                 onSelectDomain = { selectedDomainName = it?.name }
             )
+        }
+
+        if (isTeacher && !isGuestMode) {
+            item {
+                FilledTonalButton(
+                    onClick = { showAddNotionDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("add_glossary_notion_button")
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(id = R.string.glossary_add_notion_btn))
+                }
+            }
         }
 
         if (filtered.isEmpty()) {
@@ -757,6 +811,8 @@ private fun GlossaryLabSection(
             }
         } else {
             items(filtered, key = { it.id }) { entry ->
+                val customEntry = customByEntryId[entry.id]
+                val hintText = entry.keyHint.get(currentLanguage)
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -771,18 +827,53 @@ private fun GlossaryLabSection(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (isSearching) {
-                            // Search mode: definition only
-                            Text(
-                                text = entry.term.get(currentLanguage),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = entry.term.get(currentLanguage),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (customEntry != null) {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.glossary_prof_badge),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                    if (isTeacher && !isGuestMode) {
+                                        IconButton(
+                                            onClick = { onDeleteCustomGlossaryEntry(customEntry) },
+                                            modifier = Modifier
+                                                .minimumInteractiveComponentSize()
+                                                .testTag("delete_glossary_notion_${customEntry.id}")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Delete,
+                                                contentDescription = stringResource(id = R.string.glossary_delete_notion_cd),
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                             Text(
                                 text = entry.definition.get(currentLanguage),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         } else {
-                            // Browse mode: term, domain chip, definition & key hint
+                            // Browse mode: term, domain chip, Prof badge, definition & key hint
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -795,6 +886,21 @@ private fun GlossaryLabSection(
                                     modifier = Modifier.weight(1f)
                                 )
                                 Spacer(Modifier.width(8.dp))
+                                if (customEntry != null) {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.glossary_prof_badge),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                }
                                 Surface(
                                     color = MaterialTheme.colorScheme.primaryContainer,
                                     shape = RoundedCornerShape(12.dp)
@@ -806,6 +912,21 @@ private fun GlossaryLabSection(
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                     )
                                 }
+                                if (customEntry != null && isTeacher && !isGuestMode) {
+                                    IconButton(
+                                        onClick = { onDeleteCustomGlossaryEntry(customEntry) },
+                                        modifier = Modifier
+                                            .minimumInteractiveComponentSize()
+                                            .testTag("delete_glossary_notion_${customEntry.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Delete,
+                                            contentDescription = stringResource(id = R.string.glossary_delete_notion_cd),
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                             }
 
                             Text(
@@ -813,28 +934,30 @@ private fun GlossaryLabSection(
                                 style = MaterialTheme.typography.bodyMedium
                             )
 
-                            Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
-                                shape = MaterialTheme.shapes.small
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                            if (hintText.isNotBlank()) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                                    shape = MaterialTheme.shapes.small
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Lightbulb,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = entry.keyHint.get(currentLanguage),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Lightbulb,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = hintText,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -842,6 +965,17 @@ private fun GlossaryLabSection(
                 }
             }
         }
+    }
+
+    if (showAddNotionDialog && isTeacher && !isGuestMode) {
+        AddGlossaryNotionDialog(
+            initialDomain = selectedDomain ?: SvtDomain.NERVOUS_MUSCULAR,
+            onDismiss = { showAddNotionDialog = false },
+            onConfirm = { domain, term, definition, keyHint, keywordsRaw ->
+                onAddCustomGlossaryEntry(domain, term, definition, keyHint, keywordsRaw)
+                showAddNotionDialog = false
+            }
+        )
     }
 }
 

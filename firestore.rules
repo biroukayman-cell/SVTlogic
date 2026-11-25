@@ -47,6 +47,14 @@ service cloud.firestore {
              get(/databases/$(database)/documents/enrollments/$(request.auth.uid)).data.status == 'approved';
     }
 
+    function isApprovedTeacher() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher' &&
+             (!('teacherStatus' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teacherStatus == 'approved');
+    }
+
     // ---------------------------------------------------------
     // Validation Blueprints
     // ---------------------------------------------------------
@@ -82,6 +90,8 @@ service cloud.firestore {
              data.level is string && data.level.size() >= 1 && data.level.size() <= 50 &&
              data.qrToken is string && data.qrToken.size() >= 6 && data.qrToken.size() <= 64 &&
              data.qrToken.matches('^[a-zA-Z0-9_\\-]+$') &&
+             (!('establishmentId' in data) || (data.establishmentId is string && data.establishmentId.size() <= 128)) &&
+             (!('establishmentName' in data) || (data.establishmentName is string && data.establishmentName.size() <= 120)) &&
              (!('visibleLabDomains' in data) || (
                data.visibleLabDomains is list &&
                data.visibleLabDomains.size() >= 1 &&
@@ -261,6 +271,42 @@ service cloud.firestore {
              isValidTimestamp(data.updatedAt);
     }
 
+    function isValidEstablishment(data) {
+      return data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 128 &&
+             data.teacherName is string && data.teacherName.size() >= 1 && data.teacherName.size() <= 100 &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+             (!('city' in data) || (data.city is string && data.city.size() <= 100)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidGlossaryEntry(data) {
+      return data.teacherId is string && data.teacherId.size() >= 1 && data.teacherId.size() <= 128 &&
+             data.teacherName is string && data.teacherName.size() >= 1 && data.teacherName.size() <= 100 &&
+             data.domain is string && data.domain in [
+               'CELL_GENETICS',
+               'IMMUNITY',
+               'REPRODUCTION',
+               'PHYSIOLOGY_IMMUNITY',
+               'NERVOUS_MUSCULAR',
+               'GEOLOGY',
+               'ECOLOGY'
+             ] &&
+             data.term is string && data.term.size() >= 2 && data.term.size() <= 120 &&
+             data.definition is string && data.definition.size() >= 4 && data.definition.size() <= 1500 &&
+             (!('keyHint' in data) || (data.keyHint is string && data.keyHint.size() <= 400)) &&
+             (!('keywords' in data) || (
+               data.keywords is list &&
+               data.keywords.size() <= 15 &&
+               (data.keywords.size() == 0 || data.keywords[0] is string)
+             )) &&
+             data.approvedStudentIds is list &&
+             data.approvedStudentIds.size() <= 500 &&
+             (data.approvedStudentIds.size() == 0 || data.approvedStudentIds[0] is string) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
     // ---------------------------------------------------------
     // Collection Rules
     // ---------------------------------------------------------
@@ -342,17 +388,12 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
                        isValidId(classId) &&
                        incoming().keys().hasAll(['teacherId', 'teacherName', 'name', 'academicYear', 'level', 'qrToken', 'createdAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['teacherId', 'teacherName', 'name', 'academicYear', 'level', 'qrToken', 'visibleLabDomains', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['teacherId', 'teacherName', 'name', 'academicYear', 'level', 'qrToken', 'establishmentId', 'establishmentName', 'visibleLabDomains', 'createdAt', 'updatedAt']) &&
                        isValidSvtClass(incoming()) &&
                        incoming().teacherId == request.auth.uid &&
                        (
                          isAdmin() ||
-                         (
-                           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher' &&
-                           (!('teacherStatus' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
-                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teacherStatus == 'approved')
-                         )
+                         isApprovedTeacher()
                        );
 
       allow update: if isSignedIn() &&
@@ -361,7 +402,7 @@ service cloud.firestore {
                        (resource.data.teacherId == request.auth.uid || isAdmin()) &&
                        incoming().teacherId == existing().teacherId &&
                        incoming().createdAt == existing().createdAt &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['teacherName', 'name', 'academicYear', 'level', 'qrToken', 'visibleLabDomains', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['teacherName', 'name', 'academicYear', 'level', 'qrToken', 'establishmentId', 'establishmentName', 'visibleLabDomains', 'updatedAt']);
 
       allow delete: if isSignedIn() && isValidId(classId) && (resource.data.teacherId == request.auth.uid || isAdmin());
     }
@@ -380,7 +421,15 @@ service cloud.firestore {
                        existsAfter(/databases/$(database)/documents/classes/$(incoming().classId)) &&
                        getAfter(/databases/$(database)/documents/classes/$(incoming().classId)).data.teacherId == request.auth.uid;
 
-      allow update: if false;
+      allow update: if isSignedIn() &&
+                       isValidId(qrToken) &&
+                       isValidClassCode(incoming()) &&
+                       (resource.data.teacherId == request.auth.uid || isAdmin()) &&
+                       incoming().classId == existing().classId &&
+                       incoming().teacherId == existing().teacherId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['className', 'academicYear', 'teacherName']);
+
       allow delete: if isSignedIn() && isValidId(qrToken) && (resource.data.teacherId == request.auth.uid || isAdmin());
     }
 
@@ -691,9 +740,9 @@ service cloud.firestore {
                        incoming().createdAt == existing().createdAt &&
                        incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
 
+      // Strictly teacher-only message deletion (or admin)
       allow delete: if isSignedIn() && isValidId(messageId) && (
         resource.data.teacherId == request.auth.uid ||
-        resource.data.studentId == request.auth.uid ||
         isAdmin()
       );
     }
@@ -824,6 +873,65 @@ service cloud.firestore {
                        incoming().diff(existing()).affectedKeys().hasOnly(['teacherName', 'versionCode', 'versionName', 'releaseNotes', 'downloadUrl', 'updatedAt']);
 
       allow delete: if isSignedIn() && isValidId(updateId) && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // 15. Teacher Establishments (grouping SVT classes)
+    match /establishments/{establishmentId} {
+      allow get, list: if isSignedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(establishmentId) &&
+                       incoming().keys().hasAll(['teacherId', 'teacherName', 'name', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['teacherId', 'teacherName', 'name', 'city', 'createdAt', 'updatedAt']) &&
+                       isValidEstablishment(incoming()) &&
+                       incoming().teacherId == request.auth.uid &&
+                       (isAdmin() || isApprovedTeacher());
+
+      allow update: if isSignedIn() &&
+                       isValidId(establishmentId) &&
+                       isValidEstablishment(incoming()) &&
+                       (resource.data.teacherId == request.auth.uid || isAdmin()) &&
+                       incoming().teacherId == existing().teacherId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['teacherName', 'name', 'city', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(establishmentId) && (
+        resource.data.teacherId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // 16. Teacher-Added SVT Glossary Notions
+    match /glossary_entries/{entryId} {
+      allow get, list: if isSignedIn() && (
+        resource.data.teacherId == request.auth.uid ||
+        request.auth.uid in resource.data.approvedStudentIds ||
+        isAdmin()
+      );
+
+      allow create: if isSignedIn() &&
+                       isValidId(entryId) &&
+                       incoming().keys().hasAll(['teacherId', 'teacherName', 'domain', 'term', 'definition', 'approvedStudentIds', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['teacherId', 'teacherName', 'domain', 'term', 'definition', 'keyHint', 'keywords', 'approvedStudentIds', 'createdAt', 'updatedAt']) &&
+                       isValidGlossaryEntry(incoming()) &&
+                       incoming().teacherId == request.auth.uid &&
+                       (isAdmin() || isApprovedTeacher());
+
+      allow update: if isSignedIn() &&
+                       isValidId(entryId) &&
+                       isValidGlossaryEntry(incoming()) &&
+                       (resource.data.teacherId == request.auth.uid || isAdmin()) &&
+                       incoming().teacherId == existing().teacherId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['teacherName', 'domain', 'term', 'definition', 'keyHint', 'keywords', 'approvedStudentIds', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(entryId) && (
         resource.data.teacherId == request.auth.uid ||
         isAdmin()
       );

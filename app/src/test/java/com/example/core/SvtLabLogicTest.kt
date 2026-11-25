@@ -336,4 +336,63 @@ class SvtLabLogicTest {
         val pollutedWater = SvtLabLogic.evaluateWaterQuality(dbo5MgL = 25.0, dcoMgL = 80.0, dissolvedO2MgL = 1.8)
         assertEquals(SvtLabLogic.WaterQualityClass.POLLUTED, pollutedWater.qualityClass)
     }
+
+    @Test
+    fun `computeNerveAndMuscleResponse models threshold, myelination speed, calcium block, ATP fatigue, and contraction`() {
+        val subthreshold = SvtLabLogic.computeNerveAndMuscleResponse(
+            stimulusMv = -60,
+            thresholdMv = -50,
+            isMyelinated = true,
+            atpLevelPct = 90,
+            calciumAvailable = true
+        )
+        assertFalse(subthreshold.actionPotentialTriggered)
+        assertEquals(0.0, subthreshold.conductionVelocityMs, 0.01)
+        assertFalse(subthreshold.acetylcholineReleased)
+        assertFalse(subthreshold.crossBridgesActive)
+        assertEquals(0, subthreshold.sarcomereShorteningPct)
+        assertEquals(SvtLabLogic.MuscleContractionState.SUBTHRESHOLD, subthreshold.contractionState)
+
+        val myelinatedContracting = SvtLabLogic.computeNerveAndMuscleResponse(
+            stimulusMv = -40,
+            thresholdMv = -50,
+            isMyelinated = true,
+            atpLevelPct = 80,
+            calciumAvailable = true
+        )
+        assertTrue(myelinatedContracting.actionPotentialTriggered)
+        assertEquals(30, myelinatedContracting.peakPotentialMv)
+        assertEquals(120.0, myelinatedContracting.conductionVelocityMs, 0.01)
+        assertTrue(myelinatedContracting.acetylcholineReleased)
+        assertTrue(myelinatedContracting.crossBridgesActive)
+        assertTrue(myelinatedContracting.sarcomereShorteningPct > 0)
+        assertEquals(SvtLabLogic.MuscleContractionState.CONTRACTING, myelinatedContracting.contractionState)
+
+        val unmyelinatedNoCa = SvtLabLogic.computeNerveAndMuscleResponse(
+            stimulusMv = -35,
+            thresholdMv = -50,
+            isMyelinated = false,
+            atpLevelPct = 80,
+            calciumAvailable = false
+        )
+        assertTrue(unmyelinatedNoCa.actionPotentialTriggered)
+        assertEquals(2.5, unmyelinatedNoCa.conductionVelocityMs, 0.01)
+        assertFalse(unmyelinatedNoCa.acetylcholineReleased)
+        assertFalse(unmyelinatedNoCa.crossBridgesActive)
+        assertEquals(SvtLabLogic.MuscleContractionState.NO_CALCIUM_BLOCKED, unmyelinatedNoCa.contractionState)
+
+        val fatigued = SvtLabLogic.computeNerveAndMuscleResponse(
+            stimulusMv = -40,
+            thresholdMv = -50,
+            isMyelinated = true,
+            atpLevelPct = 5,
+            calciumAvailable = true
+        )
+        assertTrue(fatigued.actionPotentialTriggered)
+        assertTrue(fatigued.acetylcholineReleased)
+        assertFalse(fatigued.crossBridgesActive)
+        assertEquals(0, fatigued.sarcomereShorteningPct)
+        assertEquals(SvtLabLogic.MuscleContractionState.FATIGUED_NO_ATP, fatigued.contractionState)
+    }
 }
+

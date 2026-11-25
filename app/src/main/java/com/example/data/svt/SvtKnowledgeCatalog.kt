@@ -487,6 +487,44 @@ object SvtKnowledgeCatalog {
             )
         ),
         SvtFlashcard(
+            id = "fc_nerv_3",
+            domain = SvtDomain.NERVOUS_MUSCULAR,
+            question = LocalizedSvtText(
+                fr = "Que signifie la loi du « tout ou rien » pour une fibre nerveuse isolée ?",
+                en = "What does the \"all-or-none\" law mean for a single nerve fiber?",
+                ar = "ماذا يعني قانون «الكل أو اللاشيء» بالنسبة لليف عصبي معزول؟"
+            ),
+            answer = LocalizedSvtText(
+                fr = "Seul un stimulus ≥ seuil déclenche un potentiel d'action d'amplitude maximale et constante (+30 mV)",
+                en = "Only a stimulus ≥ threshold triggers an action potential of constant maximal amplitude (+30 mV)",
+                ar = "فقط الإهاجة الفعالة (≥ العتبة) تولد جهد عمل بوسع ثابت وأقصى (+30 mV)"
+            ),
+            explanation = LocalizedSvtText(
+                fr = "Sous le seuil (-50 mV), il n'y a qu'une dépolarisation locale. Au-delà, l'intensité est codée en fréquence de PA.",
+                en = "Below threshold (-50 mV), only local depolarization occurs. Above threshold, intensity is coded by AP frequency.",
+                ar = "دون العتبة يحدث زوال استقطاب محلي فقط، وفوق العتبة تُشفَّر شدة الإهاجة بتردد جهود العمل."
+            )
+        ),
+        SvtFlashcard(
+            id = "fc_nerv_4",
+            domain = SvtDomain.NERVOUS_MUSCULAR,
+            question = LocalizedSvtText(
+                fr = "Quel est le rôle des ions Ca²⁺ libérés par le réticulum sarcoplasmique dans le sarcomère ?",
+                en = "What is the role of Ca²⁺ ions released by the sarcoplasmic reticulum in the sarcomere?",
+                ar = "ما دور أيونات Ca²⁺ المحررة من الشبكة الساركوبلازمية في الساركومير؟"
+            ),
+            answer = LocalizedSvtText(
+                fr = "Ils se fixent sur la troponine et déplacent la tropomyosine pour libérer les sites de l'actine",
+                en = "They bind troponin and shift tropomyosin to expose myosin-binding sites on actin",
+                ar = "ترتبط بالتروبونين فتزيح التروبوميوزين لتحرير مواقع تثبيت الميوزين على الأكتين"
+            ),
+            explanation = LocalizedSvtText(
+                fr = "Cela permet la formation des ponts d'actomyosine et le glissement des filaments fins vers le centre du sarcomère (raccourcissement de la bande H et de la zone I).",
+                en = "This allows actomyosin cross-bridges to form and thin filaments to slide inward, shortening the H-band and I-band.",
+                ar = "يسمح ذلك بتشكل قناطر الأكتوميوزين وانزلاق خييطات الأكتين نحو مركز الساركومير (تقلص الشريط I والمنطقة H)."
+            )
+        ),
+        SvtFlashcard(
             id = "fc_11",
             domain = SvtDomain.PHYSIOLOGY_IMMUNITY,
             question = LocalizedSvtText(

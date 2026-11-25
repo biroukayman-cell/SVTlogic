@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,20 +28,32 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Class
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.PendingActions
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -55,8 +68,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -81,6 +96,7 @@ import com.example.core.TeacherDashboardOverview
 import com.example.data.model.Announcement
 import com.example.data.model.CourseResource
 import com.example.data.model.Enrollment
+import com.example.data.model.Establishment
 import com.example.data.model.PrivateMessage
 import com.example.data.model.Quiz
 import com.example.data.model.QuizAttempt
@@ -88,8 +104,12 @@ import com.example.data.model.RosterStudent
 import com.example.data.model.SvtClass
 import com.example.data.model.VideoTracking
 import com.example.ui.components.ClassAiAnalysisDialog
+import com.example.ui.components.CreateOrEditClassDialog
+import com.example.ui.components.CreateOrEditEstablishmentDialog
+import com.example.ui.components.OrderedStudentListSection
 import com.example.ui.components.QuestionSuccessRatioBar
 import com.example.ui.components.QuizFrequentErrorsDashboardCard
+import com.example.ui.components.StudentListSortOption
 import com.example.ui.components.StudentQuizAnswersReviewDialog
 import com.example.ui.components.StudentQuizReviewEntry
 import com.example.ui.components.SvtEmptyStateCard
@@ -115,40 +135,121 @@ fun TeacherDashboardTab(
     teacherVideoTracking: List<VideoTracking>,
     teacherAnnouncements: List<Announcement>,
     teacherMessages: List<PrivateMessage>,
+    establishments: List<Establishment> = emptyList(),
+    selectedEstablishmentId: String? = null,
+    onSelectEstablishment: (String?) -> Unit = {},
+    onCreateEstablishment: (name: String, city: String) -> Unit = { _, _ -> },
+    onUpdateEstablishment: (Establishment, name: String, city: String) -> Unit = { _, _, _ -> },
+    onDeleteEstablishment: (Establishment) -> Unit = {},
+    onCreateClass: (name: String, level: String, academicYear: String, establishmentId: String, establishmentName: String) -> Unit = { _, _, _, _, _ -> },
+    onUpdateClassDetails: (SvtClass, name: String, level: String, academicYear: String, establishmentId: String, establishmentName: String) -> Unit = { _, _, _, _, _, _ -> },
+    onDeleteClass: (SvtClass) -> Unit = {},
+    onSelectClass: (String) -> Unit = {},
     currentLanguage: AppLanguage = AppLanguage.FR,
     onAnalyzeQuizErrorsWithAi: (Quiz) -> Unit = {},
+    onOpenPendingApprovals: () -> Unit = { onSelectSection(2) },
     onNavigateToTab: (SvtTab) -> Unit
 ) {
+    val filteredClasses = remember(teacherClasses, selectedEstablishmentId) {
+        TeacherAnalyticsLogic.filterClassesByEstablishment(teacherClasses, selectedEstablishmentId)
+    }
+    val filteredClassIds = remember(filteredClasses) {
+        filteredClasses.map { it.id }.toSet()
+    }
+    val scopedEnrollments = remember(teacherEnrollments, filteredClassIds, selectedEstablishmentId) {
+        if (selectedEstablishmentId == null) teacherEnrollments
+        else teacherEnrollments.filter { it.classId in filteredClassIds }
+    }
+    val scopedRoster = remember(teacherRoster, filteredClassIds, selectedEstablishmentId) {
+        if (selectedEstablishmentId == null) teacherRoster
+        else teacherRoster.filter { it.classId in filteredClassIds }
+    }
+    val scopedQuizzes = remember(teacherQuizzes, filteredClassIds, selectedEstablishmentId) {
+        if (selectedEstablishmentId == null) teacherQuizzes
+        else teacherQuizzes.filter { it.classId in filteredClassIds }
+    }
+    val scopedAttempts = remember(teacherAttempts, filteredClassIds, selectedEstablishmentId) {
+        if (selectedEstablishmentId == null) teacherAttempts
+        else teacherAttempts.filter { it.classId in filteredClassIds }
+    }
+    val scopedResources = remember(teacherResources, filteredClassIds, selectedEstablishmentId) {
+        if (selectedEstablishmentId == null) teacherResources
+        else teacherResources.filter { it.classId in filteredClassIds }
+    }
+    val scopedVideoTracking = remember(teacherVideoTracking, filteredClassIds, selectedEstablishmentId) {
+        if (selectedEstablishmentId == null) teacherVideoTracking
+        else teacherVideoTracking.filter { it.classId in filteredClassIds }
+    }
+    val scopedAnnouncements = remember(teacherAnnouncements, filteredClassIds, selectedEstablishmentId) {
+        if (selectedEstablishmentId == null) teacherAnnouncements
+        else teacherAnnouncements.filter { it.classId in filteredClassIds }
+    }
+    val scopedMessages = remember(teacherMessages, filteredClassIds, selectedEstablishmentId) {
+        if (selectedEstablishmentId == null) teacherMessages
+        else teacherMessages.filter { it.classId in filteredClassIds }
+    }
+
     val overview = remember(
-        teacherClasses,
-        teacherEnrollments,
-        teacherRoster,
-        teacherQuizzes,
-        teacherAttempts,
-        teacherResources,
-        teacherVideoTracking,
-        teacherAnnouncements,
-        teacherMessages
+        filteredClasses,
+        scopedEnrollments,
+        scopedRoster,
+        scopedQuizzes,
+        scopedAttempts,
+        scopedResources,
+        scopedVideoTracking,
+        scopedAnnouncements,
+        scopedMessages
     ) {
         TeacherAnalyticsLogic.computeDashboardOverview(
-            classes = teacherClasses,
-            enrollments = teacherEnrollments,
-            quizzes = teacherQuizzes,
-            attempts = teacherAttempts,
-            resources = teacherResources,
-            videoTrackings = teacherVideoTracking,
-            announcements = teacherAnnouncements,
-            messages = teacherMessages,
-            roster = teacherRoster
+            classes = filteredClasses,
+            enrollments = scopedEnrollments,
+            quizzes = scopedQuizzes,
+            attempts = scopedAttempts,
+            resources = scopedResources,
+            videoTrackings = scopedVideoTracking,
+            announcements = scopedAnnouncements,
+            messages = scopedMessages,
+            roster = scopedRoster
+        )
+    }
+
+    val advancedMetrics = remember(
+        filteredClasses,
+        scopedEnrollments,
+        scopedRoster,
+        scopedQuizzes,
+        scopedAttempts
+    ) {
+        TeacherAnalyticsLogic.computeAdvancedMetrics(
+            classes = filteredClasses,
+            enrollments = scopedEnrollments,
+            roster = scopedRoster,
+            quizzes = scopedQuizzes,
+            attempts = scopedAttempts
         )
     }
 
     var showClassPromptDialog by rememberSaveable { mutableStateOf(false) }
     var promptInitialClassId by rememberSaveable { mutableStateOf<String?>(null) }
 
+    var showEstDialog by remember { mutableStateOf(false) }
+    var editingEst by remember { mutableStateOf<Establishment?>(null) }
+    var estToDelete by remember { mutableStateOf<Establishment?>(null) }
+
+    var showClassDialog by remember { mutableStateOf(false) }
+    var editingClass by remember { mutableStateOf<SvtClass?>(null) }
+    var preselectedEstIdForNewClass by remember { mutableStateOf("") }
+    var classToDelete by remember { mutableStateOf<SvtClass?>(null) }
+    var qrDialogClass by remember { mutableStateOf<SvtClass?>(null) }
+    var forcedQcmClassFilterId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val unassignedClassCount = remember(teacherClasses) {
+        teacherClasses.count { it.establishmentId.isBlank() }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
@@ -169,6 +270,71 @@ fun TeacherDashboardTab(
                     modifier = Modifier.testTag("teacher_dashboard_results_chip")
                 )
             }
+            item {
+                FilterChip(
+                    selected = selectedSection == 2,
+                    onClick = { onSelectSection(2) },
+                    leadingIcon = { Icon(Icons.Filled.Apartment, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    label = { Text(stringResource(id = R.string.teacher_dashboard_manage_tab)) },
+                    modifier = Modifier.testTag("teacher_dashboard_manage_chip")
+                )
+            }
+        }
+
+        if (establishments.isNotEmpty() || selectedSection == 2) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                item {
+                    FilterChip(
+                        selected = selectedEstablishmentId == null,
+                        onClick = { onSelectEstablishment(null) },
+                        label = {
+                            Text(
+                                stringResource(id = R.string.establishment_all_filter, teacherClasses.size),
+                                maxLines = 1
+                            )
+                        },
+                        modifier = Modifier.testTag("dashboard_est_filter_all")
+                    )
+                }
+                items(establishments, key = { it.id }) { est ->
+                    FilterChip(
+                        selected = selectedEstablishmentId == est.id,
+                        onClick = { onSelectEstablishment(est.id) },
+                        label = { Text(est.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        modifier = Modifier.testTag("dashboard_est_filter_${est.id}")
+                    )
+                }
+                if (unassignedClassCount > 0) {
+                    item {
+                        FilterChip(
+                            selected = selectedEstablishmentId == TeacherAnalyticsLogic.UNASSIGNED_ESTABLISHMENT_FILTER,
+                            onClick = { onSelectEstablishment(TeacherAnalyticsLogic.UNASSIGNED_ESTABLISHMENT_FILTER) },
+                            label = {
+                                Text(
+                                    stringResource(id = R.string.establishment_unassigned_filter, unassignedClassCount),
+                                    maxLines = 1
+                                )
+                            },
+                            modifier = Modifier.testTag("dashboard_est_filter_unassigned")
+                        )
+                    }
+                }
+                item {
+                    FilterChip(
+                        selected = false,
+                        onClick = {
+                            editingEst = null
+                            showEstDialog = true
+                        },
+                        leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                        label = { Text(stringResource(id = R.string.establishment_new_button), maxLines = 1) },
+                        modifier = Modifier.testTag("dashboard_quick_new_est_chip")
+                    )
+                }
+            }
         }
 
         HorizontalDivider()
@@ -181,10 +347,11 @@ fun TeacherDashboardTab(
                 .fillMaxWidth(),
             label = "teacher_dashboard_section_transition"
         ) { sec ->
-            if (sec == 0) {
-                TeacherOverviewSection(
+            when (sec) {
+                0 -> TeacherOverviewSection(
                     overview = overview,
-                    hasClasses = teacherClasses.isNotEmpty(),
+                    advancedMetrics = advancedMetrics,
+                    hasClasses = filteredClasses.isNotEmpty(),
                     onOpenAllClassesPrompt = {
                         promptInitialClassId = null
                         showClassPromptDialog = true
@@ -193,39 +360,177 @@ fun TeacherDashboardTab(
                         promptInitialClassId = cls.id
                         showClassPromptDialog = true
                     },
-                    onOpenQcmResults = { onSelectSection(1) },
+                    onOpenQcmResults = {
+                        forcedQcmClassFilterId = null
+                        onSelectSection(1)
+                    },
+                    onOpenEstablishmentsTab = { onSelectSection(2) },
+                    onOpenPendingApprovals = onOpenPendingApprovals,
                     onNavigateToTab = onNavigateToTab
                 )
-            } else {
-                TeacherStudentQcmResultsSection(
-                    classes = teacherClasses,
-                    enrollments = teacherEnrollments,
-                    roster = teacherRoster,
-                    quizzes = teacherQuizzes,
-                    attempts = teacherAttempts,
-                    initialClassFilterId = selectedClassId,
+
+                1 -> TeacherStudentQcmResultsSection(
+                    classes = filteredClasses,
+                    enrollments = scopedEnrollments,
+                    roster = scopedRoster,
+                    quizzes = scopedQuizzes,
+                    attempts = scopedAttempts,
+                    initialClassFilterId = forcedQcmClassFilterId ?: selectedClassId?.takeIf { it in filteredClassIds },
                     onAnalyzeClassWithAi = { cls ->
                         promptInitialClassId = cls.id
                         showClassPromptDialog = true
                     },
                     onAnalyzeQuizErrorsWithAi = onAnalyzeQuizErrorsWithAi
                 )
+
+                else -> TeacherEstablishmentsAndClassesSection(
+                    establishments = establishments,
+                    allClasses = teacherClasses,
+                    filteredClasses = filteredClasses,
+                    enrollments = teacherEnrollments,
+                    selectedEstablishmentId = selectedEstablishmentId,
+                    selectedClassId = selectedClassId,
+                    onSelectEstablishment = onSelectEstablishment,
+                    onCreateEstablishmentClick = {
+                        editingEst = null
+                        showEstDialog = true
+                    },
+                    onEditEstablishmentClick = { est ->
+                        editingEst = est
+                        showEstDialog = true
+                    },
+                    onDeleteEstablishmentClick = { est ->
+                        estToDelete = est
+                    },
+                    onCreateClassClick = { estId ->
+                        editingClass = null
+                        preselectedEstIdForNewClass = estId
+                        showClassDialog = true
+                    },
+                    onEditClassClick = { cls ->
+                        editingClass = cls
+                        preselectedEstIdForNewClass = cls.establishmentId
+                        showClassDialog = true
+                    },
+                    onSelectClass = onSelectClass,
+                    onShowQr = { cls -> qrDialogClass = cls },
+                    onOpenClassResults = { cls ->
+                        forcedQcmClassFilterId = cls.id
+                        onSelectSection(1)
+                    },
+                    onDeleteClassClick = { cls -> classToDelete = cls }
+                )
             }
         }
     }
 
-    if (showClassPromptDialog && teacherClasses.isNotEmpty()) {
+    if (showClassPromptDialog && filteredClasses.isNotEmpty()) {
         ClassAiAnalysisDialog(
             initialClassId = promptInitialClassId,
-            classes = teacherClasses,
-            enrollments = teacherEnrollments,
-            roster = teacherRoster,
-            quizzes = teacherQuizzes,
-            attempts = teacherAttempts,
-            resources = teacherResources,
-            videoTrackings = teacherVideoTracking,
+            classes = filteredClasses,
+            enrollments = scopedEnrollments,
+            roster = scopedRoster,
+            quizzes = scopedQuizzes,
+            attempts = scopedAttempts,
+            resources = scopedResources,
+            videoTrackings = scopedVideoTracking,
             currentLanguage = currentLanguage,
             onDismiss = { showClassPromptDialog = false }
+        )
+    }
+
+    if (showEstDialog) {
+        CreateOrEditEstablishmentDialog(
+            initialEstablishment = editingEst,
+            onDismiss = { showEstDialog = false },
+            onConfirm = { name, city ->
+                val target = editingEst
+                if (target == null) {
+                    onCreateEstablishment(name, city)
+                } else {
+                    onUpdateEstablishment(target, name, city)
+                }
+                showEstDialog = false
+            }
+        )
+    }
+
+    estToDelete?.let { est ->
+        AlertDialog(
+            onDismissRequest = { estToDelete = null },
+            title = { Text(stringResource(id = R.string.establishment_delete_confirm_title)) },
+            text = { Text(stringResource(id = R.string.establishment_delete_confirm_body, est.name)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteEstablishment(est)
+                        estToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("confirm_delete_est_dashboard_button")
+                ) {
+                    Text(stringResource(id = R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { estToDelete = null }) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
+        )
+    }
+
+    if (showClassDialog) {
+        CreateOrEditClassDialog(
+            establishments = establishments,
+            initialClass = editingClass,
+            preselectedEstablishmentId = preselectedEstIdForNewClass,
+            onDismiss = { showClassDialog = false },
+            onRequestQuickCreateEstablishment = {
+                editingEst = null
+                showEstDialog = true
+            },
+            onConfirm = { name, level, year, estId, estName ->
+                val target = editingClass
+                if (target == null) {
+                    onCreateClass(name, level, year, estId, estName)
+                } else {
+                    onUpdateClassDetails(target, name, level, year, estId, estName)
+                }
+                showClassDialog = false
+            }
+        )
+    }
+
+    classToDelete?.let { cls ->
+        AlertDialog(
+            onDismissRequest = { classToDelete = null },
+            title = { Text(stringResource(id = R.string.confirm_delete_title)) },
+            text = { Text(stringResource(id = R.string.confirm_delete_class_msg, cls.name)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteClass(cls)
+                        classToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("confirm_delete_class_dashboard_button")
+                ) {
+                    Text(stringResource(id = R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { classToDelete = null }) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
+        )
+    }
+
+    qrDialogClass?.let { cls ->
+        ClassQrDialog(
+            svtClass = cls,
+            onDismiss = { qrDialogClass = null }
         )
     }
 }
@@ -234,10 +539,13 @@ fun TeacherDashboardTab(
 @Composable
 private fun TeacherOverviewSection(
     overview: TeacherDashboardOverview,
+    advancedMetrics: TeacherAnalyticsLogic.TeacherAdvancedMetrics,
     hasClasses: Boolean,
     onOpenAllClassesPrompt: () -> Unit,
     onOpenClassPrompt: (SvtClass) -> Unit,
     onOpenQcmResults: () -> Unit,
+    onOpenEstablishmentsTab: () -> Unit,
+    onOpenPendingApprovals: () -> Unit,
     onNavigateToTab: (SvtTab) -> Unit
 ) {
     LazyColumn(
@@ -255,6 +563,47 @@ private fun TeacherOverviewSection(
             )
         }
 
+        if (overview.totalPendingEnrollments > 0) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("teacher_pending_alert_banner")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PendingActions,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary
+                        )
+                        Text(
+                            text = stringResource(
+                                id = R.string.teacher_pending_alert_banner,
+                                overview.totalPendingEnrollments
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilledTonalButton(
+                            onClick = onOpenPendingApprovals,
+                            modifier = Modifier.testTag("teacher_pending_alert_action_btn")
+                        ) {
+                            Text(stringResource(id = R.string.teacher_pending_alert_action))
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
@@ -267,7 +616,9 @@ private fun TeacherOverviewSection(
                         value = "${overview.totalClasses}",
                         subtitle = "${overview.totalAnnouncements} ${stringResource(id = R.string.tab_announcements)}",
                         accentColor = SvtEmeraldPrimary,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onOpenEstablishmentsTab)
                     )
                     DashboardKpiCard(
                         icon = Icons.Filled.People,
@@ -275,7 +626,9 @@ private fun TeacherOverviewSection(
                         value = "${overview.totalApprovedStudents}",
                         subtitle = stringResource(id = R.string.teacher_kpi_pending, overview.totalPendingEnrollments),
                         accentColor = if (overview.totalPendingEnrollments > 0) SvtWarning else SvtOceanSecondary,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onOpenPendingApprovals)
                     )
                 }
 
@@ -299,9 +652,34 @@ private fun TeacherOverviewSection(
                         value = "${overview.totalResources}",
                         subtitle = "${overview.videoCompletionRatePct}% • ${stringResource(id = R.string.teacher_kpi_unread_msgs, overview.unreadStudentMessages)}",
                         accentColor = SvtOceanSecondary,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onNavigateToTab(SvtTab.MESSAGING) }
                     )
                 }
+
+                DashboardKpiCard(
+                    icon = Icons.Filled.TrendingUp,
+                    title = stringResource(id = R.string.teacher_kpi_participation),
+                    value = "${advancedMetrics.participationRatePct}%",
+                    subtitle = stringResource(
+                        id = R.string.teacher_kpi_participation_sub,
+                        advancedMetrics.activeStudentsCount,
+                        advancedMetrics.totalTrackedStudents,
+                        formatDurationShort(advancedMetrics.averageQuizDurationSeconds)
+                    ),
+                    accentColor = if (advancedMetrics.participationRatePct >= 60) SvtSuccess else SvtOceanSecondary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        if (advancedMetrics.totalTrackedStudents > 0) {
+            item {
+                TeacherAttentionCard(
+                    metrics = advancedMetrics,
+                    onContactStudent = { onNavigateToTab(SvtTab.MESSAGING) }
+                )
             }
         }
 
@@ -334,6 +712,14 @@ private fun TeacherOverviewSection(
                     Icon(Icons.Filled.BarChart, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(stringResource(id = R.string.teacher_dashboard_results_tab))
+                }
+                OutlinedButton(
+                    onClick = onOpenEstablishmentsTab,
+                    modifier = Modifier.testTag("dashboard_shortcut_establishments")
+                ) {
+                    Icon(Icons.Filled.Apartment, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(id = R.string.teacher_dashboard_manage_tab))
                 }
                 OutlinedButton(onClick = { onNavigateToTab(SvtTab.EXERCISES) }) {
                     Icon(Icons.Filled.Quiz, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -373,6 +759,24 @@ private fun TeacherOverviewSection(
         } else {
             items(overview.classSummaries, key = { it.svtClass.id }) { summary ->
                 var showStudentBreakdown by rememberSaveable(summary.svtClass.id) { mutableStateOf(false) }
+                var breakdownSort by rememberSaveable(summary.svtClass.id) {
+                    mutableStateOf(StudentListSortOption.NAME_ASC)
+                }
+                val sortedStudentStats = remember(summary.studentQuestionStats, breakdownSort) {
+                    when (breakdownSort) {
+                        StudentListSortOption.SCORE_DESC -> summary.studentQuestionStats.sortedWith(
+                            compareByDescending<StudentClassQuestionStats> { it.successRatePct }
+                                .thenBy { it.studentName.lowercase() }
+                        )
+                        StudentListSortOption.MASSAR_ASC -> summary.studentQuestionStats.sortedWith(
+                            compareBy<StudentClassQuestionStats> { it.massarNumber.ifBlank { "ZZZZ" }.lowercase() }
+                                .thenBy { it.studentName.lowercase() }
+                        )
+                        StudentListSortOption.NAME_ASC -> summary.studentQuestionStats.sortedBy {
+                            it.studentName.lowercase()
+                        }
+                    }
+                }
 
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -398,8 +802,13 @@ private fun TeacherOverviewSection(
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold
                                 )
+                                val subtitleParts = listOfNotNull(
+                                    summary.svtClass.establishmentName.takeIf { it.isNotBlank() },
+                                    summary.svtClass.level,
+                                    summary.svtClass.academicYear
+                                ).joinToString(" • ")
                                 Text(
-                                    text = "${summary.svtClass.level} • ${summary.svtClass.academicYear}",
+                                    text = subtitleParts,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -513,8 +922,15 @@ private fun TeacherOverviewSection(
                                 }
 
                                 AnimatedVisibility(visible = showStudentBreakdown) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        summary.studentQuestionStats.forEach { st ->
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OrderedStudentListSection(
+                                            items = sortedStudentStats,
+                                            itemKey = { _, st -> "${summary.svtClass.id}_${st.studentId}" },
+                                            maxListHeight = 280.dp,
+                                            sortOption = breakdownSort,
+                                            onSortChange = { breakdownSort = it },
+                                            tagPrefix = "overview_students_${summary.svtClass.id}"
+                                        ) { _, st ->
                                             StudentQuestionBreakdownRow(studentStats = st)
                                         }
                                         OutlinedButton(
@@ -734,9 +1150,9 @@ private fun TeacherStudentQcmResultsSection(
     onAnalyzeClassWithAi: (SvtClass) -> Unit,
     onAnalyzeQuizErrorsWithAi: (Quiz) -> Unit
 ) {
-    var filterClassId by rememberSaveable { mutableStateOf(initialClassFilterId) }
+    var filterClassId by rememberSaveable(initialClassFilterId) { mutableStateOf(initialClassFilterId) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
-    var sortByPctDescending by rememberSaveable { mutableStateOf(true) }
+    var sortOption by rememberSaveable { mutableStateOf(StudentListSortOption.SCORE_DESC) }
     var reviewTarget by remember { mutableStateOf<Pair<StudentQcmResultSummary, String?>?>(null) }
 
     val baseResults = remember(classes, enrollments, roster, quizzes, attempts, filterClassId) {
@@ -774,7 +1190,7 @@ private fun TeacherStudentQcmResultsSection(
         baseResults.associateBy { "${it.classId}_${it.studentId}" }
     }
 
-    val visibleResults = remember(baseResults, searchQuery, sortByPctDescending) {
+    val visibleResults = remember(baseResults, searchQuery, sortOption) {
         val cleanQuery = searchQuery.trim().lowercase()
         val filtered = if (cleanQuery.isBlank()) {
             baseResults
@@ -785,13 +1201,16 @@ private fun TeacherStudentQcmResultsSection(
                     item.className.lowercase().contains(cleanQuery)
             }
         }
-        if (sortByPctDescending) {
-            filtered.sortedWith(
+        when (sortOption) {
+            StudentListSortOption.SCORE_DESC -> filtered.sortedWith(
                 compareByDescending<StudentQcmResultSummary> { it.overallPercentage }
                     .thenBy { it.studentName.lowercase() }
             )
-        } else {
-            filtered.sortedBy { it.studentName.lowercase() }
+            StudentListSortOption.MASSAR_ASC -> filtered.sortedWith(
+                compareBy<StudentQcmResultSummary> { it.massarNumber.ifBlank { "ZZZZ" }.lowercase() }
+                    .thenBy { it.studentName.lowercase() }
+            )
+            StudentListSortOption.NAME_ASC -> filtered.sortedBy { it.studentName.lowercase() }
         }
     }
 
@@ -907,44 +1326,23 @@ private fun TeacherStudentQcmResultsSection(
         }
 
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text(stringResource(id = R.string.teacher_qcm_search_hint)) },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Filled.Clear, contentDescription = stringResource(id = R.string.cancel))
-                            }
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text(stringResource(id = R.string.teacher_qcm_search_hint)) },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Filled.Clear, contentDescription = stringResource(id = R.string.cancel))
                         }
-                    },
-                    singleLine = true,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("teacher_qcm_search_field")
-                )
-                FilterChip(
-                    selected = sortByPctDescending,
-                    onClick = { sortByPctDescending = !sortByPctDescending },
-                    leadingIcon = { Icon(Icons.Filled.SwapVert, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                    label = {
-                        Text(
-                            text = stringResource(
-                                id = if (sortByPctDescending) R.string.teacher_qcm_sort_pct
-                                else R.string.teacher_qcm_sort_name
-                            ),
-                            maxLines = 1
-                        )
-                    },
-                    modifier = Modifier.testTag("teacher_qcm_sort_chip")
-                )
-            }
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("teacher_qcm_search_field")
+            )
         }
 
         if (visibleResults.isEmpty()) {
@@ -952,16 +1350,25 @@ private fun TeacherStudentQcmResultsSection(
                 SvtEmptyStateCard(title = stringResource(id = R.string.teacher_qcm_no_students))
             }
         } else {
-            items(visibleResults, key = { "${it.classId}_${it.studentId}" }) { studentSummary ->
-                StudentQcmResultCard(
-                    summary = studentSummary,
-                    onViewAllAnswers = {
-                        reviewTarget = studentSummary to null
-                    },
-                    onViewQuizAnswers = { quizId ->
-                        reviewTarget = studentSummary to quizId
-                    }
-                )
+            item {
+                OrderedStudentListSection(
+                    items = visibleResults,
+                    itemKey = { _, item -> "${item.classId}_${item.studentId}" },
+                    maxListHeight = 520.dp,
+                    sortOption = sortOption,
+                    onSortChange = { sortOption = it },
+                    tagPrefix = "teacher_qcm_students"
+                ) { _, studentSummary ->
+                    StudentQcmResultCard(
+                        summary = studentSummary,
+                        onViewAllAnswers = {
+                            reviewTarget = studentSummary to null
+                        },
+                        onViewQuizAnswers = { quizId ->
+                            reviewTarget = studentSummary to quizId
+                        }
+                    )
+                }
             }
         }
     }
@@ -1105,13 +1512,36 @@ private fun ClassGlobalQuestionStatsCard(
                 }
 
                 AnimatedVisibility(visible = expanded) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        stats.studentStats.forEach { st ->
-                            StudentQuestionBreakdownRow(
-                                studentStats = st,
-                                onInspectClick = { onInspectStudent(st) }
+                    var classStatsSort by rememberSaveable(stats.classId) {
+                        mutableStateOf(StudentListSortOption.NAME_ASC)
+                    }
+                    val sortedClassStats = remember(stats.studentStats, classStatsSort) {
+                        when (classStatsSort) {
+                            StudentListSortOption.SCORE_DESC -> stats.studentStats.sortedWith(
+                                compareByDescending<StudentClassQuestionStats> { it.successRatePct }
+                                    .thenBy { it.studentName.lowercase() }
                             )
+                            StudentListSortOption.MASSAR_ASC -> stats.studentStats.sortedWith(
+                                compareBy<StudentClassQuestionStats> { it.massarNumber.ifBlank { "ZZZZ" }.lowercase() }
+                                    .thenBy { it.studentName.lowercase() }
+                            )
+                            StudentListSortOption.NAME_ASC -> stats.studentStats.sortedBy {
+                                it.studentName.lowercase()
+                            }
                         }
+                    }
+                    OrderedStudentListSection(
+                        items = sortedClassStats,
+                        itemKey = { _, st -> "${stats.classId}_${st.studentId}" },
+                        maxListHeight = 280.dp,
+                        sortOption = classStatsSort,
+                        onSortChange = { classStatsSort = it },
+                        tagPrefix = "qcm_global_students_${stats.classId}"
+                    ) { _, st ->
+                        StudentQuestionBreakdownRow(
+                            studentStats = st,
+                            onInspectClick = { onInspectStudent(st) }
+                        )
                     }
                 }
             }
@@ -1361,5 +1791,518 @@ private fun formatScoreValue(value: Double): String {
         value.toInt().toString()
     } else {
         String.format(Locale.US, "%.1f", value)
+    }
+}
+
+private fun formatDurationShort(seconds: Int): String {
+    if (seconds <= 0) return "—"
+    val mins = seconds / 60
+    val rem = seconds % 60
+    return if (mins > 0) "${mins}m ${rem}s" else "${rem}s"
+}
+
+@Composable
+private fun TeacherAttentionCard(
+    metrics: TeacherAnalyticsLogic.TeacherAdvancedMetrics,
+    onContactStudent: () -> Unit
+) {
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var sortOption by rememberSaveable { mutableStateOf(StudentListSortOption.SCORE_DESC) }
+
+    val activeSource = if (selectedTab == 0) metrics.strugglingStudents else metrics.inactiveStudents
+    val sortedItems = remember(activeSource, sortOption) {
+        when (sortOption) {
+            StudentListSortOption.SCORE_DESC -> activeSource.sortedWith(
+                compareBy<TeacherAnalyticsLogic.TeacherAttentionStudent> { it.overallPercentage }
+                    .thenBy { it.studentName.lowercase() }
+            )
+            StudentListSortOption.MASSAR_ASC -> activeSource.sortedWith(
+                compareBy<TeacherAnalyticsLogic.TeacherAttentionStudent> { it.massarNumber.ifBlank { "ZZZZ" }.lowercase() }
+                    .thenBy { it.studentName.lowercase() }
+            )
+            StudentListSortOption.NAME_ASC -> activeSource.sortedBy { it.studentName.lowercase() }
+        }
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("teacher_attention_card")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = if (metrics.strugglingStudents.isEmpty() && metrics.inactiveStudents.isEmpty()) {
+                        Icons.Filled.CheckCircle
+                    } else {
+                        Icons.Filled.Warning
+                    },
+                    contentDescription = null,
+                    tint = if (metrics.strugglingStudents.isEmpty() && metrics.inactiveStudents.isEmpty()) {
+                        SvtSuccess
+                    } else {
+                        SvtWarning
+                    }
+                )
+                Text(
+                    text = stringResource(id = R.string.teacher_attention_card_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (metrics.strugglingStudents.isEmpty() && metrics.inactiveStudents.isEmpty()) {
+                Surface(
+                    color = SvtSuccess.copy(alpha = 0.12f),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.teacher_attention_all_good),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SvtSuccess,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        label = {
+                            Text(
+                                text = "${stringResource(id = R.string.teacher_attention_struggling_title)} (${metrics.strugglingStudents.size})",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("attention_tab_struggling")
+                    )
+                    FilterChip(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        label = {
+                            Text(
+                                text = "${stringResource(id = R.string.teacher_attention_inactive_title)} (${metrics.inactiveStudents.size})",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("attention_tab_inactive")
+                    )
+                }
+
+                if (sortedItems.isEmpty()) {
+                    Text(
+                        text = stringResource(id = R.string.teacher_attention_all_good),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SvtSuccess
+                    )
+                } else {
+                    OrderedStudentListSection(
+                        items = sortedItems,
+                        itemKey = { _, st -> "${st.classId}_${st.studentId}" },
+                        maxListHeight = 250.dp,
+                        sortOption = sortOption,
+                        onSortChange = { sortOption = it },
+                        tagPrefix = "teacher_attention_students"
+                    ) { _, st ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = st.studentName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    val meta = listOfNotNull(
+                                        st.className.takeIf { it.isNotBlank() },
+                                        st.massarNumber.takeIf { it.isNotBlank() },
+                                        if (st.isInactive) "0/${st.totalClassQuizzesCount} QCM"
+                                        else "${st.overallPercentage}%"
+                                    ).joinToString(" • ")
+                                    Text(
+                                        text = meta,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (st.isInactive) SvtWarning else SvtCoralError
+                                    )
+                                }
+                                TextButton(
+                                    onClick = onContactStudent,
+                                    modifier = Modifier.minimumInteractiveComponentSize()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Chat,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(stringResource(id = R.string.teacher_attention_message_btn))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TeacherEstablishmentsAndClassesSection(
+    establishments: List<Establishment>,
+    allClasses: List<SvtClass>,
+    filteredClasses: List<SvtClass>,
+    enrollments: List<Enrollment>,
+    selectedEstablishmentId: String?,
+    selectedClassId: String?,
+    onSelectEstablishment: (String?) -> Unit,
+    onCreateEstablishmentClick: () -> Unit,
+    onEditEstablishmentClick: (Establishment) -> Unit,
+    onDeleteEstablishmentClick: (Establishment) -> Unit,
+    onCreateClassClick: (preselectedEstId: String) -> Unit,
+    onEditClassClick: (SvtClass) -> Unit,
+    onSelectClass: (String) -> Unit,
+    onShowQr: (SvtClass) -> Unit,
+    onOpenClassResults: (SvtClass) -> Unit,
+    onDeleteClassClick: (SvtClass) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("teacher_dashboard_manage_list"),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(id = R.string.establishments_section_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = stringResource(id = R.string.establishments_section_subtitle),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = onCreateEstablishmentClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dashboard_new_establishment_button")
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(id = R.string.establishment_new_button))
+                    }
+                }
+            }
+        }
+
+        if (establishments.isEmpty()) {
+            item {
+                SvtEmptyStateCard(title = stringResource(id = R.string.establishment_empty_state))
+            }
+        } else {
+            items(establishments, key = { "est_${it.id}" }) { est ->
+                val estClassesCount = allClasses.count { it.establishmentId == est.id }
+                val isSelectedEst = selectedEstablishmentId == est.id
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelectedEst) {
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        }
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("dashboard_est_card_${est.id}")
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Apartment,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = est.name,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                val sub = listOfNotNull(
+                                    est.city.takeIf { it.isNotBlank() },
+                                    stringResource(id = R.string.establishment_classes_count, estClassesCount)
+                                ).joinToString(" • ")
+                                Text(
+                                    text = sub,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(
+                                onClick = { onEditEstablishmentClick(est) },
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("dashboard_edit_est_${est.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Edit,
+                                    contentDescription = stringResource(id = R.string.establishment_edit_dialog_title),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            IconButton(
+                                onClick = { onDeleteEstablishmentClick(est) },
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("dashboard_delete_est_${est.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = stringResource(id = R.string.delete),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { onSelectEstablishment(if (isSelectedEst) null else est.id) },
+                                modifier = Modifier.testTag("dashboard_filter_est_btn_${est.id}")
+                            ) {
+                                Text(
+                                    stringResource(
+                                        id = if (isSelectedEst) R.string.establishment_all_filter else R.string.establishment_classes_count,
+                                        if (isSelectedEst) allClasses.size else estClassesCount
+                                    )
+                                )
+                            }
+                            FilledTonalButton(
+                                onClick = { onCreateClassClick(est.id) },
+                                modifier = Modifier.testTag("dashboard_add_class_est_${est.id}")
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(id = R.string.establishment_add_class_inside))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${stringResource(id = R.string.teacher_classes_title)} (${filteredClasses.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Button(
+                    onClick = {
+                        val preEst = selectedEstablishmentId
+                            ?.takeUnless { it == TeacherAnalyticsLogic.UNASSIGNED_ESTABLISHMENT_FILTER }
+                            .orEmpty()
+                        onCreateClassClick(preEst)
+                    },
+                    modifier = Modifier.testTag("dashboard_new_class_button")
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(id = R.string.teacher_new_class))
+                }
+            }
+        }
+
+        if (filteredClasses.isEmpty()) {
+            item {
+                SvtEmptyStateCard(title = stringResource(id = R.string.no_class_selected))
+            }
+        } else {
+            items(filteredClasses, key = { "cls_mgr_${it.id}" }) { svtClass ->
+                val approvedCount = enrollments.count { it.classId == svtClass.id && it.status == "approved" }
+                val pendingCount = enrollments.count { it.classId == svtClass.id && it.status == "pending" }
+                val isSelectedClass = svtClass.id == selectedClassId
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("dashboard_class_card_${svtClass.id}")
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = svtClass.name,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "${svtClass.level} • ${svtClass.academicYear}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Surface(
+                                color = if (svtClass.establishmentName.isNotBlank()) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text(
+                                    text = svtClass.establishmentName.ifBlank {
+                                        stringResource(id = R.string.class_unassigned_badge)
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (svtClass.establishmentName.isNotBlank()) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "$approvedCount ${stringResource(id = R.string.teacher_kpi_students)} • ${stringResource(id = R.string.teacher_kpi_pending, pendingCount)}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FilterChip(
+                                selected = isSelectedClass,
+                                onClick = { onSelectClass(svtClass.id) },
+                                label = { Text(svtClass.name) },
+                                modifier = Modifier.testTag("dashboard_select_class_${svtClass.id}")
+                            )
+                            OutlinedButton(
+                                onClick = { onEditClassClick(svtClass) },
+                                modifier = Modifier.testTag("dashboard_edit_class_${svtClass.id}")
+                            ) {
+                                Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(id = R.string.class_edit_button))
+                            }
+                            OutlinedButton(
+                                onClick = { onShowQr(svtClass) },
+                                modifier = Modifier.testTag("dashboard_qr_class_${svtClass.id}")
+                            ) {
+                                Icon(Icons.Filled.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(id = R.string.teacher_show_qr))
+                            }
+                            OutlinedButton(
+                                onClick = { onOpenClassResults(svtClass) },
+                                modifier = Modifier.testTag("dashboard_results_class_${svtClass.id}")
+                            ) {
+                                Icon(Icons.Filled.BarChart, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(id = R.string.teacher_dashboard_results_tab))
+                            }
+                            IconButton(
+                                onClick = { onDeleteClassClick(svtClass) },
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("dashboard_delete_class_${svtClass.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = stringResource(id = R.string.teacher_delete_class),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

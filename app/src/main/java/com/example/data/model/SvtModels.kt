@@ -40,6 +40,8 @@ data class SvtClass(
     val academicYear: String = "",
     val level: String = "",
     val qrToken: String = "",
+    val establishmentId: String = "",
+    val establishmentName: String = "",
     val visibleLabDomains: List<String> = DEFAULT_LAB_DOMAINS,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
@@ -241,6 +243,32 @@ data class AppUpdateRelease(
     val versionName: String = "",
     val releaseNotes: String = "",
     val downloadUrl: String = "",
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class Establishment(
+    @DocumentId val id: String = "",
+    val teacherId: String = "",
+    val teacherName: String = "",
+    val name: String = "",
+    val city: String = "",
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class CustomGlossaryEntry(
+    @DocumentId val id: String = "",
+    val teacherId: String = "",
+    val teacherName: String = "",
+    val domain: String = "NERVOUS_MUSCULAR",
+    val term: String = "",
+    val definition: String = "",
+    val keyHint: String = "",
+    val keywords: List<String> = emptyList(),
+    val approvedStudentIds: List<String> = emptyList(),
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )

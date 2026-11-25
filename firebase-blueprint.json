@@ -39,6 +39,8 @@
         "academicYear": { "type": "string" },
         "level": { "type": "string" },
         "qrToken": { "type": "string" },
+        "establishmentId": { "type": "string" },
+        "establishmentName": { "type": "string" },
         "visibleLabDomains": { "type": "array", "description": "Enabled Labo SVT theme domain keys visible to students (CELL_GENETICS, IMMUNITY, REPRODUCTION, PHYSIOLOGY_IMMUNITY, NERVOUS_MUSCULAR, GEOLOGY, ECOLOGY)" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -257,6 +259,38 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["classId", "teacherId", "teacherName", "versionCode", "versionName", "releaseNotes", "downloadUrl", "createdAt", "updatedAt"]
+    },
+    "Establishment": {
+      "title": "Establishment",
+      "description": "School or high school establishment created by a teacher to organize classes.",
+      "type": "object",
+      "properties": {
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "name": { "type": "string" },
+        "city": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teacherId", "teacherName", "name", "createdAt", "updatedAt"]
+    },
+    "CustomGlossaryEntry": {
+      "title": "CustomGlossaryEntry",
+      "description": "Teacher-authored SVT glossary notion shared with approved students.",
+      "type": "object",
+      "properties": {
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "domain": { "type": "string", "enum": ["CELL_GENETICS", "IMMUNITY", "REPRODUCTION", "PHYSIOLOGY_IMMUNITY", "NERVOUS_MUSCULAR", "GEOLOGY", "ECOLOGY"] },
+        "term": { "type": "string" },
+        "definition": { "type": "string" },
+        "keyHint": { "type": "string" },
+        "keywords": { "type": "array" },
+        "approvedStudentIds": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teacherId", "teacherName", "domain", "term", "definition", "approvedStudentIds", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -315,6 +349,14 @@
     "/app_updates/{updateId}": {
       "schema": { "$ref": "#/entities/AppUpdateRelease" },
       "description": "Teacher-published app update announcements and external HTTPS download links."
+    },
+    "/establishments/{establishmentId}": {
+      "schema": { "$ref": "#/entities/Establishment" },
+      "description": "Teacher-created establishments grouping SVT classes."
+    },
+    "/glossary_entries/{entryId}": {
+      "schema": { "$ref": "#/entities/CustomGlossaryEntry" },
+      "description": "Teacher-added SVT glossary notions visible to approved students."
     }
   }
 }

@@ -79,6 +79,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -115,6 +116,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.DarkMode
@@ -129,7 +131,10 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.BuildConfig
 import com.example.R
 import com.example.core.AppThemePalette
@@ -148,14 +153,20 @@ import com.example.core.SecurityLockManager
 import com.example.core.ThemeConfig
 import com.example.core.ThemeMode
 import com.example.core.findFragmentActivity
+import com.example.ui.components.CreateOrEditClassDialog
+import com.example.ui.components.CreateOrEditEstablishmentDialog
+import com.example.ui.components.OrderedStudentListSection
 import com.example.ui.components.ProfileAvatarImage
 import com.example.ui.components.SetupSecurityPinDialog
+import com.example.ui.components.StudentListSortOption
+import com.example.ui.components.SvtEmptyStateCard
 import com.example.ui.components.SvtHeroBannerCard
 import com.example.data.badges.BadgeCategory
 import com.example.data.badges.BadgeEngine
 import com.example.data.badges.BadgeProgressItem
 import com.example.data.model.AppUpdateRelease
 import com.example.data.model.Enrollment
+import com.example.data.model.Establishment
 import com.example.data.model.QuizAttempt
 import com.example.data.model.RosterStudent
 import com.example.data.model.SvtClass
@@ -226,12 +237,30 @@ fun ProfileAndBadgesTab(
     },
     onResetStudentPassword: (RosterStudent, Enrollment?) -> Unit = { _, _ -> },
     onResetTeacherPassword: (UserProfile) -> Unit = {},
+    establishments: List<Establishment> = emptyList(),
+    selectedEstablishmentId: String? = null,
+    onSelectEstablishment: (String?) -> Unit = {},
+    onCreateEstablishment: (name: String, city: String) -> Unit = { _, _ -> },
+    onUpdateEstablishment: (Establishment, name: String, city: String) -> Unit = { _, _, _ -> },
+    onDeleteEstablishment: (Establishment) -> Unit = {},
+    onCreateClassInEstablishment: (name: String, level: String, academicYear: String, establishmentId: String, establishmentName: String) -> Unit = { name, level, year, _, _ ->
+        onCreateClass(name, level, year)
+    },
+    onUpdateClassDetails: (SvtClass, name: String, level: String, academicYear: String, establishmentId: String, establishmentName: String) -> Unit = { _, _, _, _, _, _ -> },
+    selectedTeacherSection: Int = 0,
+    onSelectTeacherSection: (Int) -> Unit = {},
     onGuestBlocked: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val isTeacherRole = profile.role == "teacher"
     var showEditDialog by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showNewClassDialog by remember { mutableStateOf(false) }
+    var editingClass by remember { mutableStateOf<SvtClass?>(null) }
+    var preselectedEstIdForNewClass by remember { mutableStateOf("") }
+    var showEstDialog by remember { mutableStateOf(false) }
+    var editingEst by remember { mutableStateOf<Establishment?>(null) }
+    var estToDelete by remember { mutableStateOf<Establishment?>(null) }
     var showPublishUpdateDialog by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
     var showTermsDialog by remember { mutableStateOf(false) }
@@ -247,6 +276,13 @@ fun ProfileAndBadgesTab(
     var parsedPreviewPair by remember { mutableStateOf<Pair<SvtClass, List<ImportedStudentRow>>?>(null) }
     var manualStudentTargetClass by remember { mutableStateOf<SvtClass?>(null) }
     var expandedRosterClassIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    val filteredTeacherClasses = remember(teacherClasses, selectedEstablishmentId) {
+        TeacherAnalyticsLogic.filterClassesByEstablishment(teacherClasses, selectedEstablishmentId)
+    }
+    val unassignedClassCount = remember(teacherClasses) {
+        teacherClasses.count { it.establishmentId.isBlank() }
+    }
 
     val coroutineScope = rememberCoroutineScope()
     var showPinSetupDialog by remember { mutableStateOf(false) }
@@ -327,7 +363,7 @@ fun ProfileAndBadgesTab(
             SvtHeroBannerCard(
                 title = stringResource(id = R.string.tab_profile),
                 subtitle = stringResource(
-                    id = if (profile.role == "teacher") R.string.profile_role_teacher
+                    id = if (isTeacherRole) R.string.profile_role_teacher
                     else R.string.profile_role_student
                 ),
                 backgroundResId = R.drawable.img_tab_profile,
@@ -335,7 +371,35 @@ fun ProfileAndBadgesTab(
             )
         }
 
-        // 1. Personal Info Card
+        if (isTeacherRole) {
+            item {
+                val teacherSubTabs = listOf(
+                    Triple(0, R.string.teacher_profile_tab_overview, Icons.Filled.Person),
+                    Triple(1, R.string.teacher_profile_tab_institutions, Icons.Filled.Apartment),
+                    Triple(2, R.string.teacher_profile_tab_security, Icons.Filled.Security),
+                    Triple(3, R.string.teacher_profile_tab_legal, Icons.Filled.Gavel)
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(teacherSubTabs, key = { it.first }) { (tabIndex, labelRes, icon) ->
+                        FilterChip(
+                            selected = selectedTeacherSection == tabIndex,
+                            onClick = { onSelectTeacherSection(tabIndex) },
+                            leadingIcon = {
+                                Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+                            },
+                            label = { Text(stringResource(id = labelRes), maxLines = 1) },
+                            modifier = Modifier.testTag("teacher_profile_tab_$tabIndex")
+                        )
+                    }
+                }
+            }
+        }
+
+        // 1. Personal Info Card (always for students, Overview tab for teachers)
+        if (!isTeacherRole || selectedTeacherSection == 0) {
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -555,6 +619,46 @@ fun ProfileAndBadgesTab(
             }
         }
 
+        if (isTeacherRole) {
+            item {
+                val pendingTotal = teacherEnrollments.count { it.status == "pending" }
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelectTeacherSection(1) }
+                        .testTag("teacher_profile_quick_summary_card")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = stringResource(id = R.string.teacher_profile_tab_institutions),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${establishments.size} ${stringResource(id = R.string.establishments_section_title)} • ${teacherClasses.size} ${stringResource(id = R.string.teacher_kpi_classes)} • ${stringResource(id = R.string.teacher_kpi_pending, pendingTotal)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                        FilledTonalButton(
+                            onClick = { onSelectTeacherSection(1) },
+                            modifier = Modifier.testTag("teacher_profile_jump_institutions_btn")
+                        ) {
+                            Text(stringResource(id = R.string.teacher_pending_alert_action))
+                        }
+                    }
+                }
+            }
+        }
+
         // 1a. Theme & Appearance Card
         item {
             ThemeSelectorCard(
@@ -562,9 +666,10 @@ fun ProfileAndBadgesTab(
                 onThemeChanged = onThemeChanged
             )
         }
+        } // end !isTeacherRole || selectedTeacherSection == 0
 
         // 1a-bis. 2nd Security Layer (PIN Lock) & Background Notifications Cards
-        if (!isGuestMode) {
+        if (!isGuestMode && (!isTeacherRole || selectedTeacherSection == 2)) {
             item {
                 SecurityPinSettingsCard(
                     isPinEnabled = isPinEnabled,
@@ -611,34 +716,36 @@ fun ProfileAndBadgesTab(
                     }
                 )
             }
+        }
 
-            if (isOwnerAdminEmail) {
-                item {
-                    AdminTeacherApprovalsCard(
-                        currentUserId = profile.userId,
-                        isAdminVerified = isAdminVerified,
-                        teachers = allTeachersForAdmin,
-                        onSendVerification = onSendAdminVerification,
-                        onRefreshStatus = onRefreshAdminStatus,
-                        onApproveTeacher = onApproveTeacher,
-                        onRejectTeacher = onRejectTeacher,
-                        onResetTeacherPassword = onResetTeacherPassword
-                    )
-                }
+        if (!isGuestMode && isOwnerAdminEmail && (!isTeacherRole || selectedTeacherSection == 3)) {
+            item {
+                AdminTeacherApprovalsCard(
+                    currentUserId = profile.userId,
+                    isAdminVerified = isAdminVerified,
+                    teachers = allTeachersForAdmin,
+                    onSendVerification = onSendAdminVerification,
+                    onRefreshStatus = onRefreshAdminStatus,
+                    onApproveTeacher = onApproveTeacher,
+                    onRejectTeacher = onRejectTeacher,
+                    onResetTeacherPassword = onResetTeacherPassword
+                )
             }
         }
 
         // 1b. App Updates Card (Play-policy compliant HTTPS update link + Teacher publisher)
-        item {
-            AppUpdatesCard(
-                isTeacher = profile.role == "teacher",
-                hasTeacherClasses = teacherClasses.isNotEmpty(),
-                teacherClasses = teacherClasses,
-                appUpdates = appUpdates,
-                onOpenUpdateUrl = { url -> openAppUpdateLink(context, url) },
-                onPublishClick = { showPublishUpdateDialog = true },
-                onDeleteUpdate = { updateToDelete = it }
-            )
+        if (!isTeacherRole || selectedTeacherSection == 2) {
+            item {
+                AppUpdatesCard(
+                    isTeacher = isTeacherRole,
+                    hasTeacherClasses = teacherClasses.isNotEmpty(),
+                    teacherClasses = teacherClasses,
+                    appUpdates = appUpdates,
+                    onOpenUpdateUrl = { url -> openAppUpdateLink(context, url) },
+                    onPublishClick = { showPublishUpdateDialog = true },
+                    onDeleteUpdate = { updateToDelete = it }
+                )
+            }
         }
 
         // 2. Student Badges & Rewards Section
@@ -763,8 +870,201 @@ fun ProfileAndBadgesTab(
             }
         }
 
-        // 3. Teacher Class Management, QR Codes & Student Approvals
-        if (profile.role == "teacher") {
+        // 3. Teacher Establishments, Class Management, QR Codes & Student Approvals
+        if (isTeacherRole && selectedTeacherSection == 1) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(id = R.string.establishments_section_title),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = stringResource(id = R.string.establishments_section_subtitle),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                        Button(
+                            onClick = {
+                                editingEst = null
+                                showEstDialog = true
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profile_new_establishment_button")
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(id = R.string.establishment_new_button))
+                        }
+                    }
+                }
+            }
+
+            if (establishments.isEmpty()) {
+                item {
+                    SvtEmptyStateCard(title = stringResource(id = R.string.establishment_empty_state))
+                }
+            } else {
+                items(establishments, key = { "profile_est_${it.id}" }) { est ->
+                    val estClassesCount = teacherClasses.count { it.establishmentId == est.id }
+                    val isSelectedEst = selectedEstablishmentId == est.id
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelectedEst) {
+                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+                            } else {
+                                MaterialTheme.colorScheme.surface
+                            }
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("profile_est_card_${est.id}")
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Apartment,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = est.name,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    val sub = listOfNotNull(
+                                        est.city.takeIf { it.isNotBlank() },
+                                        stringResource(id = R.string.establishment_classes_count, estClassesCount)
+                                    ).joinToString(" • ")
+                                    Text(
+                                        text = sub,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        editingEst = est
+                                        showEstDialog = true
+                                    },
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("profile_edit_est_${est.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = stringResource(id = R.string.establishment_edit_dialog_title),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { estToDelete = est },
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("profile_delete_est_${est.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = stringResource(id = R.string.delete),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { onSelectEstablishment(if (isSelectedEst) null else est.id) },
+                                    modifier = Modifier.testTag("profile_filter_est_btn_${est.id}")
+                                ) {
+                                    Text(
+                                        stringResource(
+                                            id = if (isSelectedEst) R.string.establishment_all_filter else R.string.establishment_classes_count,
+                                            if (isSelectedEst) teacherClasses.size else estClassesCount
+                                        )
+                                    )
+                                }
+                                FilledTonalButton(
+                                    onClick = {
+                                        editingClass = null
+                                        preselectedEstIdForNewClass = est.id
+                                        showNewClassDialog = true
+                                    },
+                                    modifier = Modifier.testTag("profile_add_class_est_${est.id}")
+                                ) {
+                                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(stringResource(id = R.string.establishment_add_class_inside))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (establishments.isNotEmpty() || unassignedClassCount > 0) {
+                item {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        item {
+                            FilterChip(
+                                selected = selectedEstablishmentId == null,
+                                onClick = { onSelectEstablishment(null) },
+                                label = { Text(stringResource(id = R.string.establishment_all_filter, teacherClasses.size)) },
+                                modifier = Modifier.testTag("profile_est_filter_all")
+                            )
+                        }
+                        items(establishments, key = { "p_est_chip_${it.id}" }) { est ->
+                            FilterChip(
+                                selected = selectedEstablishmentId == est.id,
+                                onClick = { onSelectEstablishment(est.id) },
+                                label = { Text(est.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                modifier = Modifier.testTag("profile_est_filter_${est.id}")
+                            )
+                        }
+                        if (unassignedClassCount > 0) {
+                            item {
+                                FilterChip(
+                                    selected = selectedEstablishmentId == TeacherAnalyticsLogic.UNASSIGNED_ESTABLISHMENT_FILTER,
+                                    onClick = { onSelectEstablishment(TeacherAnalyticsLogic.UNASSIGNED_ESTABLISHMENT_FILTER) },
+                                    label = { Text(stringResource(id = R.string.establishment_unassigned_filter, unassignedClassCount)) },
+                                    modifier = Modifier.testTag("profile_est_filter_unassigned")
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -772,11 +1072,17 @@ fun ProfileAndBadgesTab(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = stringResource(id = R.string.teacher_classes_title),
+                        text = "${stringResource(id = R.string.teacher_classes_title)} (${filteredTeacherClasses.size})",
                         style = MaterialTheme.typography.titleLarge
                     )
                     Button(
-                        onClick = { showNewClassDialog = true },
+                        onClick = {
+                            editingClass = null
+                            preselectedEstIdForNewClass = selectedEstablishmentId
+                                ?.takeUnless { it == TeacherAnalyticsLogic.UNASSIGNED_ESTABLISHMENT_FILTER }
+                                .orEmpty()
+                            showNewClassDialog = true
+                        },
                         modifier = Modifier.testTag("new_class_button")
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null)
@@ -807,12 +1113,56 @@ fun ProfileAndBadgesTab(
                 }
             }
 
-            items(teacherClasses, key = { it.id }) { svtClass ->
+            items(filteredTeacherClasses, key = { it.id }) { svtClass ->
                 val classEnrollments = teacherEnrollments.filter { it.classId == svtClass.id }
                 val pending = classEnrollments.filter { it.status == "pending" }
                 val approved = classEnrollments.filter { it.status == "approved" }
                 val classRoster = teacherRoster.filter { it.classId == svtClass.id }
                 val rosterExpanded = svtClass.id in expandedRosterClassIds
+                var rosterSortOption by rememberSaveable(svtClass.id) {
+                    mutableStateOf(StudentListSortOption.NAME_ASC)
+                }
+                var approvedSortOption by rememberSaveable(svtClass.id) {
+                    mutableStateOf(StudentListSortOption.NAME_ASC)
+                }
+
+                val sortedRoster = remember(classRoster, rosterSortOption) {
+                    when (rosterSortOption) {
+                        StudentListSortOption.MASSAR_ASC -> classRoster.sortedWith(
+                            compareBy<RosterStudent> { it.massarNumber.lowercase() }
+                                .thenBy { it.fullName.lowercase() }
+                        )
+                        else -> classRoster.sortedBy { it.fullName.lowercase() }
+                    }
+                }
+
+                val sortedApproved = remember(approved, classRoster, classEnrollments, approvedSortOption) {
+                    when (approvedSortOption) {
+                        StudentListSortOption.MASSAR_ASC -> approved.sortedWith(
+                            compareBy<Enrollment> { it.massarNumber.ifBlank { "ZZZZ" }.lowercase() }
+                                .thenBy {
+                                    TeacherAnalyticsLogic.resolveOfficialStudentName(
+                                        studentId = it.studentId,
+                                        massarNumber = it.massarNumber,
+                                        classId = it.classId,
+                                        fallbackName = it.studentName,
+                                        roster = classRoster,
+                                        enrollments = classEnrollments
+                                    ).lowercase()
+                                }
+                        )
+                        else -> approved.sortedBy {
+                            TeacherAnalyticsLogic.resolveOfficialStudentName(
+                                studentId = it.studentId,
+                                massarNumber = it.massarNumber,
+                                classId = it.classId,
+                                fallbackName = it.studentName,
+                                roster = classRoster,
+                                enrollments = classEnrollments
+                            ).lowercase()
+                        }
+                    }
+                }
 
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -839,8 +1189,46 @@ fun ProfileAndBadgesTab(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                Surface(
+                                    color = if (svtClass.establishmentName.isNotBlank()) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.padding(top = 4.dp)
+                                ) {
+                                    Text(
+                                        text = svtClass.establishmentName.ifBlank {
+                                            stringResource(id = R.string.class_unassigned_badge)
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (svtClass.establishmentName.isNotBlank()) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
-                            Row {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = {
+                                        editingClass = svtClass
+                                        preselectedEstIdForNewClass = svtClass.establishmentId
+                                        showNewClassDialog = true
+                                    },
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("edit_class_${svtClass.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = stringResource(id = R.string.class_edit_button),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                                 OutlinedButton(
                                     onClick = { qrDialogClass = svtClass },
                                     modifier = Modifier.testTag("show_qr_${svtClass.id}")
@@ -855,7 +1243,9 @@ fun ProfileAndBadgesTab(
                                 }
                                 IconButton(
                                     onClick = { classToDelete = svtClass },
-                                    modifier = Modifier.testTag("delete_class_${svtClass.id}")
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("delete_class_${svtClass.id}")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Delete,
@@ -919,7 +1309,7 @@ fun ProfileAndBadgesTab(
                             onUpdateClassLabDomains = onUpdateClassLabDomains
                         )
 
-                        // Generated Roster & Provisional Passwords Section
+                        // Generated Roster & Provisional Passwords Section (ordered & arrow-scrollable)
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
                             shape = MaterialTheme.shapes.medium
@@ -961,7 +1351,18 @@ fun ProfileAndBadgesTab(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 } else if (rosterExpanded) {
-                                    classRoster.forEach { roster ->
+                                    OrderedStudentListSection(
+                                        items = sortedRoster,
+                                        itemKey = { _, r -> r.id },
+                                        maxListHeight = 280.dp,
+                                        sortOption = rosterSortOption,
+                                        onSortChange = { rosterSortOption = it },
+                                        availableSorts = listOf(
+                                            StudentListSortOption.NAME_ASC,
+                                            StudentListSortOption.MASSAR_ASC
+                                        ),
+                                        tagPrefix = "profile_roster_${svtClass.id}"
+                                    ) { _, roster ->
                                         val linkedEnrollment = classEnrollments.firstOrNull {
                                             it.studentId == roster.studentUid ||
                                                 it.massarNumber.equals(roster.massarNumber, ignoreCase = true)
@@ -988,7 +1389,9 @@ fun ProfileAndBadgesTab(
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 IconButton(
                                                     onClick = { studentToResetPassword = roster to linkedEnrollment },
-                                                    modifier = Modifier.testTag("reset_roster_password_${roster.massarNumber}")
+                                                    modifier = Modifier
+                                                        .minimumInteractiveComponentSize()
+                                                        .testTag("reset_roster_password_${roster.massarNumber}")
                                                 ) {
                                                     Icon(
                                                         imageVector = Icons.Filled.Key,
@@ -999,7 +1402,9 @@ fun ProfileAndBadgesTab(
                                                 }
                                                 IconButton(
                                                     onClick = { onDeleteRosterStudent(roster) },
-                                                    modifier = Modifier.testTag("delete_roster_${roster.massarNumber}")
+                                                    modifier = Modifier
+                                                        .minimumInteractiveComponentSize()
+                                                        .testTag("delete_roster_${roster.massarNumber}")
                                                 ) {
                                                     Icon(
                                                         imageVector = Icons.Filled.Delete,
@@ -1100,73 +1505,92 @@ fun ProfileAndBadgesTab(
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        approved.forEach { enrollment ->
-                            val matchingRoster = classRoster.firstOrNull {
-                                it.studentUid == enrollment.studentId ||
-                                    (enrollment.massarNumber.isNotBlank() &&
-                                        it.massarNumber.equals(enrollment.massarNumber, ignoreCase = true))
-                            }
-                            val approvedOfficialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
-                                studentId = enrollment.studentId,
-                                massarNumber = enrollment.massarNumber,
-                                classId = enrollment.classId,
-                                fallbackName = enrollment.studentName,
-                                roster = classRoster,
-                                enrollments = classEnrollments
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(approvedOfficialName, style = MaterialTheme.typography.bodyMedium)
-                                    val sub = listOfNotNull(
-                                        enrollment.massarNumber.takeIf { it.isNotBlank() },
-                                        enrollment.studentPhone.takeIf { it.isNotBlank() }
-                                    ).joinToString(" • ")
-                                    if (sub.isNotBlank()) {
-                                        Text(
-                                            sub,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                        if (sortedApproved.isNotEmpty()) {
+                            OrderedStudentListSection(
+                                items = sortedApproved,
+                                itemKey = { _, e -> e.studentId },
+                                maxListHeight = 320.dp,
+                                sortOption = approvedSortOption,
+                                onSortChange = { approvedSortOption = it },
+                                availableSorts = listOf(
+                                    StudentListSortOption.NAME_ASC,
+                                    StudentListSortOption.MASSAR_ASC
+                                ),
+                                tagPrefix = "profile_approved_${svtClass.id}"
+                            ) { _, enrollment ->
+                                val matchingRoster = classRoster.firstOrNull {
+                                    it.studentUid == enrollment.studentId ||
+                                        (enrollment.massarNumber.isNotBlank() &&
+                                            it.massarNumber.equals(enrollment.massarNumber, ignoreCase = true))
                                 }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (matchingRoster != null) {
-                                        IconButton(
-                                            onClick = { studentToResetPassword = matchingRoster to enrollment },
-                                            modifier = Modifier.testTag("reset_student_password_${enrollment.studentId}")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Key,
-                                                contentDescription = stringResource(id = R.string.teacher_reset_student_password_btn),
-                                                tint = MaterialTheme.colorScheme.tertiary
+                                val approvedOfficialName = TeacherAnalyticsLogic.resolveOfficialStudentName(
+                                    studentId = enrollment.studentId,
+                                    massarNumber = enrollment.massarNumber,
+                                    classId = enrollment.classId,
+                                    fallbackName = enrollment.studentName,
+                                    roster = classRoster,
+                                    enrollments = classEnrollments
+                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(approvedOfficialName, style = MaterialTheme.typography.bodyMedium)
+                                        val sub = listOfNotNull(
+                                            enrollment.massarNumber.takeIf { it.isNotBlank() },
+                                            enrollment.studentPhone.takeIf { it.isNotBlank() }
+                                        ).joinToString(" • ")
+                                        if (sub.isNotBlank()) {
+                                            Text(
+                                                sub,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }
-                                    IconButton(
-                                        onClick = { studentToResetDevice = enrollment },
-                                        modifier = Modifier.testTag("reset_device_${enrollment.studentId}")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.LockOpen,
-                                            contentDescription = stringResource(id = R.string.device_lock_reset_button),
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = { studentToDelete = enrollment },
-                                        modifier = Modifier.testTag("delete_student_${enrollment.studentId}")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Delete,
-                                            contentDescription = stringResource(id = R.string.teacher_delete_student),
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (matchingRoster != null) {
+                                            IconButton(
+                                                onClick = { studentToResetPassword = matchingRoster to enrollment },
+                                                modifier = Modifier
+                                                    .minimumInteractiveComponentSize()
+                                                    .testTag("reset_student_password_${enrollment.studentId}")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Key,
+                                                    contentDescription = stringResource(id = R.string.teacher_reset_student_password_btn),
+                                                    tint = MaterialTheme.colorScheme.tertiary
+                                                )
+                                            }
+                                        }
+                                        IconButton(
+                                            onClick = { studentToResetDevice = enrollment },
+                                            modifier = Modifier
+                                                .minimumInteractiveComponentSize()
+                                                .testTag("reset_device_${enrollment.studentId}")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.LockOpen,
+                                                contentDescription = stringResource(id = R.string.device_lock_reset_button),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = { studentToDelete = enrollment },
+                                            modifier = Modifier
+                                                .minimumInteractiveComponentSize()
+                                                .testTag("delete_student_${enrollment.studentId}")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Delete,
+                                                contentDescription = stringResource(id = R.string.teacher_delete_student),
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1177,6 +1601,7 @@ fun ProfileAndBadgesTab(
         }
 
         // 4. Legal Notice Card
+        if (!isTeacherRole || selectedTeacherSection == 3) {
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1318,6 +1743,7 @@ fun ProfileAndBadgesTab(
                 }
             }
         }
+        } // end !isTeacherRole || selectedTeacherSection == 3
     }
 
     if (showEditDialog) {
@@ -1377,12 +1803,65 @@ fun ProfileAndBadgesTab(
     }
 
     if (showNewClassDialog) {
-        NewClassDialog(
-            onCreate = { name, level, year ->
-                onCreateClass(name, level, year)
-                showNewClassDialog = false
+        CreateOrEditClassDialog(
+            establishments = establishments,
+            initialClass = editingClass,
+            preselectedEstablishmentId = preselectedEstIdForNewClass,
+            onDismiss = { showNewClassDialog = false },
+            onRequestQuickCreateEstablishment = {
+                editingEst = null
+                showEstDialog = true
             },
-            onDismiss = { showNewClassDialog = false }
+            onConfirm = { name, level, year, estId, estName ->
+                val target = editingClass
+                if (target == null) {
+                    onCreateClassInEstablishment(name, level, year, estId, estName)
+                } else {
+                    onUpdateClassDetails(target, name, level, year, estId, estName)
+                }
+                showNewClassDialog = false
+            }
+        )
+    }
+
+    if (showEstDialog) {
+        CreateOrEditEstablishmentDialog(
+            initialEstablishment = editingEst,
+            onDismiss = { showEstDialog = false },
+            onConfirm = { name, city ->
+                val target = editingEst
+                if (target == null) {
+                    onCreateEstablishment(name, city)
+                } else {
+                    onUpdateEstablishment(target, name, city)
+                }
+                showEstDialog = false
+            }
+        )
+    }
+
+    estToDelete?.let { est ->
+        AlertDialog(
+            onDismissRequest = { estToDelete = null },
+            title = { Text(stringResource(id = R.string.establishment_delete_confirm_title)) },
+            text = { Text(stringResource(id = R.string.establishment_delete_confirm_body, est.name)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteEstablishment(est)
+                        estToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("confirm_delete_est_profile_button")
+                ) {
+                    Text(stringResource(id = R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { estToDelete = null }) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
         )
     }
 
@@ -2266,7 +2745,8 @@ private fun ThemeSelectorCard(
                     AppThemePalette.EMERALD to R.string.theme_palette_emerald,
                     AppThemePalette.OCEAN to R.string.theme_palette_ocean,
                     AppThemePalette.EARTH to R.string.theme_palette_earth,
-                    AppThemePalette.BOTANICAL to R.string.theme_palette_botanical
+                    AppThemePalette.BOTANICAL to R.string.theme_palette_botanical,
+                    AppThemePalette.NERVOUS_MUSCULAR to R.string.theme_palette_nervous_muscular
                 )
                 palettes.forEach { (palette, labelRes) ->
                     val selected = currentTheme.palette == palette
@@ -3422,7 +3902,7 @@ private fun NewClassDialog(
 }
 
 @Composable
-private fun ClassQrDialog(
+internal fun ClassQrDialog(
     svtClass: SvtClass,
     onDismiss: () -> Unit
 ) {

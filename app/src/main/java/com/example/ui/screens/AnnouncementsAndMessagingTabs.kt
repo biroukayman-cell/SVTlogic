@@ -40,6 +40,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,6 +61,8 @@ import com.example.data.model.Announcement
 import com.example.data.model.Enrollment
 import com.example.data.model.PrivateMessage
 import com.example.data.model.RosterStudent
+import com.example.ui.components.OrderedStudentListSection
+import com.example.ui.components.StudentListSortOption
 import com.example.ui.components.SvtEmptyStateCard
 import com.example.ui.components.SvtHeroBannerCard
 import java.text.SimpleDateFormat
@@ -267,11 +270,12 @@ fun MessagingTab(
     onSendAsStudent: (String) -> Unit,
     onSendAsTeacher: (classId: String, studentId: String, studentName: String, content: String) -> Unit,
     onMarkThreadRead: (List<PrivateMessage>) -> Unit,
+    onDeleteMessage: (PrivateMessage) -> Unit = {},
     isGuestMode: Boolean = false,
     onGuestBlocked: () -> Unit = {}
 ) {
     if (!isTeacher) {
-        // Student strictly isolated private channel with their Teacher ONLY
+        // Student strictly isolated private channel with their Teacher ONLY (never show delete button)
         LaunchedEffect(messages, isGuestMode) {
             if (!isGuestMode) {
                 val unreadFromTeacher = messages.filter { it.senderRole == "teacher" && !it.isRead }
@@ -285,37 +289,74 @@ fun MessagingTab(
             currentUserId = currentUserId,
             isGuestMode = isGuestMode,
             onGuestBlocked = onGuestBlocked,
+            onDeleteMessage = null,
             onSend = onSendAsStudent
         )
     } else {
-        // Teacher inbox grouped strictly per student
+        // Teacher inbox grouped strictly per student, ordered & arrow-scrollable
         var activeStudentEnrollment by remember { mutableStateOf<Enrollment?>(null) }
-        val classStudents = remember(teacherEnrollments, selectedClassId) {
+        var sortOption by rememberSaveable { mutableStateOf(StudentListSortOption.NAME_ASC) }
+
+        val classStudents = remember(teacherEnrollments, teacherRoster, selectedClassId, sortOption) {
             val approved = teacherEnrollments.filter { it.status == "approved" }
-            if (selectedClassId != null) approved.filter { it.classId == selectedClassId } else approved
+            val scoped = if (selectedClassId != null) approved.filter { it.classId == selectedClassId } else approved
+            when (sortOption) {
+                StudentListSortOption.MASSAR_ASC -> scoped.sortedWith(
+                    compareBy<Enrollment> { it.massarNumber.ifBlank { "ZZZZ" }.lowercase() }
+                        .thenBy {
+                            TeacherAnalyticsLogic.resolveOfficialStudentName(
+                                studentId = it.studentId,
+                                massarNumber = it.massarNumber,
+                                classId = it.classId,
+                                fallbackName = it.studentName,
+                                roster = teacherRoster,
+                                enrollments = teacherEnrollments
+                            ).lowercase()
+                        }
+                )
+                else -> scoped.sortedBy {
+                    TeacherAnalyticsLogic.resolveOfficialStudentName(
+                        studentId = it.studentId,
+                        massarNumber = it.massarNumber,
+                        classId = it.classId,
+                        fallbackName = it.studentName,
+                        roster = teacherRoster,
+                        enrollments = teacherEnrollments
+                    ).lowercase()
+                }
+            }
         }
 
         if (activeStudentEnrollment == null) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                item {
-                    val unreadTotal = messages.count { it.senderRole == "student" && !it.isRead }
-                    SvtHeroBannerCard(
-                        title = stringResource(id = R.string.tab_messaging),
-                        subtitle = stringResource(id = R.string.messaging_teacher_inbox, unreadTotal),
-                        backgroundResId = R.drawable.img_tab_messaging
-                    )
-                }
+                val unreadTotal = messages.count { it.senderRole == "student" && !it.isRead }
+                SvtHeroBannerCard(
+                    title = stringResource(id = R.string.tab_messaging),
+                    subtitle = stringResource(id = R.string.messaging_teacher_inbox, unreadTotal),
+                    backgroundResId = R.drawable.img_tab_messaging
+                )
 
                 if (classStudents.isEmpty()) {
-                    item {
-                        SvtEmptyStateCard(title = stringResource(id = R.string.messaging_empty))
-                    }
+                    SvtEmptyStateCard(title = stringResource(id = R.string.messaging_empty))
                 } else {
-                    items(classStudents, key = { it.studentId }) { student ->
+                    OrderedStudentListSection(
+                        items = classStudents,
+                        itemKey = { _, student -> student.studentId },
+                        modifier = Modifier.weight(1f),
+                        maxListHeight = 1200.dp,
+                        sortOption = sortOption,
+                        onSortChange = { sortOption = it },
+                        availableSorts = listOf(
+                            StudentListSortOption.NAME_ASC,
+                            StudentListSortOption.MASSAR_ASC
+                        ),
+                        tagPrefix = "messaging_inbox"
+                    ) { _, student ->
                         val studentMsgs = messages.filter { it.studentId == student.studentId }
                         val unreadCount = studentMsgs.count { it.senderRole == "student" && !it.isRead }
                         val lastMsg = studentMsgs.lastOrNull()
@@ -331,7 +372,8 @@ fun MessagingTab(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { activeStudentEnrollment = student },
+                                .clickable { activeStudentEnrollment = student }
+                                .testTag("messaging_thread_card_${student.studentId}"),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
                             Row(
@@ -391,6 +433,7 @@ fun MessagingTab(
                 messages = threadMessages,
                 currentUserId = currentUserId,
                 onBack = { activeStudentEnrollment = null },
+                onDeleteMessage = onDeleteMessage,
                 onSend = { content ->
                     onSendAsTeacher(student.classId, student.studentId, officialName, content)
                 }
@@ -408,9 +451,11 @@ private fun PrivateChatThread(
     isGuestMode: Boolean = false,
     onGuestBlocked: () -> Unit = {},
     onBack: (() -> Unit)? = null,
+    onDeleteMessage: ((PrivateMessage) -> Unit)? = null,
     onSend: (String) -> Unit
 ) {
     var draft by remember { mutableStateOf("") }
+    var messageToDelete by remember { mutableStateOf<PrivateMessage?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(
@@ -425,7 +470,10 @@ private fun PrivateChatThread(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (onBack != null) {
-                    IconButton(onClick = onBack) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.minimumInteractiveComponentSize()
+                    ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(id = R.string.close)
@@ -465,8 +513,24 @@ private fun PrivateChatThread(
                     val isMine = msg.senderId == currentUserId
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
+                        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        if (isMine && onDeleteMessage != null && msg.id.isNotBlank()) {
+                            IconButton(
+                                onClick = { messageToDelete = msg },
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("delete_private_message_${msg.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = stringResource(id = R.string.message_delete_action),
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
                         Surface(
                             shape = RoundedCornerShape(
                                 topStart = 16.dp,
@@ -476,7 +540,7 @@ private fun PrivateChatThread(
                             ),
                             color = if (isMine) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.widthIn(max = 290.dp)
+                            modifier = Modifier.widthIn(max = 270.dp)
                         ) {
                             Text(
                                 text = msg.content,
@@ -485,6 +549,21 @@ private fun PrivateChatThread(
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                             )
+                        }
+                        if (!isMine && onDeleteMessage != null && msg.id.isNotBlank()) {
+                            IconButton(
+                                onClick = { messageToDelete = msg },
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("delete_private_message_${msg.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = stringResource(id = R.string.message_delete_action),
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -542,5 +621,30 @@ private fun PrivateChatThread(
                 }
             }
         }
+    }
+
+    messageToDelete?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { messageToDelete = null },
+            title = { Text(stringResource(id = R.string.message_delete_confirm_title)) },
+            text = { Text(stringResource(id = R.string.message_delete_confirm_body)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteMessage?.invoke(msg)
+                        messageToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("confirm_delete_private_message_button")
+                ) {
+                    Text(stringResource(id = R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { messageToDelete = null }) {
+                    Text(stringResource(id = R.string.cancel))
+                }
+            }
+        )
     }
 }

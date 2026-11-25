@@ -138,6 +138,7 @@ fun MainDashboardScreen(
         mutableStateOf(if (isTeacher) SvtTab.DASHBOARD else SvtTab.EXERCISES)
     }
     var teacherDashboardSection by rememberSaveable { mutableIntStateOf(0) }
+    var teacherProfileSection by rememberSaveable { mutableIntStateOf(0) }
     var showNotificationsSheet by remember { mutableStateOf(false) }
     var showClassMenu by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -151,6 +152,8 @@ fun MainDashboardScreen(
     val pendingVideoTrackings by viewModel.pendingVideoTrackings.collectAsStateWithLifecycle()
     val isSyncingOffline by viewModel.isSyncingOffline.collectAsStateWithLifecycle()
 
+    val teacherEstablishments by viewModel.teacherEstablishments.collectAsStateWithLifecycle()
+    val selectedEstablishmentId by viewModel.selectedEstablishmentId.collectAsStateWithLifecycle()
     val teacherClasses by viewModel.teacherClasses.collectAsStateWithLifecycle()
     val selectedClassId by viewModel.selectedClassId.collectAsStateWithLifecycle()
     val teacherEnrollments by viewModel.teacherEnrollments.collectAsStateWithLifecycle()
@@ -162,6 +165,7 @@ fun MainDashboardScreen(
     val teacherVideoTracking by viewModel.teacherVideoTracking.collectAsStateWithLifecycle()
     val teacherAnnouncements by viewModel.teacherAnnouncements.collectAsStateWithLifecycle()
     val teacherMessages by viewModel.teacherMessages.collectAsStateWithLifecycle()
+    val teacherCustomGlossary by viewModel.teacherCustomGlossary.collectAsStateWithLifecycle()
 
     val studentEnrollment by viewModel.studentEnrollment.collectAsStateWithLifecycle()
     val studentAllowedLabDomains by viewModel.studentAllowedLabDomains.collectAsStateWithLifecycle()
@@ -173,6 +177,7 @@ fun MainDashboardScreen(
     val studentAnnouncements by viewModel.studentAnnouncements.collectAsStateWithLifecycle()
     val studentMessages by viewModel.studentMessages.collectAsStateWithLifecycle()
     val studentNotifications by viewModel.studentNotifications.collectAsStateWithLifecycle()
+    val studentCustomGlossary by viewModel.studentCustomGlossary.collectAsStateWithLifecycle()
 
     val aiQuizState by viewModel.aiQuizState.collectAsStateWithLifecycle()
     val labSvtSearchState by viewModel.labSvtSearchState.collectAsStateWithLifecycle()
@@ -441,9 +446,33 @@ fun MainDashboardScreen(
                                 teacherVideoTracking = teacherVideoTracking,
                                 teacherAnnouncements = teacherAnnouncements,
                                 teacherMessages = teacherMessages,
+                                establishments = teacherEstablishments,
+                                selectedEstablishmentId = selectedEstablishmentId,
+                                onSelectEstablishment = { viewModel.selectEstablishment(it) },
+                                onCreateEstablishment = { name, city ->
+                                    viewModel.createEstablishment(context, profile.fullName, name, city)
+                                },
+                                onUpdateEstablishment = { est, name, city ->
+                                    viewModel.updateEstablishment(context, est.id, name, city)
+                                },
+                                onDeleteEstablishment = { est ->
+                                    viewModel.deleteEstablishment(context, est)
+                                },
+                                onCreateClass = { name, level, year, estId, estName ->
+                                    viewModel.createClass(profile.fullName, name, level, year, estId, estName)
+                                },
+                                onUpdateClassDetails = { cls, name, level, year, estId, estName ->
+                                    viewModel.updateClassDetails(context, cls, name, level, year, estId, estName)
+                                },
+                                onDeleteClass = { viewModel.deleteClass(it) },
+                                onSelectClass = { viewModel.selectClass(it) },
                                 currentLanguage = currentLanguage,
                                 onAnalyzeQuizErrorsWithAi = { quiz ->
                                     promptErrorsQuizId = quiz.id
+                                },
+                                onOpenPendingApprovals = {
+                                    teacherProfileSection = 1
+                                    currentTab = SvtTab.PROFILE
                                 },
                                 onNavigateToTab = { targetTab -> currentTab = targetTab }
                             )
@@ -520,6 +549,13 @@ fun MainDashboardScreen(
                                 },
                                 onUpdateClassLabDomains = { classId, domains ->
                                     viewModel.updateClassLabDomains(context, classId, domains)
+                                },
+                                customGlossaryEntries = if (isTeacher) teacherCustomGlossary else studentCustomGlossary,
+                                onAddCustomGlossaryEntry = { domain, term, def, hint, kw ->
+                                    viewModel.addCustomGlossaryEntry(context, domain, term, def, hint, kw)
+                                },
+                                onDeleteCustomGlossaryEntry = { entry ->
+                                    viewModel.deleteCustomGlossaryEntry(context, entry)
                                 }
                             )
 
@@ -597,7 +633,12 @@ fun MainDashboardScreen(
                                     val notifTitle = context.getString(R.string.tab_messaging)
                                     viewModel.sendMessageAsTeacher(clsId, stId, stName, content, notifTitle)
                                 },
-                                onMarkThreadRead = { viewModel.markThreadRead(it) }
+                                onMarkThreadRead = { viewModel.markThreadRead(it) },
+                                onDeleteMessage = if (isTeacher) { msg ->
+                                    viewModel.deletePrivateMessageAsTeacher(context, msg)
+                                } else {
+                                    {}
+                                }
                             )
 
                             SvtTab.PROFILE -> ProfileAndBadgesTab(
@@ -747,7 +788,27 @@ fun MainDashboardScreen(
                                     viewModel.sendAdminTeacherPasswordReset(context, teacher) { phone, smsBody ->
                                         launchSmsComposerOrShare(context, phone, smsBody)
                                     }
-                                }
+                                },
+                                establishments = teacherEstablishments,
+                                selectedEstablishmentId = selectedEstablishmentId,
+                                onSelectEstablishment = { viewModel.selectEstablishment(it) },
+                                onCreateEstablishment = { name, city ->
+                                    viewModel.createEstablishment(context, profile.fullName, name, city)
+                                },
+                                onUpdateEstablishment = { est, name, city ->
+                                    viewModel.updateEstablishment(context, est.id, name, city)
+                                },
+                                onDeleteEstablishment = { est ->
+                                    viewModel.deleteEstablishment(context, est)
+                                },
+                                onCreateClassInEstablishment = { name, level, year, estId, estName ->
+                                    viewModel.createClass(profile.fullName, name, level, year, estId, estName)
+                                },
+                                onUpdateClassDetails = { cls, name, level, year, estId, estName ->
+                                    viewModel.updateClassDetails(context, cls, name, level, year, estId, estName)
+                                },
+                                selectedTeacherSection = teacherProfileSection,
+                                onSelectTeacherSection = { teacherProfileSection = it }
                             )
                         }
                     }

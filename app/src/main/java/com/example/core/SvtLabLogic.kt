@@ -4,6 +4,7 @@ import com.example.data.svt.SvtDomain
 import com.example.data.svt.SvtGlossaryEntry
 import java.text.Normalizer
 import java.util.Locale
+import kotlin.math.roundToInt
 
 data class DnaSynthesisResult(
     val templateDna: String,
@@ -435,6 +436,69 @@ object SvtLabLogic {
             dissolvedO2MgL = safeO2,
             biodegradabilityRatio = ratio,
             qualityClass = quality
+        )
+    }
+
+    enum class MuscleContractionState {
+        SUBTHRESHOLD,
+        NO_CALCIUM_BLOCKED,
+        FATIGUED_NO_ATP,
+        CONTRACTING
+    }
+
+    data class NerveAndMuscleResult(
+        val stimulusMv: Int,
+        val thresholdMv: Int,
+        val restingPotentialMv: Int,
+        val peakPotentialMv: Int,
+        val actionPotentialTriggered: Boolean,
+        val conductionVelocityMs: Double,
+        val isMyelinated: Boolean,
+        val acetylcholineReleased: Boolean,
+        val crossBridgesActive: Boolean,
+        val sarcomereShorteningPct: Int,
+        val contractionState: MuscleContractionState
+    )
+
+    fun computeNerveAndMuscleResponse(
+        stimulusMv: Int,
+        thresholdMv: Int = -50,
+        isMyelinated: Boolean = true,
+        atpLevelPct: Int = 80,
+        calciumAvailable: Boolean = true
+    ): NerveAndMuscleResult {
+        val safeStimulus = stimulusMv.coerceIn(-80, 50)
+        val safeThreshold = thresholdMv.coerceIn(-65, -30)
+        val safeAtp = atpLevelPct.coerceIn(0, 100)
+        val restingMv = -70
+        val triggered = safeStimulus >= safeThreshold
+        val peakMv = if (triggered) 30 else safeStimulus
+        val velocity = when {
+            !triggered -> 0.0
+            isMyelinated -> 120.0
+            else -> 2.5
+        }
+        val achReleased = triggered && calciumAvailable
+        val crossBridges = achReleased && safeAtp >= 10
+        val shortening = if (!crossBridges) 0 else (safeAtp * 0.35).roundToInt().coerceIn(4, 35)
+        val state = when {
+            !triggered -> MuscleContractionState.SUBTHRESHOLD
+            !calciumAvailable -> MuscleContractionState.NO_CALCIUM_BLOCKED
+            safeAtp < 10 -> MuscleContractionState.FATIGUED_NO_ATP
+            else -> MuscleContractionState.CONTRACTING
+        }
+        return NerveAndMuscleResult(
+            stimulusMv = safeStimulus,
+            thresholdMv = safeThreshold,
+            restingPotentialMv = restingMv,
+            peakPotentialMv = peakMv,
+            actionPotentialTriggered = triggered,
+            conductionVelocityMs = velocity,
+            isMyelinated = isMyelinated,
+            acetylcholineReleased = achReleased,
+            crossBridgesActive = crossBridges,
+            sarcomereShorteningPct = shortening,
+            contractionState = state
         )
     }
 }

@@ -810,4 +810,86 @@
     <string name="biometric_disabled_toast">Fingerprint sign-in disabled.</string>
     <string name="biometric_credentials_expired">Your password changed. Sign in once with your password to refresh fingerprint sign-in.</string>
     <string name="biometric_unlock_button">Unlock with fingerprint</string>
+
+    <!-- Teacher Organization: Establishments, Ordered Lists, Custom Glossary, Messaging & Nervous/Muscular -->
+    <string name="teacher_dashboard_manage_tab">Schools &amp; Classes</string>
+    <string name="teacher_profile_tab_overview">Profile</string>
+    <string name="teacher_profile_tab_institutions">Schools &amp; Classes</string>
+    <string name="teacher_profile_tab_security">Security &amp; App</string>
+    <string name="teacher_profile_tab_legal">Legal &amp; Admin</string>
+
+    <string name="establishments_section_title">Schools &amp; Institutions</string>
+    <string name="establishments_section_subtitle">Create schools, enter their names, and organize your classes inside each school.</string>
+    <string name="establishment_all_filter">All (%1$d)</string>
+    <string name="establishment_unassigned_filter">Unassigned (%1$d)</string>
+    <string name="establishment_new_button">New school</string>
+    <string name="establishment_create_dialog_title">Create a school</string>
+    <string name="establishment_edit_dialog_title">Edit school</string>
+    <string name="establishment_name_label">School name (e.g. Ibn Sina High School)</string>
+    <string name="establishment_city_label">City / District (optional)</string>
+    <string name="establishment_name_required">Enter a school name of at least 2 characters.</string>
+    <string name="establishment_created_success">School "%1$s" created.</string>
+    <string name="establishment_updated_success">School "%1$s" updated.</string>
+    <string name="establishment_deleted_success">School "%1$s" deleted.</string>
+    <string name="establishment_delete_confirm_title">Delete this school?</string>
+    <string name="establishment_delete_confirm_body">School "%1$s" will be deleted. Its classes will be kept without an assigned school.</string>
+    <string name="establishment_empty_state">No school created yet. Create a school to group your classes.</string>
+    <string name="establishment_classes_count">%1$d class(es)</string>
+    <string name="establishment_add_class_inside">Add class here</string>
+    <string name="establishment_none_chip">No school</string>
+    <string name="class_establishment_picker_label">Parent school</string>
+    <string name="class_edit_button">Edit</string>
+    <string name="class_edit_dialog_title">Edit class</string>
+    <string name="class_updated_success">Class "%1$s" updated.</string>
+    <string name="class_unassigned_badge">No school</string>
+
+    <string name="student_list_sort_name">Name A→Z</string>
+    <string name="student_list_sort_score">Score ↓</string>
+    <string name="student_list_sort_massar">Massar</string>
+    <string name="student_list_scroll_up">Scroll list up</string>
+    <string name="student_list_scroll_down">Scroll list down</string>
+    <string name="student_list_range_indicator">%1$d–%2$d / %3$d</string>
+
+    <string name="message_delete_action">Delete message</string>
+    <string name="message_delete_confirm_title">Delete this message?</string>
+    <string name="message_delete_confirm_body">This message will be permanently removed from the conversation.</string>
+    <string name="message_deleted_success">Message deleted.</string>
+
+    <string name="teacher_kpi_participation">Quiz Participation</string>
+    <string name="teacher_kpi_participation_sub">%1$d / %2$d active • Avg %3$s</string>
+    <string name="teacher_attention_card_title">Class Tracking &amp; Alerts</string>
+    <string name="teacher_attention_struggling_title">Students needing support (&lt; 50%%)</string>
+    <string name="teacher_attention_inactive_title">Students with 0 quizzes done</string>
+    <string name="teacher_attention_all_good">All active students scored at least 50%%!</string>
+    <string name="teacher_attention_message_btn">Message</string>
+    <string name="teacher_pending_alert_banner">%1$d enrollment request(s) awaiting approval</string>
+    <string name="teacher_pending_alert_action">Manage</string>
+
+    <string name="glossary_add_notion_btn">Add notion</string>
+    <string name="glossary_add_dialog_title">New Glossary Notion</string>
+    <string name="glossary_notion_domain_label">SVT Theme</string>
+    <string name="glossary_notion_term_label">Term / Concept (e.g. Motor end plate)</string>
+    <string name="glossary_notion_def_label">Clear scientific definition</string>
+    <string name="glossary_notion_hint_label">Key takeaway / Exam tip (optional)</string>
+    <string name="glossary_notion_keywords_label">Comma-separated keywords</string>
+    <string name="glossary_prof_badge">Teacher</string>
+    <string name="glossary_delete_notion_cd">Delete this notion</string>
+    <string name="glossary_add_validation_error">Term (2+ chars) and definition (4+ chars) are required.</string>
+    <string name="glossary_added_success">Notion "%1$s" added to glossary.</string>
+    <string name="glossary_deleted_success">Notion removed from glossary.</string>
+
+    <string name="theme_palette_nervous_muscular">Nervous &amp; Muscular System</string>
+    <string name="svt_tool_chip_nervous_muscular">Nervous &amp; Muscular</string>
+    <string name="svt_tool_neuro_title">Nerve Impulse &amp; Muscle Contraction Simulator</string>
+    <string name="svt_tool_neuro_desc">Test the all-or-none law, myelinated conduction, and actin–myosin sarcomere sliding.</string>
+    <string name="svt_tool_neuro_stimulus">Stimulus intensity: %1$d mV (Threshold: %2$d mV)</string>
+    <string name="svt_tool_neuro_myelin">Myelinated axon (saltatory conduction)</string>
+    <string name="svt_tool_neuro_calcium">Ca²⁺ ion availability</string>
+    <string name="svt_tool_neuro_atp">ATP reserve: %1$d%%</string>
+    <string name="svt_tool_neuro_ap_yes">Action potential (+30 mV) • %1$s m/s</string>
+    <string name="svt_tool_neuro_ap_no">Subthreshold (%1$d mV) • No AP (0 m/s)</string>
+    <string name="svt_tool_neuro_state_contracting">Active contraction: actomyosin bridges • Sarcomere -%1$d%%</string>
+    <string name="svt_tool_neuro_state_subthreshold">Resting (-70 mV): stimulus too weak to open Na⁺ channels</string>
+    <string name="svt_tool_neuro_state_no_ca">Synaptic / troponin block: missing Ca²⁺ ions</string>
+    <string name="svt_tool_neuro_state_no_atp">Muscle fatigue: insufficient ATP for myosin head stroke</string>
 </resources>
