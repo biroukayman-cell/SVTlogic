@@ -1148,7 +1148,7 @@ private fun TeacherQuizStatsDialog(
                             .testTag("quiz_stats_ai_errors_button_${quiz.id}")
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.AutoAwesome,
+                            imageVector = Icons.Filled.ContentCopy,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp)
                         )

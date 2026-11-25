@@ -739,10 +739,18 @@
     <string name="teacher_answers_empty_incorrect">لا توجد إجابات خاطئة — جميع الأسئلة صحيحة!</string>
     <string name="teacher_answers_empty_detail">لا تتوفر تفاصيل الإجابة لكل سؤال لهذه المحاولة.</string>
 
-    <!-- التحليل التربوي بالذكاء الاصطناعي للقسم -->
-    <string name="teacher_ai_analysis_btn">تحليل بالذكاء الاصطناعي</string>
-    <string name="teacher_ai_analysis_dialog_title">تحليل بالذكاء الاصطناعي — %1$s</string>
-    <string name="teacher_ai_analysis_loading">جارٍ إنشاء التحليل التربوي للقسم بالذكاء الاصطناعي…</string>
+    <!-- موجه التحليل الخارجي بالذكاء الاصطناعي للقسم -->
+    <string name="teacher_ai_analysis_btn">نسخ موجه تحليل الذكاء الاصطناعي</string>
+    <string name="teacher_ai_analysis_dialog_title">موجه التحليل — %1$s</string>
+    <string name="teacher_ai_prompt_subtitle">انسخ هذا الموجه الذي يتضمن نتائج أقسامك والصقه في تطبيق ذكاء اصطناعي خارجي (ChatGPT أو Gemini أو Claude…).</string>
+    <string name="teacher_ai_prompt_all_classes">جميع الأقسام (%1$d)</string>
+    <string name="teacher_ai_prompt_copy">نسخ الموجه</string>
+    <string name="teacher_ai_prompt_copied">تم نسخ موجه التحليل! الصقه في تطبيق الذكاء الاصطناعي الخارجي.</string>
+    <string name="teacher_ai_prompt_share">إرسال إلى AI</string>
+    <string name="teacher_ai_prompt_share_chooser">إرسال الموجه إلى تطبيق ذكاء اصطناعي</string>
+    <string name="teacher_ai_prompt_preview_label">الموجه الجاهز للصق</string>
+    <string name="teacher_ai_paste_response_label">لصق رد الذكاء الاصطناعي (اختياري، لحفظه PDF)</string>
+    <string name="teacher_ai_paste_response_hint">الصق هنا التحليل الذي أنشأه الذكاء الاصطناعي الخارجي لتحميله بصيغة PDF…</string>
     <string name="teacher_ai_analysis_summary_title">ملخص القسم</string>
     <string name="teacher_ai_analysis_strengths_title">نقاط القوة المحددة</string>
     <string name="teacher_ai_analysis_gaps_title">الثغرات ونقاط الضعف</string>
@@ -758,13 +766,16 @@
     <string name="teacher_ai_pdf_saved_generic">تم حفظ ملف PDF بنجاح.</string>
     <string name="teacher_ai_pdf_error">تعذر إنشاء ملف PDF: %1$s</string>
     <string name="teacher_ai_pdf_share_chooser">فتح أو مشاركة تحليل PDF</string>
+    <string name="teacher_ai_pdf_metrics_section">النتائج والمؤشرات</string>
+    <string name="teacher_ai_pdf_external_analysis_section">تحليل الذكاء الاصطناعي الملصق</string>
+    <string name="teacher_ai_pdf_prompt_section">موجه التحليل الكامل</string>
 
-    <!-- ملخص الأخطاء الشائعة لكل اختبار (Gemini) -->
-    <string name="teacher_quiz_ai_errors_section_header">ملخص الأخطاء الشائعة لكل اختبار (Gemini)</string>
-    <string name="teacher_quiz_ai_errors_section_desc">أنشئ بواسطة Gemini ملخصاً للأخطاء المتكررة لدى التلاميذ لكل اختبار لتوجيه المعالجة التربوية.</string>
-    <string name="teacher_quiz_ai_errors_btn">ملخص الأخطاء (Gemini)</string>
-    <string name="teacher_quiz_ai_errors_dialog_title">الأخطاء الشائعة — %1$s</string>
-    <string name="teacher_quiz_ai_errors_loading">جارٍ إنشاء ملخص الأخطاء الشائعة بواسطة Gemini…</string>
+    <!-- موجه الأخطاء الشائعة لكل اختبار (ذكاء اصطناعي خارجي) -->
+    <string name="teacher_quiz_ai_errors_section_header">موجه الأخطاء الشائعة لكل اختبار (ذكاء اصطناعي خارجي)</string>
+    <string name="teacher_quiz_ai_errors_section_desc">انسخ لكل اختبار موجهاً مفصلاً لأخطاء التلاميذ المتكررة لتحليله عبر تطبيق ذكاء اصطناعي خارجي.</string>
+    <string name="teacher_quiz_ai_errors_btn">نسخ موجه الأخطاء</string>
+    <string name="teacher_quiz_ai_errors_dialog_title">موجه الأخطاء — %1$s</string>
+    <string name="teacher_quiz_ai_errors_loading">جارٍ تحضير الموجه…</string>
     <string name="teacher_quiz_ai_errors_summary_title">الملخص العام للاختبار</string>
     <string name="teacher_quiz_ai_errors_list_title">الأخطاء الشائعة لدى التلاميذ</string>
     <string name="teacher_quiz_ai_errors_causes_title">الأسباب والالتباسات المحتملة</string>

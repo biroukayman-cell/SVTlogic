@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import android.content.Intent
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -13,33 +14,37 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -50,43 +55,124 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.core.AiAnalysisPdfExporter
-import com.example.data.ai.ClassAiAnalysisReport
-import com.example.ui.theme.SvtCoralError
+import com.example.core.AppLanguage
+import com.example.core.ExternalAiAnalysisHelper
+import com.example.core.TeacherAnalyticsLogic
+import com.example.data.model.CourseResource
+import com.example.data.model.Enrollment
+import com.example.data.model.Quiz
+import com.example.data.model.QuizAttempt
+import com.example.data.model.RosterStudent
+import com.example.data.model.SvtClass
+import com.example.data.model.VideoTracking
 import com.example.ui.theme.SvtEmeraldPrimary
-import com.example.ui.theme.SvtSuccess
-import com.example.ui.theme.SvtWarning
-import com.example.ui.viewmodel.ClassAiAnalysisState
+import kotlin.math.roundToInt
 
 @Composable
 fun ClassAiAnalysisDialog(
-    state: ClassAiAnalysisState,
-    onRetry: (classId: String) -> Unit,
+    initialClassId: String?,
+    classes: List<SvtClass>,
+    enrollments: List<Enrollment>,
+    roster: List<RosterStudent>,
+    quizzes: List<Quiz>,
+    attempts: List<QuizAttempt>,
+    resources: List<CourseResource>,
+    videoTrackings: List<VideoTracking>,
+    currentLanguage: AppLanguage,
     onDismiss: () -> Unit
 ) {
-    if (state is ClassAiAnalysisState.Idle) return
-
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
-    val className = when (state) {
-        is ClassAiAnalysisState.Loading -> state.className
-        is ClassAiAnalysisState.Success -> state.className
-        is ClassAiAnalysisState.Error -> state.className
-        ClassAiAnalysisState.Idle -> ""
+    var selectedClassId by rememberSaveable(initialClassId) { mutableStateOf(initialClassId) }
+    var pastedAiResponse by rememberSaveable { mutableStateOf("") }
+    var copiedNotice by remember { mutableStateOf(false) }
+
+    val targetClasses = remember(classes, selectedClassId) {
+        if (selectedClassId.isNullOrBlank()) {
+            classes
+        } else {
+            classes.filter { it.id == selectedClassId }.ifEmpty { classes }
+        }
+    }
+
+    val analysisInputs = remember(
+        targetClasses,
+        enrollments,
+        roster,
+        quizzes,
+        attempts,
+        resources,
+        videoTrackings
+    ) {
+        targetClasses.map { cls ->
+            TeacherAnalyticsLogic.buildClassAiAnalysisInput(
+                svtClass = cls,
+                enrollments = enrollments,
+                roster = roster,
+                quizzes = quizzes,
+                attempts = attempts,
+                resources = resources,
+                videoTrackings = videoTrackings
+            )
+        }
+    }
+
+    val promptText = remember(analysisInputs, currentLanguage) {
+        if (analysisInputs.isEmpty()) {
+            ""
+        } else {
+            ExternalAiAnalysisHelper.buildAllClassesAnalysisPrompt(analysisInputs, currentLanguage)
+        }
+    }
+
+    val scopeDisplayName = remember(selectedClassId, targetClasses, classes) {
+        if (selectedClassId.isNullOrBlank() && classes.size > 1) {
+            context.getString(R.string.teacher_ai_prompt_all_classes, classes.size)
+        } else {
+            targetClasses.firstOrNull()?.name.orEmpty().ifBlank { "SVT" }
+        }
+    }
+
+    val metricsLines = remember(analysisInputs) {
+        if (analysisInputs.isEmpty()) {
+            emptyList()
+        } else {
+            val totalStudents = analysisInputs.sumOf { it.totalStudentsCount }
+            val activeStudents = analysisInputs.sumOf { it.activeQcmStudentsCount }
+            val avgPct = analysisInputs.map { it.classAveragePct }.average().roundToInt()
+            val totalOk = analysisInputs.sumOf { it.totalSucceededQuestions }
+            val totalKo = analysisInputs.sumOf { it.totalFailedQuestions }
+            val totalAns = totalOk + totalKo
+            val qRate = if (totalAns > 0) ((totalOk.toDouble() / totalAns) * 100.0).roundToInt() else 0
+            buildList {
+                add("Classes analysées : ${analysisInputs.joinToString(", ") { it.className }}")
+                add("Élèves suivis : $totalStudents (Actifs QCM : $activeStudents)")
+                add("Moyenne QCM : $avgPct% • Réussite questions : $qRate% ($totalOk✓ / $totalKo✗)")
+                analysisInputs.forEach { inp ->
+                    add("• ${inp.className} : moy. ${inp.classAveragePct}%, ${inp.totalSucceededQuestions}✓ / ${inp.totalFailedQuestions}✗ (${inp.questionSuccessRatePct}%)")
+                }
+            }
+        }
     }
 
     val createPdfLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/pdf")
     ) { targetUri ->
-        val successState = state as? ClassAiAnalysisState.Success ?: return@rememberLauncherForActivityResult
         if (targetUri == null) return@rememberLauncherForActivityResult
-        val docTitle = context.getString(R.string.teacher_ai_analysis_dialog_title, successState.className)
-        val sections = AiAnalysisPdfExporter.buildClassAnalysisSections(context, successState.report)
+        val docTitle = context.getString(R.string.teacher_ai_analysis_dialog_title, scopeDisplayName)
+        val sections = AiAnalysisPdfExporter.buildExternalAnalysisSections(
+            context = context,
+            metricsTitle = context.getString(R.string.teacher_ai_pdf_metrics_section),
+            metricsLines = metricsLines,
+            pastedAiAnalysis = pastedAiResponse,
+            promptText = promptText
+        )
         AiAnalysisPdfExporter.writePdfToUri(
             context = context,
             targetUri = targetUri,
             documentTitle = docTitle,
-            subtitle = successState.className,
+            subtitle = scopeDisplayName,
             sections = sections
         ).onSuccess {
             Toast.makeText(
@@ -112,12 +198,12 @@ fun ClassAiAnalysisDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.AutoAwesome,
+                    imageVector = Icons.Filled.Psychology,
                     contentDescription = null,
                     tint = SvtEmeraldPrimary
                 )
                 Text(
-                    text = stringResource(id = R.string.teacher_ai_analysis_dialog_title, className),
+                    text = stringResource(id = R.string.teacher_ai_analysis_dialog_title, scopeDisplayName),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -125,238 +211,215 @@ fun ClassAiAnalysisDialog(
         },
         text = {
             SecureDialogWindowEffect()
-            when (state) {
-                is ClassAiAnalysisState.Loading -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.testTag("class_ai_analysis_loading"))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = stringResource(id = R.string.teacher_ai_prompt_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (classes.size > 1) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        item {
+                            FilterChip(
+                                selected = selectedClassId == null,
+                                onClick = {
+                                    selectedClassId = null
+                                    copiedNotice = false
+                                },
+                                label = {
+                                    Text(stringResource(id = R.string.teacher_ai_prompt_all_classes, classes.size))
+                                },
+                                modifier = Modifier.testTag("class_prompt_all_classes_chip")
+                            )
+                        }
+                        items(classes, key = { it.id }) { cls ->
+                            FilterChip(
+                                selected = selectedClassId == cls.id,
+                                onClick = {
+                                    selectedClassId = cls.id
+                                    copiedNotice = false
+                                },
+                                label = {
+                                    Text(cls.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                },
+                                modifier = Modifier.testTag("class_prompt_chip_${cls.id}")
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = stringResource(id = R.string.teacher_ai_prompt_preview_label),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    SelectionContainer {
                         Text(
-                            text = stringResource(id = R.string.teacher_ai_analysis_loading),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = promptText.ifBlank { stringResource(id = R.string.no_class_selected) },
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 170.dp)
+                                .verticalScroll(rememberScrollState())
+                                .padding(10.dp)
+                                .testTag("class_ai_prompt_preview_text")
                         )
                     }
                 }
 
-                is ClassAiAnalysisState.Error -> {
-                    Surface(
-                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f),
-                        shape = RoundedCornerShape(12.dp),
+                if (copiedNotice) {
+                    Text(
+                        text = stringResource(id = R.string.teacher_ai_prompt_copied),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = SvtEmeraldPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(promptText))
+                            copiedNotice = true
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.teacher_ai_prompt_copied),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        },
+                        enabled = promptText.isNotBlank(),
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("class_ai_analysis_error_card")
+                            .weight(1f)
+                            .testTag("class_ai_analysis_copy_button")
                     ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.ErrorOutline,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Text(
-                                text = state.message,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
+                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = stringResource(id = R.string.teacher_ai_prompt_copy),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, scopeDisplayName)
+                                putExtra(Intent.EXTRA_TEXT, promptText)
+                            }
+                            val chooser = Intent.createChooser(
+                                sendIntent,
+                                context.getString(R.string.teacher_ai_prompt_share_chooser)
+                            ).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            runCatching { context.startActivity(chooser) }
+                        },
+                        enabled = promptText.isNotBlank(),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("class_ai_prompt_share_button")
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = stringResource(id = R.string.teacher_ai_prompt_share),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
 
-                is ClassAiAnalysisState.Success -> {
-                    val summaryTitle = stringResource(id = R.string.teacher_ai_analysis_dialog_title, state.className)
-                    val summaryHeader = stringResource(id = R.string.teacher_ai_analysis_summary_title)
-                    val strengthsHeader = stringResource(id = R.string.teacher_ai_analysis_strengths_title)
-                    val gapsHeader = stringResource(id = R.string.teacher_ai_analysis_gaps_title)
-                    val recHeader = stringResource(id = R.string.teacher_ai_analysis_recommendations_title)
-                    val copiedToast = stringResource(id = R.string.teacher_ai_analysis_copied)
+                HorizontalDivider()
 
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        SelectionContainer {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 400.dp)
-                                    .verticalScroll(rememberScrollState())
-                                    .testTag("class_ai_analysis_content"),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                if (state.report.textualSummary.isNotBlank()) {
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(12.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Text(
-                                                text = summaryHeader,
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                            Text(
-                                                text = state.report.textualSummary,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        }
-                                    }
-                                }
+                OutlinedTextField(
+                    value = pastedAiResponse,
+                    onValueChange = { pastedAiResponse = it },
+                    label = { Text(stringResource(id = R.string.teacher_ai_paste_response_label)) },
+                    placeholder = { Text(stringResource(id = R.string.teacher_ai_paste_response_hint)) },
+                    minLines = 2,
+                    maxLines = 4,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("class_ai_paste_response_input")
+                )
 
-                                if (state.report.strengths.isNotEmpty()) {
-                                    AnalysisSectionCard(
-                                        title = strengthsHeader,
-                                        items = state.report.strengths,
-                                        icon = Icons.Filled.CheckCircle,
-                                        accentColor = SvtSuccess
-                                    )
+                FilledTonalButton(
+                    onClick = {
+                        val fileName = AiAnalysisPdfExporter.buildSuggestedFileName(
+                            prefix = "Analyse_Classe",
+                            subjectName = scopeDisplayName
+                        )
+                        val docTitle = context.getString(R.string.teacher_ai_analysis_dialog_title, scopeDisplayName)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val sections = AiAnalysisPdfExporter.buildExternalAnalysisSections(
+                                context = context,
+                                metricsTitle = context.getString(R.string.teacher_ai_pdf_metrics_section),
+                                metricsLines = metricsLines,
+                                pastedAiAnalysis = pastedAiResponse,
+                                promptText = promptText
+                            )
+                            AiAnalysisPdfExporter.exportToDownloadsAndGetUri(
+                                context = context,
+                                fileName = fileName,
+                                documentTitle = docTitle,
+                                subtitle = scopeDisplayName,
+                                sections = sections
+                            ).onSuccess { result ->
+                                val toastText = if (result.savedToDownloads) {
+                                    context.getString(R.string.teacher_ai_pdf_saved, result.fileName)
+                                } else {
+                                    context.getString(R.string.teacher_ai_pdf_saved_generic)
                                 }
-
-                                if (state.report.gaps.isNotEmpty()) {
-                                    AnalysisSectionCard(
-                                        title = gapsHeader,
-                                        items = state.report.gaps,
-                                        icon = Icons.Filled.Warning,
-                                        accentColor = SvtCoralError
-                                    )
-                                }
-
-                                if (state.report.recommendations.isNotEmpty()) {
-                                    AnalysisSectionCard(
-                                        title = recHeader,
-                                        items = state.report.recommendations,
-                                        icon = Icons.Filled.Lightbulb,
-                                        accentColor = SvtWarning
-                                    )
-                                }
+                                Toast.makeText(context, toastText, Toast.LENGTH_LONG).show()
+                                AiAnalysisPdfExporter.openOrSharePdf(context, result, docTitle)
+                            }.onFailure { err ->
+                                Toast.makeText(
+                                    context,
+                                    context.getString(
+                                        R.string.teacher_ai_pdf_error,
+                                        err.localizedMessage ?: "PDF"
+                                    ),
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
+                        } else {
+                            createPdfLauncher.launch(fileName)
                         }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = {
-                                    val formatted = formatReportAsText(
-                                        title = summaryTitle,
-                                        summaryHeader = summaryHeader,
-                                        strengthsHeader = strengthsHeader,
-                                        gapsHeader = gapsHeader,
-                                        recHeader = recHeader,
-                                        report = state.report
-                                    )
-                                    clipboardManager.setText(AnnotatedString(formatted))
-                                    Toast.makeText(context, copiedToast, Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("class_ai_analysis_copy_button")
-                            ) {
-                                Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = stringResource(id = R.string.teacher_ai_analysis_copy),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-
-                            Button(
-                                onClick = {
-                                    val fileName = AiAnalysisPdfExporter.buildSuggestedFileName(
-                                        prefix = "Analyse_Classe",
-                                        subjectName = state.className
-                                    )
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                        val sections = AiAnalysisPdfExporter.buildClassAnalysisSections(
-                                            context = context,
-                                            report = state.report
-                                        )
-                                        AiAnalysisPdfExporter.exportToDownloadsAndGetUri(
-                                            context = context,
-                                            fileName = fileName,
-                                            documentTitle = summaryTitle,
-                                            subtitle = state.className,
-                                            sections = sections
-                                        ).onSuccess { result ->
-                                            val toastText = if (result.savedToDownloads) {
-                                                context.getString(R.string.teacher_ai_pdf_saved, result.fileName)
-                                            } else {
-                                                context.getString(R.string.teacher_ai_pdf_saved_generic)
-                                            }
-                                            Toast.makeText(context, toastText, Toast.LENGTH_LONG).show()
-                                            AiAnalysisPdfExporter.openOrSharePdf(context, result, summaryTitle)
-                                        }.onFailure { err ->
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(
-                                                    R.string.teacher_ai_pdf_error,
-                                                    err.localizedMessage ?: "PDF"
-                                                ),
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        }
-                                    } else {
-                                        createPdfLauncher.launch(fileName)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("class_ai_analysis_download_pdf_button")
-                            ) {
-                                Icon(Icons.Filled.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = stringResource(id = R.string.teacher_ai_download_pdf),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
+                    },
+                    enabled = promptText.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("class_ai_analysis_download_pdf_button")
+                ) {
+                    Icon(Icons.Filled.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(id = R.string.teacher_ai_download_pdf))
                 }
-
-                ClassAiAnalysisState.Idle -> Unit
             }
         },
         confirmButton = {
-            when (state) {
-                is ClassAiAnalysisState.Success -> {
-                    OutlinedButton(
-                        onClick = { onRetry(state.classId) },
-                        modifier = Modifier.testTag("class_ai_analysis_refresh_button")
-                    ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(id = R.string.teacher_ai_analysis_retry))
-                    }
-                }
-
-                is ClassAiAnalysisState.Error -> {
-                    Button(
-                        onClick = { onRetry(state.classId) },
-                        modifier = Modifier.testTag("class_ai_analysis_retry_button")
-                    ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(id = R.string.teacher_ai_analysis_retry))
-                    }
-                }
-
-                else -> Unit
-            }
-        },
-        dismissButton = {
             TextButton(
                 onClick = onDismiss,
                 modifier = Modifier.testTag("class_ai_analysis_close_button")
@@ -366,80 +429,3 @@ fun ClassAiAnalysisDialog(
         }
     )
 }
-
-@Composable
-private fun AnalysisSectionCard(
-    title: String,
-    items: List<String>,
-    icon: ImageVector,
-    accentColor: Color
-) {
-    Surface(
-        color = accentColor.copy(alpha = 0.09f),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = accentColor
-                )
-            }
-            items.forEach { item ->
-                Text(
-                    text = "• $item",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-    }
-}
-
-private fun formatReportAsText(
-    title: String,
-    summaryHeader: String,
-    strengthsHeader: String,
-    gapsHeader: String,
-    recHeader: String,
-    report: ClassAiAnalysisReport
-): String = buildString {
-    appendLine(title)
-    appendLine()
-    if (report.textualSummary.isNotBlank()) {
-        appendLine(summaryHeader)
-        appendLine(report.textualSummary)
-        appendLine()
-    }
-    if (report.strengths.isNotEmpty()) {
-        appendLine(strengthsHeader)
-        report.strengths.forEach { appendLine("• $it") }
-        appendLine()
-    }
-    if (report.gaps.isNotEmpty()) {
-        appendLine(gapsHeader)
-        report.gaps.forEach { appendLine("• $it") }
-        appendLine()
-    }
-    if (report.recommendations.isNotEmpty()) {
-        appendLine(recHeader)
-        report.recommendations.forEach { appendLine("• $it") }
-    }
-}.trim()

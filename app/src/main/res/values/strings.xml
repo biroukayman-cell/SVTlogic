@@ -739,10 +739,18 @@
     <string name="teacher_answers_empty_incorrect">Aucune réponse incorrecte — toutes les questions sont réussies !</string>
     <string name="teacher_answers_empty_detail">Aucun détail question par question disponible pour cette copie.</string>
 
-    <!-- Analyse par IA d'une classe -->
-    <string name="teacher_ai_analysis_btn">Analyse par IA</string>
-    <string name="teacher_ai_analysis_dialog_title">Analyse par IA — %1$s</string>
-    <string name="teacher_ai_analysis_loading">Analyse pédagogique de la classe en cours par l\'IA…</string>
+    <!-- Prompt d'analyse externe par IA d'une classe -->
+    <string name="teacher_ai_analysis_btn">Prompt d\'analyse IA</string>
+    <string name="teacher_ai_analysis_dialog_title">Prompt d\'analyse IA — %1$s</string>
+    <string name="teacher_ai_prompt_subtitle">Copiez ce prompt contenant les résultats de vos classes et collez-le dans une application IA externe (ChatGPT, Gemini, Claude…).</string>
+    <string name="teacher_ai_prompt_all_classes">Toutes les classes (%1$d)</string>
+    <string name="teacher_ai_prompt_copy">Copier le prompt</string>
+    <string name="teacher_ai_prompt_copied">Prompt d\'analyse copié ! Collez-le dans votre application IA externe.</string>
+    <string name="teacher_ai_prompt_share">Envoyer vers IA</string>
+    <string name="teacher_ai_prompt_share_chooser">Envoyer le prompt vers une application IA</string>
+    <string name="teacher_ai_prompt_preview_label">Prompt prêt à coller</string>
+    <string name="teacher_ai_paste_response_label">Coller la réponse de l\'IA (optionnel, pour PDF)</string>
+    <string name="teacher_ai_paste_response_hint">Collez ici l\'analyse générée par votre IA externe pour la sauvegarder en PDF…</string>
     <string name="teacher_ai_analysis_summary_title">Résumé de la classe</string>
     <string name="teacher_ai_analysis_strengths_title">Points forts identifiés</string>
     <string name="teacher_ai_analysis_gaps_title">Lacunes identifiées</string>
@@ -758,13 +766,16 @@
     <string name="teacher_ai_pdf_saved_generic">PDF enregistré avec succès.</string>
     <string name="teacher_ai_pdf_error">Impossible de générer le PDF : %1$s</string>
     <string name="teacher_ai_pdf_share_chooser">Ouvrir ou partager l\'analyse PDF</string>
+    <string name="teacher_ai_pdf_metrics_section">Résultats et indicateurs</string>
+    <string name="teacher_ai_pdf_external_analysis_section">Analyse IA collée</string>
+    <string name="teacher_ai_pdf_prompt_section">Prompt d\'analyse complet</string>
 
-    <!-- Synthèse des erreurs fréquentes par QCM (Gemini) -->
-    <string name="teacher_quiz_ai_errors_section_header">Synthèse des erreurs fréquentes par QCM (Gemini)</string>
-    <string name="teacher_quiz_ai_errors_section_desc">Générez avec Gemini un résumé des erreurs récurrentes des élèves pour chaque QCM afin d\'orienter la remédiation.</string>
-    <string name="teacher_quiz_ai_errors_btn">Synthèse erreurs (Gemini)</string>
-    <string name="teacher_quiz_ai_errors_dialog_title">Erreurs fréquentes — %1$s</string>
-    <string name="teacher_quiz_ai_errors_loading">Synthèse des erreurs fréquentes par Gemini en cours…</string>
+    <!-- Prompt d'erreurs fréquentes par QCM (IA externe) -->
+    <string name="teacher_quiz_ai_errors_section_header">Prompt erreurs fréquentes par QCM (IA externe)</string>
+    <string name="teacher_quiz_ai_errors_section_desc">Copiez pour chaque QCM un prompt détaillé des erreurs fréquentes des élèves afin de l\'analyser sur une IA externe.</string>
+    <string name="teacher_quiz_ai_errors_btn">Copier prompt erreurs IA</string>
+    <string name="teacher_quiz_ai_errors_dialog_title">Prompt erreurs — %1$s</string>
+    <string name="teacher_quiz_ai_errors_loading">Préparation du prompt…</string>
     <string name="teacher_quiz_ai_errors_summary_title">Synthèse globale du QCM</string>
     <string name="teacher_quiz_ai_errors_list_title">Erreurs fréquentes des élèves</string>
     <string name="teacher_quiz_ai_errors_causes_title">Causes et confusions probables</string>

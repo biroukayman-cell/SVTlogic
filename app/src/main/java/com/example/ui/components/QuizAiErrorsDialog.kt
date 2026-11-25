@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import android.content.Intent
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -18,31 +19,32 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -53,13 +55,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.core.AiAnalysisPdfExporter
+import com.example.core.AppLanguage
+import com.example.core.ExternalAiAnalysisHelper
+import com.example.core.TeacherAnalyticsLogic
 import com.example.core.TeacherQuizDashboardSummary
-import com.example.data.ai.QuizErrorsAiReport
-import com.example.ui.theme.SvtCoralError
+import com.example.data.model.Quiz
+import com.example.data.model.QuizAttempt
+import com.example.data.model.SvtClass
 import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtSuccess
 import com.example.ui.theme.SvtWarning
-import com.example.ui.viewmodel.QuizAiErrorsState
+import kotlin.math.roundToInt
 
 @Composable
 fun QuizFrequentErrorsDashboardCard(
@@ -151,7 +157,7 @@ fun QuizFrequentErrorsDashboardCard(
                     .testTag("quiz_ai_errors_button_${quiz.id}")
             ) {
                 Icon(
-                    imageVector = Icons.Filled.AutoAwesome,
+                    imageVector = Icons.Filled.ContentCopy,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )
@@ -164,35 +170,83 @@ fun QuizFrequentErrorsDashboardCard(
 
 @Composable
 fun QuizAiErrorsDialog(
-    state: QuizAiErrorsState,
-    onRetry: (quizId: String) -> Unit,
+    quiz: Quiz?,
+    svtClass: SvtClass?,
+    attempts: List<QuizAttempt>,
+    currentLanguage: AppLanguage,
     onDismiss: () -> Unit
 ) {
-    if (state is QuizAiErrorsState.Idle) return
+    if (quiz == null) return
 
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
-    val quizTitle = when (state) {
-        is QuizAiErrorsState.Loading -> state.quizTitle
-        is QuizAiErrorsState.Success -> state.quizTitle
-        is QuizAiErrorsState.Error -> state.quizTitle
-        QuizAiErrorsState.Idle -> ""
+    var pastedAiResponse by rememberSaveable(quiz.id) { mutableStateOf("") }
+    var copiedNotice by remember(quiz.id) { mutableStateOf(false) }
+
+    val analysisInput = remember(quiz, svtClass, attempts) {
+        TeacherAnalyticsLogic.buildQuizFrequentErrorsInput(
+            quiz = quiz,
+            svtClass = svtClass,
+            attempts = attempts
+        )
+    }
+
+    val promptText = remember(analysisInput, currentLanguage) {
+        if (analysisInput.attemptsCount == 0) {
+            ""
+        } else {
+            ExternalAiAnalysisHelper.buildQuizFrequentErrorsPrompt(analysisInput, currentLanguage)
+        }
+    }
+
+    val totalAnswers = analysisInput.totalSucceededAnswers + analysisInput.totalFailedAnswers
+    val errorRatePct = if (totalAnswers > 0) {
+        ((analysisInput.totalFailedAnswers.toDouble() / totalAnswers.toDouble()) * 100.0)
+            .roundToInt()
+            .coerceIn(0, 100)
+    } else 0
+
+    val metaText = buildList {
+        if (analysisInput.className.isNotBlank()) add(analysisInput.className)
+        add(
+            stringResource(
+                id = R.string.teacher_quiz_ai_errors_meta,
+                analysisInput.attemptsCount,
+                analysisInput.averagePct,
+                errorRatePct
+            )
+        )
+    }.joinToString(" • ")
+
+    val metricsLines = remember(analysisInput, metaText) {
+        buildList {
+            add("QCM : ${analysisInput.quizTitle}")
+            if (analysisInput.chapterSvt.isNotBlank()) add("Chapitre : ${analysisInput.chapterSvt}")
+            add(metaText)
+            analysisInput.questionErrorMetrics.take(6).forEach { q ->
+                add("• Q${q.questionNumber} (${q.errorRatePct}% erreur) : ${q.questionText}")
+            }
+        }
     }
 
     val createPdfLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/pdf")
     ) { targetUri ->
-        val successState = state as? QuizAiErrorsState.Success ?: return@rememberLauncherForActivityResult
         if (targetUri == null) return@rememberLauncherForActivityResult
-        val docTitle = context.getString(R.string.teacher_quiz_ai_errors_dialog_title, successState.quizTitle)
-        val subtitle = buildQuizPdfSubtitle(context, successState)
-        val sections = AiAnalysisPdfExporter.buildQuizErrorsSections(context, successState.report)
+        val docTitle = context.getString(R.string.teacher_quiz_ai_errors_dialog_title, quiz.title)
+        val sections = AiAnalysisPdfExporter.buildExternalAnalysisSections(
+            context = context,
+            metricsTitle = context.getString(R.string.teacher_ai_pdf_metrics_section),
+            metricsLines = metricsLines,
+            pastedAiAnalysis = pastedAiResponse,
+            promptText = promptText
+        )
         AiAnalysisPdfExporter.writePdfToUri(
             context = context,
             targetUri = targetUri,
             documentTitle = docTitle,
-            subtitle = subtitle,
+            subtitle = metaText,
             sections = sections
         ).onSuccess {
             Toast.makeText(
@@ -218,12 +272,12 @@ fun QuizAiErrorsDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.AutoAwesome,
+                    imageVector = Icons.Filled.Psychology,
                     contentDescription = null,
                     tint = SvtEmeraldPrimary
                 )
                 Text(
-                    text = stringResource(id = R.string.teacher_quiz_ai_errors_dialog_title, quizTitle),
+                    text = stringResource(id = R.string.teacher_quiz_ai_errors_dialog_title, quiz.title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -231,263 +285,212 @@ fun QuizAiErrorsDialog(
         },
         text = {
             SecureDialogWindowEffect()
-            when (state) {
-                is QuizAiErrorsState.Loading -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+            if (analysisInput.attemptsCount == 0) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("quiz_ai_errors_error_card")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.testTag("quiz_ai_errors_loading"))
+                        Icon(
+                            imageVector = Icons.Filled.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
                         Text(
-                            text = stringResource(id = R.string.teacher_quiz_ai_errors_loading),
+                            text = stringResource(id = R.string.teacher_quiz_ai_errors_no_attempts),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
                 }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = metaText,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = stringResource(id = R.string.teacher_ai_prompt_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = stringResource(id = R.string.teacher_ai_prompt_preview_label),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
 
-                is QuizAiErrorsState.Error -> {
                     Surface(
-                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("quiz_ai_errors_error_card")
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.ErrorOutline,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Text(
-                                text = state.message,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                    }
-                }
-
-                is QuizAiErrorsState.Success -> {
-                    val docTitle = stringResource(id = R.string.teacher_quiz_ai_errors_dialog_title, state.quizTitle)
-                    val summaryHeader = stringResource(id = R.string.teacher_quiz_ai_errors_summary_title)
-                    val errorsHeader = stringResource(id = R.string.teacher_quiz_ai_errors_list_title)
-                    val causesHeader = stringResource(id = R.string.teacher_quiz_ai_errors_causes_title)
-                    val recHeader = stringResource(id = R.string.teacher_quiz_ai_errors_remediation_title)
-                    val copiedToast = stringResource(id = R.string.teacher_ai_analysis_copied)
-                    val totalAnswers = state.totalSucceededAnswers + state.totalFailedAnswers
-                    val errorRatePct = if (totalAnswers > 0) {
-                        ((state.totalFailedAnswers.toDouble() / totalAnswers.toDouble()) * 100.0)
-                            .toInt()
-                            .coerceIn(0, 100)
-                    } else 0
-                    val metaText = buildList {
-                        if (state.className.isNotBlank()) add(state.className)
-                        add(
-                            stringResource(
-                                id = R.string.teacher_quiz_ai_errors_meta,
-                                state.attemptsCount,
-                                state.averagePct,
-                                errorRatePct
-                            )
-                        )
-                    }.joinToString(" • ")
-
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = metaText,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
                         SelectionContainer {
-                            Column(
+                            Text(
+                                text = promptText,
+                                style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(max = 380.dp)
+                                    .heightIn(max = 170.dp)
                                     .verticalScroll(rememberScrollState())
-                                    .testTag("quiz_ai_errors_content"),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                if (state.report.overallSynthesis.isNotBlank()) {
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(12.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Text(
-                                                text = summaryHeader,
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                            Text(
-                                                text = state.report.overallSynthesis,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        }
-                                    }
-                                }
-
-                                if (state.report.frequentErrors.isNotEmpty()) {
-                                    QuizErrorSectionCard(
-                                        title = errorsHeader,
-                                        items = state.report.frequentErrors,
-                                        icon = Icons.Filled.Warning,
-                                        accentColor = SvtCoralError
-                                    )
-                                }
-
-                                if (state.report.misconceptionCauses.isNotEmpty()) {
-                                    QuizErrorSectionCard(
-                                        title = causesHeader,
-                                        items = state.report.misconceptionCauses,
-                                        icon = Icons.Filled.Psychology,
-                                        accentColor = SvtWarning
-                                    )
-                                }
-
-                                if (state.report.remediationActions.isNotEmpty()) {
-                                    QuizErrorSectionCard(
-                                        title = recHeader,
-                                        items = state.report.remediationActions,
-                                        icon = Icons.Filled.Lightbulb,
-                                        accentColor = SvtSuccess
-                                    )
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = {
-                                    val formatted = formatQuizErrorsAsText(
-                                        title = docTitle,
-                                        metaLine = metaText,
-                                        summaryHeader = summaryHeader,
-                                        errorsHeader = errorsHeader,
-                                        causesHeader = causesHeader,
-                                        recHeader = recHeader,
-                                        report = state.report
-                                    )
-                                    clipboardManager.setText(AnnotatedString(formatted))
-                                    Toast.makeText(context, copiedToast, Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("quiz_ai_errors_copy_button")
-                            ) {
-                                Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = stringResource(id = R.string.teacher_ai_analysis_copy),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-
-                            Button(
-                                onClick = {
-                                    val fileName = AiAnalysisPdfExporter.buildSuggestedFileName(
-                                        prefix = "Erreurs_QCM",
-                                        subjectName = state.quizTitle
-                                    )
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                        val sections = AiAnalysisPdfExporter.buildQuizErrorsSections(
-                                            context = context,
-                                            report = state.report
-                                        )
-                                        val subtitle = buildQuizPdfSubtitle(context, state)
-                                        AiAnalysisPdfExporter.exportToDownloadsAndGetUri(
-                                            context = context,
-                                            fileName = fileName,
-                                            documentTitle = docTitle,
-                                            subtitle = subtitle,
-                                            sections = sections
-                                        ).onSuccess { result ->
-                                            val toastText = if (result.savedToDownloads) {
-                                                context.getString(R.string.teacher_ai_pdf_saved, result.fileName)
-                                            } else {
-                                                context.getString(R.string.teacher_ai_pdf_saved_generic)
-                                            }
-                                            Toast.makeText(context, toastText, Toast.LENGTH_LONG).show()
-                                            AiAnalysisPdfExporter.openOrSharePdf(context, result, docTitle)
-                                        }.onFailure { err ->
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(
-                                                    R.string.teacher_ai_pdf_error,
-                                                    err.localizedMessage ?: "PDF"
-                                                ),
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        }
-                                    } else {
-                                        createPdfLauncher.launch(fileName)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("quiz_ai_errors_download_pdf_button")
-                            ) {
-                                Icon(Icons.Filled.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = stringResource(id = R.string.teacher_ai_download_pdf),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                                    .padding(10.dp)
+                                    .testTag("quiz_ai_errors_prompt_preview")
+                            )
                         }
                     }
-                }
 
-                QuizAiErrorsState.Idle -> Unit
+                    if (copiedNotice) {
+                        Text(
+                            text = stringResource(id = R.string.teacher_ai_prompt_copied),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = SvtEmeraldPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(promptText))
+                                copiedNotice = true
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.teacher_ai_prompt_copied),
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("quiz_ai_errors_copy_button")
+                        ) {
+                            Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(id = R.string.teacher_ai_prompt_copy),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, quiz.title)
+                                    putExtra(Intent.EXTRA_TEXT, promptText)
+                                }
+                                val chooser = Intent.createChooser(
+                                    sendIntent,
+                                    context.getString(R.string.teacher_ai_prompt_share_chooser)
+                                ).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                runCatching { context.startActivity(chooser) }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("quiz_ai_errors_share_button")
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(id = R.string.teacher_ai_prompt_share),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    OutlinedTextField(
+                        value = pastedAiResponse,
+                        onValueChange = { pastedAiResponse = it },
+                        label = { Text(stringResource(id = R.string.teacher_ai_paste_response_label)) },
+                        placeholder = { Text(stringResource(id = R.string.teacher_ai_paste_response_hint)) },
+                        minLines = 2,
+                        maxLines = 4,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("quiz_ai_errors_paste_response_input")
+                    )
+
+                    FilledTonalButton(
+                        onClick = {
+                            val fileName = AiAnalysisPdfExporter.buildSuggestedFileName(
+                                prefix = "Erreurs_QCM",
+                                subjectName = quiz.title
+                            )
+                            val docTitle = context.getString(R.string.teacher_quiz_ai_errors_dialog_title, quiz.title)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                val sections = AiAnalysisPdfExporter.buildExternalAnalysisSections(
+                                    context = context,
+                                    metricsTitle = context.getString(R.string.teacher_ai_pdf_metrics_section),
+                                    metricsLines = metricsLines,
+                                    pastedAiAnalysis = pastedAiResponse,
+                                    promptText = promptText
+                                )
+                                AiAnalysisPdfExporter.exportToDownloadsAndGetUri(
+                                    context = context,
+                                    fileName = fileName,
+                                    documentTitle = docTitle,
+                                    subtitle = metaText,
+                                    sections = sections
+                                ).onSuccess { result ->
+                                    val toastText = if (result.savedToDownloads) {
+                                        context.getString(R.string.teacher_ai_pdf_saved, result.fileName)
+                                    } else {
+                                        context.getString(R.string.teacher_ai_pdf_saved_generic)
+                                    }
+                                    Toast.makeText(context, toastText, Toast.LENGTH_LONG).show()
+                                    AiAnalysisPdfExporter.openOrSharePdf(context, result, docTitle)
+                                }.onFailure { err ->
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(
+                                            R.string.teacher_ai_pdf_error,
+                                            err.localizedMessage ?: "PDF"
+                                        ),
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            } else {
+                                createPdfLauncher.launch(fileName)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("quiz_ai_errors_download_pdf_button")
+                    ) {
+                        Icon(Icons.Filled.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(id = R.string.teacher_ai_download_pdf))
+                    }
+                }
             }
         },
         confirmButton = {
-            when (state) {
-                is QuizAiErrorsState.Success -> {
-                    OutlinedButton(
-                        onClick = { onRetry(state.quizId) },
-                        modifier = Modifier.testTag("quiz_ai_errors_refresh_button")
-                    ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(id = R.string.teacher_ai_analysis_retry))
-                    }
-                }
-
-                is QuizAiErrorsState.Error -> {
-                    Button(
-                        onClick = { onRetry(state.quizId) },
-                        modifier = Modifier.testTag("quiz_ai_errors_retry_button")
-                    ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(id = R.string.teacher_ai_analysis_retry))
-                    }
-                }
-
-                else -> Unit
-            }
-        },
-        dismissButton = {
             TextButton(
                 onClick = onDismiss,
                 modifier = Modifier.testTag("quiz_ai_errors_close_button")
@@ -497,103 +500,3 @@ fun QuizAiErrorsDialog(
         }
     )
 }
-
-@Composable
-private fun QuizErrorSectionCard(
-    title: String,
-    items: List<String>,
-    icon: ImageVector,
-    accentColor: Color
-) {
-    Surface(
-        color = accentColor.copy(alpha = 0.09f),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = accentColor
-                )
-            }
-            items.forEach { item ->
-                Text(
-                    text = "• $item",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-    }
-}
-
-private fun buildQuizPdfSubtitle(
-    context: android.content.Context,
-    state: QuizAiErrorsState.Success
-): String {
-    val totalAnswers = state.totalSucceededAnswers + state.totalFailedAnswers
-    val errorRatePct = if (totalAnswers > 0) {
-        ((state.totalFailedAnswers.toDouble() / totalAnswers.toDouble()) * 100.0)
-            .toInt()
-            .coerceIn(0, 100)
-    } else 0
-    return listOfNotNull(
-        state.className.takeIf { it.isNotBlank() },
-        context.getString(
-            R.string.teacher_quiz_ai_errors_meta,
-            state.attemptsCount,
-            state.averagePct,
-            errorRatePct
-        )
-    ).joinToString(" • ")
-}
-
-private fun formatQuizErrorsAsText(
-    title: String,
-    metaLine: String,
-    summaryHeader: String,
-    errorsHeader: String,
-    causesHeader: String,
-    recHeader: String,
-    report: QuizErrorsAiReport
-): String = buildString {
-    appendLine(title)
-    if (metaLine.isNotBlank()) appendLine(metaLine)
-    appendLine()
-    if (report.overallSynthesis.isNotBlank()) {
-        appendLine(summaryHeader)
-        appendLine(report.overallSynthesis)
-        appendLine()
-    }
-    if (report.frequentErrors.isNotEmpty()) {
-        appendLine(errorsHeader)
-        report.frequentErrors.forEach { appendLine("• $it") }
-        appendLine()
-    }
-    if (report.misconceptionCauses.isNotEmpty()) {
-        appendLine(causesHeader)
-        report.misconceptionCauses.forEach { appendLine("• $it") }
-        appendLine()
-    }
-    if (report.remediationActions.isNotEmpty()) {
-        appendLine(recHeader)
-        report.remediationActions.forEach { appendLine("• $it") }
-    }
-}.trim()

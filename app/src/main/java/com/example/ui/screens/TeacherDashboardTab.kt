@@ -27,11 +27,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Class
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -72,6 +72,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.core.AppLanguage
 import com.example.core.ClassGlobalQuestionStats
 import com.example.core.StudentClassQuestionStats
 import com.example.core.StudentQcmResultSummary
@@ -98,7 +99,6 @@ import com.example.ui.theme.SvtEmeraldPrimary
 import com.example.ui.theme.SvtOceanSecondary
 import com.example.ui.theme.SvtSuccess
 import com.example.ui.theme.SvtWarning
-import com.example.ui.viewmodel.ClassAiAnalysisState
 import java.util.Locale
 
 @Composable
@@ -115,9 +115,7 @@ fun TeacherDashboardTab(
     teacherVideoTracking: List<VideoTracking>,
     teacherAnnouncements: List<Announcement>,
     teacherMessages: List<PrivateMessage>,
-    classAiAnalysisState: ClassAiAnalysisState = ClassAiAnalysisState.Idle,
-    onAnalyzeClassWithAi: (SvtClass) -> Unit = {},
-    onDismissAiAnalysis: () -> Unit = {},
+    currentLanguage: AppLanguage = AppLanguage.FR,
     onAnalyzeQuizErrorsWithAi: (Quiz) -> Unit = {},
     onNavigateToTab: (SvtTab) -> Unit
 ) {
@@ -145,9 +143,8 @@ fun TeacherDashboardTab(
         )
     }
 
-    val activeClassForShortcut = remember(teacherClasses, selectedClassId) {
-        teacherClasses.firstOrNull { it.id == selectedClassId } ?: teacherClasses.firstOrNull()
-    }
+    var showClassPromptDialog by rememberSaveable { mutableStateOf(false) }
+    var promptInitialClassId by rememberSaveable { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         LazyRow(
@@ -187,8 +184,15 @@ fun TeacherDashboardTab(
             if (sec == 0) {
                 TeacherOverviewSection(
                     overview = overview,
-                    activeClassForAi = activeClassForShortcut,
-                    onAnalyzeClassWithAi = onAnalyzeClassWithAi,
+                    hasClasses = teacherClasses.isNotEmpty(),
+                    onOpenAllClassesPrompt = {
+                        promptInitialClassId = null
+                        showClassPromptDialog = true
+                    },
+                    onOpenClassPrompt = { cls ->
+                        promptInitialClassId = cls.id
+                        showClassPromptDialog = true
+                    },
                     onOpenQcmResults = { onSelectSection(1) },
                     onNavigateToTab = onNavigateToTab
                 )
@@ -200,28 +204,39 @@ fun TeacherDashboardTab(
                     quizzes = teacherQuizzes,
                     attempts = teacherAttempts,
                     initialClassFilterId = selectedClassId,
-                    onAnalyzeClassWithAi = onAnalyzeClassWithAi,
+                    onAnalyzeClassWithAi = { cls ->
+                        promptInitialClassId = cls.id
+                        showClassPromptDialog = true
+                    },
                     onAnalyzeQuizErrorsWithAi = onAnalyzeQuizErrorsWithAi
                 )
             }
         }
     }
 
-    ClassAiAnalysisDialog(
-        state = classAiAnalysisState,
-        onRetry = { classId ->
-            teacherClasses.firstOrNull { it.id == classId }?.let(onAnalyzeClassWithAi)
-        },
-        onDismiss = onDismissAiAnalysis
-    )
+    if (showClassPromptDialog && teacherClasses.isNotEmpty()) {
+        ClassAiAnalysisDialog(
+            initialClassId = promptInitialClassId,
+            classes = teacherClasses,
+            enrollments = teacherEnrollments,
+            roster = teacherRoster,
+            quizzes = teacherQuizzes,
+            attempts = teacherAttempts,
+            resources = teacherResources,
+            videoTrackings = teacherVideoTracking,
+            currentLanguage = currentLanguage,
+            onDismiss = { showClassPromptDialog = false }
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TeacherOverviewSection(
     overview: TeacherDashboardOverview,
-    activeClassForAi: SvtClass?,
-    onAnalyzeClassWithAi: (SvtClass) -> Unit,
+    hasClasses: Boolean,
+    onOpenAllClassesPrompt: () -> Unit,
+    onOpenClassPrompt: (SvtClass) -> Unit,
     onOpenQcmResults: () -> Unit,
     onNavigateToTab: (SvtTab) -> Unit
 ) {
@@ -302,12 +317,12 @@ private fun TeacherOverviewSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (activeClassForAi != null) {
+                if (hasClasses) {
                     FilledTonalButton(
-                        onClick = { onAnalyzeClassWithAi(activeClassForAi) },
+                        onClick = onOpenAllClassesPrompt,
                         modifier = Modifier.testTag("teacher_ai_analysis_shortcut_button")
                     ) {
-                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(stringResource(id = R.string.teacher_ai_analysis_btn))
                     }
@@ -519,13 +534,13 @@ private fun TeacherOverviewSection(
                             }
 
                             FilledTonalButton(
-                                onClick = { onAnalyzeClassWithAi(summary.svtClass) },
+                                onClick = { onOpenClassPrompt(summary.svtClass) },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("class_ai_analysis_button_${summary.svtClass.id}")
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.AutoAwesome,
+                                    imageVector = Icons.Filled.ContentCopy,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -1060,7 +1075,7 @@ private fun ClassGlobalQuestionStatsCard(
                         .testTag("qcm_class_ai_analysis_button_${stats.classId}")
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.AutoAwesome,
+                        imageVector = Icons.Filled.ContentCopy,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )

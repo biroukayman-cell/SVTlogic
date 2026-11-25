@@ -176,8 +176,6 @@ fun MainDashboardScreen(
 
     val aiQuizState by viewModel.aiQuizState.collectAsStateWithLifecycle()
     val labSvtSearchState by viewModel.labSvtSearchState.collectAsStateWithLifecycle()
-    val classAiAnalysisState by viewModel.classAiAnalysisState.collectAsStateWithLifecycle()
-    val quizAiErrorsState by viewModel.quizAiErrorsState.collectAsStateWithLifecycle()
     val unlockedBadges by viewModel.newlyUnlockedBadges.collectAsStateWithLifecycle()
     val isUploadingResource by viewModel.isUploadingResource.collectAsStateWithLifecycle()
     val appUpdates by viewModel.appUpdates.collectAsStateWithLifecycle()
@@ -188,6 +186,7 @@ fun MainDashboardScreen(
     val actionError by viewModel.actionError.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
     var dismissedUpdateId by rememberSaveable { mutableStateOf<String?>(null) }
+    var promptErrorsQuizId by rememberSaveable { mutableStateOf<String?>(null) }
     var knownNotificationIds by remember(profile.userId) { mutableStateOf<Set<String>?>(null) }
     var newlyArrivedNotificationIds by remember(profile.userId) { mutableStateOf<Set<String>>(emptySet()) }
 
@@ -442,13 +441,9 @@ fun MainDashboardScreen(
                                 teacherVideoTracking = teacherVideoTracking,
                                 teacherAnnouncements = teacherAnnouncements,
                                 teacherMessages = teacherMessages,
-                                classAiAnalysisState = classAiAnalysisState,
-                                onAnalyzeClassWithAi = { cls ->
-                                    viewModel.analyzeClassWithAi(cls, currentLanguage)
-                                },
-                                onDismissAiAnalysis = { viewModel.resetClassAiAnalysis() },
+                                currentLanguage = currentLanguage,
                                 onAnalyzeQuizErrorsWithAi = { quiz ->
-                                    viewModel.analyzeQuizErrorsWithAi(quiz, currentLanguage)
+                                    promptErrorsQuizId = quiz.id
                                 },
                                 onNavigateToTab = { targetTab -> currentTab = targetTab }
                             )
@@ -505,7 +500,7 @@ fun MainDashboardScreen(
                                     }
                                 } else null,
                                 onAnalyzeQuizErrorsWithAi = if (isTeacher) {
-                                    { quiz -> viewModel.analyzeQuizErrorsWithAi(quiz, currentLanguage) }
+                                    { quiz -> promptErrorsQuizId = quiz.id }
                                 } else null,
                                 currentLanguage = currentLanguage
                             )
@@ -762,14 +757,14 @@ fun MainDashboardScreen(
     }
 
     if (isTeacher) {
+        val targetQuiz = promptErrorsQuizId?.let { qId -> teacherQuizzes.firstOrNull { it.id == qId } }
+        val targetClass = targetQuiz?.let { q -> teacherClasses.firstOrNull { it.id == q.classId } }
         com.example.ui.components.QuizAiErrorsDialog(
-            state = quizAiErrorsState,
-            onRetry = { quizId ->
-                teacherQuizzes.firstOrNull { it.id == quizId }?.let { quiz ->
-                    viewModel.analyzeQuizErrorsWithAi(quiz, currentLanguage)
-                }
-            },
-            onDismiss = { viewModel.resetQuizAiErrors() }
+            quiz = targetQuiz,
+            svtClass = targetClass,
+            attempts = teacherAttempts,
+            currentLanguage = currentLanguage,
+            onDismiss = { promptErrorsQuizId = null }
         )
     }
 

@@ -19,8 +19,6 @@ import android.text.TextDirectionHeuristics
 import android.text.TextPaint
 import androidx.core.content.FileProvider
 import com.example.R
-import com.example.data.ai.ClassAiAnalysisReport
-import com.example.data.ai.QuizErrorsAiReport
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
@@ -59,85 +57,45 @@ object AiAnalysisPdfExporter {
         return "${prefix}_${cleanSubject}_$stamp.pdf"
     }
 
-    fun buildClassAnalysisSections(
+    fun buildExternalAnalysisSections(
         context: Context,
-        report: ClassAiAnalysisReport
+        metricsTitle: String,
+        metricsLines: List<String>,
+        pastedAiAnalysis: String,
+        promptText: String
     ): List<AiPdfSection> = buildList {
-        if (report.textualSummary.isNotBlank()) {
+        if (metricsLines.isNotEmpty()) {
             add(
                 AiPdfSection(
-                    title = context.getString(R.string.teacher_ai_analysis_summary_title),
-                    bodyLines = listOf(report.textualSummary),
+                    title = metricsTitle,
+                    bodyLines = metricsLines,
                     accentColorRgb = Triple(18, 92, 62)
                 )
             )
         }
-        if (report.strengths.isNotEmpty()) {
+        val cleanAnalysis = pastedAiAnalysis.trim()
+        if (cleanAnalysis.isNotBlank()) {
+            val paragraphs = cleanAnalysis
+                .split(Regex("\\n+"))
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
             add(
                 AiPdfSection(
-                    title = context.getString(R.string.teacher_ai_analysis_strengths_title),
-                    bodyLines = report.strengths.map { "• $it" },
+                    title = context.getString(R.string.teacher_ai_pdf_external_analysis_section),
+                    bodyLines = paragraphs,
                     accentColorRgb = Triple(22, 128, 61)
                 )
             )
-        }
-        if (report.gaps.isNotEmpty()) {
+        } else if (promptText.isNotBlank()) {
+            val promptLines = promptText
+                .split(Regex("\\n+"))
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
             add(
                 AiPdfSection(
-                    title = context.getString(R.string.teacher_ai_analysis_gaps_title),
-                    bodyLines = report.gaps.map { "• $it" },
-                    accentColorRgb = Triple(190, 56, 48)
-                )
-            )
-        }
-        if (report.recommendations.isNotEmpty()) {
-            add(
-                AiPdfSection(
-                    title = context.getString(R.string.teacher_ai_analysis_recommendations_title),
-                    bodyLines = report.recommendations.map { "• $it" },
+                    title = context.getString(R.string.teacher_ai_pdf_prompt_section),
+                    bodyLines = promptLines,
                     accentColorRgb = Triple(180, 108, 12)
-                )
-            )
-        }
-    }
-
-    fun buildQuizErrorsSections(
-        context: Context,
-        report: QuizErrorsAiReport
-    ): List<AiPdfSection> = buildList {
-        if (report.overallSynthesis.isNotBlank()) {
-            add(
-                AiPdfSection(
-                    title = context.getString(R.string.teacher_quiz_ai_errors_summary_title),
-                    bodyLines = listOf(report.overallSynthesis),
-                    accentColorRgb = Triple(18, 92, 62)
-                )
-            )
-        }
-        if (report.frequentErrors.isNotEmpty()) {
-            add(
-                AiPdfSection(
-                    title = context.getString(R.string.teacher_quiz_ai_errors_list_title),
-                    bodyLines = report.frequentErrors.map { "• $it" },
-                    accentColorRgb = Triple(190, 56, 48)
-                )
-            )
-        }
-        if (report.misconceptionCauses.isNotEmpty()) {
-            add(
-                AiPdfSection(
-                    title = context.getString(R.string.teacher_quiz_ai_errors_causes_title),
-                    bodyLines = report.misconceptionCauses.map { "• $it" },
-                    accentColorRgb = Triple(180, 108, 12)
-                )
-            )
-        }
-        if (report.remediationActions.isNotEmpty()) {
-            add(
-                AiPdfSection(
-                    title = context.getString(R.string.teacher_quiz_ai_errors_remediation_title),
-                    bodyLines = report.remediationActions.map { "• $it" },
-                    accentColorRgb = Triple(22, 128, 61)
                 )
             )
         }
