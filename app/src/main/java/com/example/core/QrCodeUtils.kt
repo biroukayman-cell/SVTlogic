@@ -65,57 +65,27 @@ object QrCodeUtils {
     }
 
     fun extractTokenFromScan(rawValue: String): String {
-        val unwrapped = unwrapWebQrQuery(rawValue.trim()).first
+        val trimmed = rawValue.trim()
         val withoutPrefix = when {
-            unwrapped.startsWith("BIOTERRE:", ignoreCase = true) ->
-                unwrapped.substring("BIOTERRE:".length).trim()
-            else -> unwrapped
+            trimmed.startsWith("BIOTERRE:", ignoreCase = true) ->
+                trimmed.substring("BIOTERRE:".length).trim()
+            else -> trimmed
         }
         return withoutPrefix.substringBefore("|").trim()
     }
 
     fun extractMassarFromScan(rawValue: String): String? {
-        val (unwrapped, queryMassar) = unwrapWebQrQuery(rawValue.trim())
+        val trimmed = rawValue.trim()
         val withoutPrefix = when {
-            unwrapped.startsWith("BIOTERRE:", ignoreCase = true) ->
-                unwrapped.substring("BIOTERRE:".length).trim()
-            else -> unwrapped
+            trimmed.startsWith("BIOTERRE:", ignoreCase = true) ->
+                trimmed.substring("BIOTERRE:".length).trim()
+            else -> trimmed
         }
-        if ("|" in withoutPrefix) {
-            return withoutPrefix.substringAfter("|").trim().takeIf { it.isNotBlank() }
+        return if ("|" in withoutPrefix) {
+            withoutPrefix.substringAfter("|").trim().takeIf { it.isNotBlank() }
+        } else {
+            null
         }
-        return queryMassar?.trim()?.takeIf { it.isNotBlank() }
-    }
-
-    private fun unwrapWebQrQuery(trimmed: String): Pair<String, String?> {
-        if (!trimmed.startsWith("http://", ignoreCase = true) &&
-            !trimmed.startsWith("https://", ignoreCase = true)
-        ) {
-            return trimmed to null
-        }
-        val uri = runCatching { java.net.URI(trimmed) }.getOrNull() ?: return trimmed to null
-        val rawQuery = uri.rawQuery.orEmpty()
-        if (rawQuery.isBlank()) return trimmed to null
-
-        val params = rawQuery
-            .split('&')
-            .mapNotNull { part ->
-                val idx = part.indexOf('=')
-                if (idx <= 0) null
-                else {
-                    val key = runCatching { java.net.URLDecoder.decode(part.substring(0, idx), "UTF-8") }.getOrDefault(part.substring(0, idx))
-                    val value = runCatching { java.net.URLDecoder.decode(part.substring(idx + 1), "UTF-8") }.getOrDefault(part.substring(idx + 1))
-                    key.lowercase() to value
-                }
-            }
-            .toMap()
-
-        val qrOrToken = params["qr"]?.takeIf { it.isNotBlank() }
-            ?: params["token"]?.takeIf { it.isNotBlank() }
-            ?: params["code"]?.takeIf { it.isNotBlank() }
-            ?: return trimmed to null
-        val massar = params["massar"]?.takeIf { it.isNotBlank() }
-        return qrOrToken to massar
     }
 
     fun copyTextToClipboard(context: Context, label: String, text: String): Boolean {

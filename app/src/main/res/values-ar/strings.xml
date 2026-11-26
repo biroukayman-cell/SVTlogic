@@ -489,8 +489,8 @@
     <string name="device_lock_blocked_body">لأسباب أمنية، يعمل حساب التلميذ على هاتف واحد فقط. هذا الحساب مرتبط مسبقاً بالجهاز: %1$s.</string>
     <string name="device_lock_teacher_hint">إذا غيّرت هاتفك، اطلب من أستاذك إلغاء ربط الجهاز السابق من الملف الشخصي ← لائحة التلاميذ.</string>
     <string name="device_lock_reset_button">فك ربط الهاتف</string>
-    <string name="device_lock_reset_confirm">هل تريد السماح لـ %1$s بتسجيل الدخول من جهاز جديد (أندرويد وآيفون/ويب)؟ سيتم إلغاء ربط الأجهزة السابقة.</string>
-    <string name="device_lock_reset_success">تم فك ربط أجهزة التلميذ (أندرويد وآيفون/ويب) بنجاح.</string>
+    <string name="device_lock_reset_confirm">هل تريد السماح لـ %1$s بتسجيل الدخول من هاتف جديد؟ سيتم إلغاء ربط الهاتف السابق.</string>
+    <string name="device_lock_reset_success">تم فك ربط هاتف التلميذ بنجاح.</string>
     <string name="teacher_lab_themes_title">محاور مختبر SVT لهذا القسم</string>
     <string name="teacher_lab_themes_desc">اختر المحاور التي تظهر لتلاميذ هذا القسم في تبويب مختبر SVT.</string>
     <string name="teacher_lab_themes_min_one">يجب الإبقاء على محور واحد على الأقل مفعّلاً.</string>
@@ -892,11 +892,4 @@
     <string name="svt_tool_neuro_state_subthreshold">كمون الراحة (-70 mV): الإهاجة غير كافية لفتح قنوات Na⁺</string>
     <string name="svt_tool_neuro_state_no_ca">توقف عند السينابس/التروبونين: نقص Ca²⁺</string>
     <string name="svt_tool_neuro_state_no_atp">تعب عضلي: نقص ATP لدوران رؤوس الميوزين</string>
-
-    <string name="profile_load_error_title">تعذر تحميل ملفك الشخصي</string>
-    <string name="profile_load_error_body">لم يتم حذف بياناتك من الخادم، لكن الاتصال الآمن بقاعدة البيانات تعذر مؤقتاً. يرجى التحقق من الاتصال بالإنترنت وإعادة المحاولة.</string>
-    <string name="retry_action">إعادة المحاولة</string>
-    <string name="firestore_stream_error">خطأ في قراءة Firestore (%1$s): %2$s</string>
-    <string name="firestore_sync_warning_banner">تعذر تحميل بعض البيانات من الخادم مؤقتاً.</string>
-    <string name="firestore_server_empty_after_cache">تم عرض %1$d قسم(أقسام) من الذاكرة المحلية، لكن خادم Firestore لا يحتوي على أي أقسام لهذا الحساب (%2$s).</string>
 </resources>

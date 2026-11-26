@@ -21,10 +21,8 @@
         "loginStreak": { "type": "integer", "description": "Consecutive active login days" },
         "lastLoginDate": { "type": "string", "description": "ISO local date of last active day (YYYY-MM-DD)" },
         "unlockedBadgeIds": { "type": "array", "description": "List of unlocked badge IDs" },
-        "boundDeviceId": { "type": "string", "description": "Single bound physical Android device identifier for student accounts" },
-        "boundDeviceModel": { "type": "string", "description": "Human-readable bound Android phone model name" },
-        "boundWebDeviceId": { "type": "string", "description": "Single bound Web/iPhone browser identifier for student accounts" },
-        "boundWebDeviceModel": { "type": "string", "description": "Human-readable bound Web/iPhone browser or device label" },
+        "boundDeviceId": { "type": "string", "description": "Single bound physical device identifier for student accounts" },
+        "boundDeviceModel": { "type": "string", "description": "Human-readable bound phone model name" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
       },

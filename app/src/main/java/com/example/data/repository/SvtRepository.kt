@@ -3,7 +3,6 @@ package com.example.data.repository
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.util.Log
 import android.webkit.MimeTypeMap
 import com.example.R
 import com.example.core.AppUpdateUrlHelper
@@ -37,7 +36,6 @@ import com.google.firebase.firestore.DocumentSnapshot.ServerTimestampBehavior
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
-import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.snapshots
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -117,25 +115,6 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
     }
 
-    private inline fun <reified T : Any> QuerySnapshot.toObjectsSafe(collectionLabel: String): List<T> {
-        val result = ArrayList<T>(documents.size)
-        for (doc in documents) {
-            try {
-                val item = doc.toObject(T::class.java, ServerTimestampBehavior.ESTIMATE)
-                if (item != null) {
-                    result.add(item)
-                }
-            } catch (e: Exception) {
-                Log.e(
-                    "SvtRepository",
-                    "Skipping malformed document ${doc.id} in $collectionLabel: ${e.message}",
-                    e
-                )
-            }
-        }
-        return result
-    }
-
     // ---------------------------------------------------------
     // 1. User Profile & Streak
     // ---------------------------------------------------------
@@ -145,12 +124,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .snapshots()
             .map { snapshot ->
                 if (snapshot.exists()) {
-                    try {
-                        snapshot.toObject(UserProfile::class.java, ServerTimestampBehavior.ESTIMATE)
-                    } catch (e: Exception) {
-                        Log.e("SvtRepository", "Failed to deserialize user profile $userId: ${e.message}", e)
-                        null
-                    }
+                    snapshot.toObject(UserProfile::class.java, ServerTimestampBehavior.ESTIMATE)
                 } else {
                     null
                 }
@@ -290,8 +264,6 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 mapOf(
                     "boundDeviceId" to "",
                     "boundDeviceModel" to "",
-                    "boundWebDeviceId" to "",
-                    "boundWebDeviceModel" to "",
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
@@ -379,7 +351,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("role", "teacher")
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<UserProfile>("users")
+                snapshot.toObjects(UserProfile::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedWith(
                         compareBy<UserProfile>(
                             { when (it.teacherStatus) { "pending" -> 0; "rejected" -> 1; else -> 2 } },
@@ -387,7 +359,6 @@ class SvtRepository(private val db: FirebaseFirestore) {
                         )
                     )
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "users", uid)
             .collect { emit(it) }
     }
@@ -507,36 +478,15 @@ class SvtRepository(private val db: FirebaseFirestore) {
     // ---------------------------------------------------------
     // 2. Classes & QR Codes (Teacher + Student Lookup)
     // ---------------------------------------------------------
-    fun observeTeacherClasses(
-        teacherId: String,
-        onServerClearedCachedData: ((Int) -> Unit)? = null,
-        onServerNonEmpty: (() -> Unit)? = null
-    ): Flow<List<SvtClass>> = flow {
+    fun observeTeacherClasses(teacherId: String): Flow<List<SvtClass>> = flow {
         val path = "classes"
-        var cachedCount = 0
         db.collection("classes")
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                val list = snapshot.toObjectsSafe<SvtClass>(path)
+                snapshot.toObjects(SvtClass::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
-                if (snapshot.metadata.isFromCache) {
-                    if (list.isNotEmpty()) {
-                        cachedCount = list.size
-                    }
-                } else {
-                    if (list.isNotEmpty()) {
-                        cachedCount = 0
-                        onServerNonEmpty?.invoke()
-                    } else if (cachedCount > 0 && !snapshot.metadata.hasPendingWrites()) {
-                        val staleCount = cachedCount
-                        cachedCount = 0
-                        onServerClearedCachedData?.invoke(staleCount)
-                    }
-                }
-                list
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, path, teacherId)
             .collect { emit(it) }
     }
@@ -566,10 +516,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<Establishment>(path)
+                snapshot.toObjects(Establishment::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedBy { it.name.lowercase(Locale.getDefault()) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, path, teacherId)
             .collect { emit(it) }
     }
@@ -920,10 +869,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<Enrollment>(path)
+                snapshot.toObjects(Enrollment::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.requestedAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, path, teacherId)
             .collect { emit(it) }
     }
@@ -1172,10 +1120,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<Quiz>("quizzes")
+                snapshot.toObjects(Quiz::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "quizzes", teacherId)
             .collect { emit(it) }
     }
@@ -1185,10 +1132,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("classId", classId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<Quiz>("quizzes")
+                snapshot.toObjects(Quiz::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "quizzes", classId)
             .collect { emit(it) }
     }
@@ -1198,10 +1144,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<QuizAttempt>("quiz_attempts")
+                snapshot.toObjects(QuizAttempt::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.completedAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "quiz_attempts", teacherId)
             .collect { emit(it) }
     }
@@ -1211,10 +1156,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("studentId", studentId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<QuizAttempt>("quiz_attempts")
+                snapshot.toObjects(QuizAttempt::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.completedAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "quiz_attempts", studentId)
             .collect { emit(it) }
     }
@@ -1486,10 +1430,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<CourseResource>("resources")
+                snapshot.toObjects(CourseResource::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "resources", teacherId)
             .collect { emit(it) }
     }
@@ -1499,10 +1442,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("classId", classId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<CourseResource>("resources")
+                snapshot.toObjects(CourseResource::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "resources", classId)
             .collect { emit(it) }
     }
@@ -1512,9 +1454,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<VideoTracking>("video_tracking")
+                snapshot.toObjects(VideoTracking::class.java, ServerTimestampBehavior.ESTIMATE)
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "video_tracking", teacherId)
             .collect { emit(it) }
     }
@@ -1524,9 +1465,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("studentId", studentId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<VideoTracking>("video_tracking")
+                snapshot.toObjects(VideoTracking::class.java, ServerTimestampBehavior.ESTIMATE)
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "video_tracking", studentId)
             .collect { emit(it) }
     }
@@ -1884,10 +1824,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<Announcement>("announcements")
+                snapshot.toObjects(Announcement::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "announcements", teacherId)
             .collect { emit(it) }
     }
@@ -1897,10 +1836,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("classId", classId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<Announcement>("announcements")
+                snapshot.toObjects(Announcement::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "announcements", classId)
             .collect { emit(it) }
     }
@@ -1973,10 +1911,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<PrivateMessage>("private_messages")
+                snapshot.toObjects(PrivateMessage::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedBy { it.createdAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "private_messages", teacherId)
             .collect { emit(it) }
     }
@@ -1986,10 +1923,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("studentId", studentId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<PrivateMessage>("private_messages")
+                snapshot.toObjects(PrivateMessage::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedBy { it.createdAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "private_messages", studentId)
             .collect { emit(it) }
     }
@@ -2082,10 +2018,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<CustomGlossaryEntry>("glossary_entries")
+                snapshot.toObjects(CustomGlossaryEntry::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedBy { it.term.lowercase(Locale.getDefault()) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "glossary_entries", teacherId)
             .collect { emit(it) }
     }
@@ -2095,10 +2030,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereArrayContains("approvedStudentIds", studentId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<CustomGlossaryEntry>("glossary_entries")
+                snapshot.toObjects(CustomGlossaryEntry::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedBy { it.term.lowercase(Locale.getDefault()) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "glossary_entries", studentId)
             .collect { emit(it) }
     }
@@ -2180,10 +2114,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("studentId", studentId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<StudentNotification>("student_notifications")
+                snapshot.toObjects(StudentNotification::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.createdAt ?: Timestamp(0, 0) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "student_notifications", studentId)
             .collect { emit(it) }
     }
@@ -2239,10 +2172,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<RosterStudent>("class_rosters")
+                snapshot.toObjects(RosterStudent::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedBy { it.fullName.lowercase(Locale.getDefault()) }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "class_rosters", teacherId)
             .collect { emit(it) }
     }
@@ -2252,10 +2184,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("studentUid", studentUid)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<RosterStudent>("class_rosters")
+                snapshot.toObjects(RosterStudent::class.java, ServerTimestampBehavior.ESTIMATE)
                     .firstOrNull()
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "class_rosters", studentUid)
             .collect { emit(it) }
     }
@@ -2349,10 +2280,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("teacherId", teacherId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<AppUpdateRelease>("app_updates")
+                snapshot.toObjects(AppUpdateRelease::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.versionCode }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "app_updates", teacherId)
             .collect { emit(it) }
     }
@@ -2362,10 +2292,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
             .whereEqualTo("classId", classId)
             .snapshots()
             .map { snapshot ->
-                snapshot.toObjectsSafe<AppUpdateRelease>("app_updates")
+                snapshot.toObjects(AppUpdateRelease::class.java, ServerTimestampBehavior.ESTIMATE)
                     .sortedByDescending { it.versionCode }
             }
-            .retryTransientFirestoreErrors()
             .logFirestoreErrors(OperationType.LIST, "app_updates", classId)
             .collect { emit(it) }
     }

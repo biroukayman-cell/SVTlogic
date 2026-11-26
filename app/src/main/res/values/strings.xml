@@ -489,8 +489,8 @@
     <string name="device_lock_blocked_body">Par sécurité, chaque compte élève ne fonctionne que sur un seul téléphone. Ce compte est déjà associé à l\'appareil : %1$s.</string>
     <string name="device_lock_teacher_hint">Si vous avez changé de téléphone, demandez à votre professeur de délier votre ancien appareil depuis Profil → Liste des élèves.</string>
     <string name="device_lock_reset_button">Délier téléphone</string>
-    <string name="device_lock_reset_confirm">Autoriser %1$s à se connecter depuis un nouvel appareil (Android et iPhone/Web) ? Les anciens appareils associés ne seront plus liés.</string>
-    <string name="device_lock_reset_success">Appareils (Android et iPhone/Web) de l\'élève déliés avec succès.</string>
+    <string name="device_lock_reset_confirm">Autoriser %1$s à se connecter depuis un nouveau téléphone ? L\'ancien appareil ne sera plus lié.</string>
+    <string name="device_lock_reset_success">Téléphone de l\'élève délié avec succès.</string>
     <string name="teacher_lab_themes_title">Thèmes du Labo SVT pour cette classe</string>
     <string name="teacher_lab_themes_desc">Choisissez les thèmes affichés aux élèves de cette classe dans l\'onglet Labo SVT.</string>
     <string name="teacher_lab_themes_min_one">Au moins un thème SVT doit rester activé.</string>
@@ -892,11 +892,4 @@
     <string name="svt_tool_neuro_state_subthreshold">Repos (-70 mV) : stimulation insuffisante pour ouvrir les canaux Na⁺</string>
     <string name="svt_tool_neuro_state_no_ca">Blocage synaptique/troponine : manque de Ca²⁺</string>
     <string name="svt_tool_neuro_state_no_atp">Fatigue musculaire : manque d\'ATP pour le pivotement de la myosine</string>
-
-    <string name="profile_load_error_title">Impossible de charger votre profil</string>
-    <string name="profile_load_error_body">Vos données sur le serveur n\'ont pas été supprimées, mais la connexion sécurisée à la base de données a échoué temporairement. Vérifiez votre connexion internet et réessayez.</string>
-    <string name="retry_action">Réessayer</string>
-    <string name="firestore_stream_error">Erreur de lecture Firestore (%1$s) : %2$s</string>
-    <string name="firestore_sync_warning_banner">Synchronisation interrompue : certaines données n\'ont pas pu être chargées depuis le serveur.</string>
-    <string name="firestore_server_empty_after_cache">%1$d classe(s) provenaient du cache local, mais le serveur Firestore ne renvoie aucune classe pour ce compte (%2$s).</string>
 </resources>

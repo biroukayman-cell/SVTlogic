@@ -19,7 +19,6 @@ import com.example.core.SvtBackgroundNotificationWorker
 import com.example.core.SvtLabLogic
 import com.example.core.TeacherAnalyticsLogic
 import com.example.core.appCheckDiagnosticTag
-import com.example.core.catchPreservingLast
 import com.example.data.ai.AiAppCheckException
 import com.example.data.ai.GeneratedQuizDraft
 import com.example.data.ai.SvtAiRepository
@@ -61,14 +60,12 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -145,38 +142,7 @@ class SvtMainViewModel(
     val isAcceptingTerms: StateFlow<Boolean> = _isAcceptingTerms.asStateFlow()
 
     private val _profileRetryTrigger = MutableStateFlow(0)
-    private val _streamRetryTrigger = MutableStateFlow(0)
     private val _authReloadTick = MutableStateFlow(0)
-    private val _streamSyncError = MutableStateFlow<String?>(null)
-    val streamSyncError: StateFlow<String?> = _streamSyncError.asStateFlow()
-
-    private fun <T> Flow<T>.catchFirestoreStreamError(
-        @Suppress("UNUSED_PARAMETER") defaultValue: T,
-        streamLabel: String
-    ): Flow<T> {
-        return this.catchPreservingLast(
-            isNonCancellableFirestoreError = { error ->
-                generateSequence(error) { it.cause }
-                    .filterIsInstance<FirebaseFirestoreException>()
-                    .any()
-            },
-            onError = { error ->
-                val fsErr = generateSequence(error) { it.cause }
-                    .filterIsInstance<FirebaseFirestoreException>()
-                    .firstOrNull()
-                val root = fsErr ?: error
-                Log.e(TAG, "Firestore stream error ($streamLabel)", root)
-                if (Firebase.auth.currentUser != null) {
-                    val detail = root.localizedMessage ?: root.message ?: root.javaClass.simpleName
-                    val msg = context.getString(R.string.firestore_stream_error, streamLabel, detail)
-                    _streamSyncError.value = msg
-                    if (_actionError.value.isNullOrBlank()) {
-                        _actionError.value = msg
-                    }
-                }
-            }
-        )
-    }
 
     val isOwnerAdminEmail: StateFlow<Boolean> = _authReloadTick.map {
         Firebase.auth.currentUser?.email.equals(
@@ -260,137 +226,96 @@ class SvtMainViewModel(
         initialValue = ProfileGateState.Loading
     )
 
-    private val roleFlow = combine(
-        profileState.map { state -> (state as? ProfileGateState.Ready)?.profile?.role }
-            .distinctUntilChanged(),
-        _streamRetryTrigger
-    ) { role, _ -> role }
+    private val roleFlow = profileState.map { state ->
+        (state as? ProfileGateState.Ready)?.profile?.role
+    }
 
     val allTeachersForAdmin: StateFlow<List<UserProfile>> = combine(
         roleFlow,
-        isVerifiedOwnerAdmin,
-        _streamRetryTrigger
-    ) { role, isVerifiedAdmin, _ ->
+        isVerifiedOwnerAdmin
+    ) { role, isVerifiedAdmin ->
         role == "teacher" && isVerifiedAdmin
     }.flatMapLatest { eligible ->
-        if (eligible) repository.observeAllTeachers()
-            .catchFirestoreStreamError(emptyList(), "teachers")
+        if (eligible) repository.observeAllTeachers().catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     // Teacher streams
-    val teacherClasses: StateFlow<List<SvtClass>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
-        if (role == "teacher") repository.observeTeacherClasses(
-            teacherId = currentUserId,
-            onServerClearedCachedData = { staleCount ->
-                _streamSyncError.value = context.getString(
-                    R.string.firestore_server_empty_after_cache,
-                    staleCount,
-                    currentUserId.take(10)
-                )
-            },
-            onServerNonEmpty = {
-                val existing = _streamSyncError.value
-                if (!existing.isNullOrBlank() && existing.contains(currentUserId.take(10))) {
-                    _streamSyncError.value = null
-                }
-            }
-        ).catchFirestoreStreamError(emptyList(), "classes")
+    val teacherClasses: StateFlow<List<SvtClass>> = roleFlow.flatMapLatest { role ->
+        if (role == "teacher") repository.observeTeacherClasses(currentUserId)
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val teacherEnrollments: StateFlow<List<Enrollment>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
+    val teacherEnrollments: StateFlow<List<Enrollment>> = roleFlow.flatMapLatest { role ->
         if (role == "teacher") repository.observeTeacherEnrollments(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "enrollments")
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val teacherQuizzes: StateFlow<List<Quiz>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
+    val teacherQuizzes: StateFlow<List<Quiz>> = roleFlow.flatMapLatest { role ->
         if (role == "teacher") repository.observeTeacherQuizzes(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "quizzes")
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val teacherAttempts: StateFlow<List<QuizAttempt>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
+    val teacherAttempts: StateFlow<List<QuizAttempt>> = roleFlow.flatMapLatest { role ->
         if (role == "teacher") repository.observeTeacherAttempts(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "quiz_attempts")
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val teacherResources: StateFlow<List<CourseResource>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
+    val teacherResources: StateFlow<List<CourseResource>> = roleFlow.flatMapLatest { role ->
         if (role == "teacher") repository.observeTeacherResources(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "resources")
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val teacherVideoTracking: StateFlow<List<VideoTracking>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
+    val teacherVideoTracking: StateFlow<List<VideoTracking>> = roleFlow.flatMapLatest { role ->
         if (role == "teacher") repository.observeTeacherVideoTracking(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "video_tracking")
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val teacherAnnouncements: StateFlow<List<Announcement>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
+    val teacherAnnouncements: StateFlow<List<Announcement>> = roleFlow.flatMapLatest { role ->
         if (role == "teacher") repository.observeTeacherAnnouncements(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "announcements")
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val teacherMessages: StateFlow<List<PrivateMessage>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
+    val teacherMessages: StateFlow<List<PrivateMessage>> = roleFlow.flatMapLatest { role ->
         if (role == "teacher") repository.observeTeacherMessages(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "private_messages")
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val teacherRoster: StateFlow<List<RosterStudent>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
+    val teacherRoster: StateFlow<List<RosterStudent>> = roleFlow.flatMapLatest { role ->
         if (role == "teacher") repository.observeTeacherRoster(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "class_rosters")
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val teacherEstablishments: StateFlow<List<Establishment>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
+    val teacherEstablishments: StateFlow<List<Establishment>> = roleFlow.flatMapLatest { role ->
         if (role == "teacher") repository.observeTeacherEstablishments(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "establishments")
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val teacherCustomGlossary: StateFlow<List<CustomGlossaryEntry>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
+    val teacherCustomGlossary: StateFlow<List<CustomGlossaryEntry>> = roleFlow.flatMapLatest { role ->
         if (role == "teacher") repository.observeTeacherGlossaryEntries(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "glossary_entries")
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     // Student streams
-    val studentRoster: StateFlow<RosterStudent?> = _streamRetryTrigger.flatMapLatest {
-        repository.observeStudentRoster(currentUserId)
-            .catchFirestoreStreamError(null, "student_roster")
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+    val studentRoster: StateFlow<RosterStudent?> = repository.observeStudentRoster(currentUserId)
+        .catch { emit(null) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
     val studentEnrollment: StateFlow<Enrollment?> = combine(
-        combine(roleFlow, _streamRetryTrigger) { role, tick -> role to tick }.flatMapLatest { (role, _) ->
+        roleFlow.flatMapLatest { role ->
             if (role == "student") repository.observeStudentEnrollment(currentUserId)
-                .catchFirestoreStreamError(null, "student_enrollment")
+                .catch { emit(null) }
             else flowOf(null)
         },
         _optimisticEnrollment
@@ -400,15 +325,12 @@ class SvtMainViewModel(
 
     private val approvedClassId = studentEnrollment.map { enr ->
         if (enr?.status == "approved" && enr.classId.isNotBlank()) enr.classId else null
-    }.distinctUntilChanged()
+    }
 
-    private val isApprovedStudent = approvedClassId.map { it != null }.distinctUntilChanged()
+    private val isApprovedStudent = approvedClassId.map { it != null }
 
-    val studentClass: StateFlow<SvtClass?> = combine(approvedClassId, _streamRetryTrigger) { classId, tick ->
-        classId to tick
-    }.flatMapLatest { (classId, _) ->
-        if (classId != null) repository.observeClassById(classId)
-            .catchFirestoreStreamError(null, "student_class")
+    val studentClass: StateFlow<SvtClass?> = approvedClassId.flatMapLatest { classId ->
+        if (classId != null) repository.observeClassById(classId).catch { emit(null) }
         else flowOf(null)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
@@ -420,11 +342,8 @@ class SvtMainViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), SvtDomain.entries.toSet())
 
-    private val remoteStudentQuizzes: StateFlow<List<Quiz>> = combine(approvedClassId, _streamRetryTrigger) { classId, tick ->
-        classId to tick
-    }.flatMapLatest { (classId, _) ->
-        if (classId != null) repository.observeStudentQuizzes(classId)
-            .catchFirestoreStreamError(emptyList(), "quizzes")
+    private val remoteStudentQuizzes: StateFlow<List<Quiz>> = approvedClassId.flatMapLatest { classId ->
+        if (classId != null) repository.observeStudentQuizzes(classId).catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
@@ -442,11 +361,8 @@ class SvtMainViewModel(
         byId.values.toList()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    private val remoteStudentAttempts: StateFlow<List<QuizAttempt>> = combine(isApprovedStudent, _streamRetryTrigger) { approved, tick ->
-        approved to tick
-    }.flatMapLatest { (approved, _) ->
-        if (approved) repository.observeStudentAttempts(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "quiz_attempts")
+    private val remoteStudentAttempts: StateFlow<List<QuizAttempt>> = isApprovedStudent.flatMapLatest { approved ->
+        if (approved) repository.observeStudentAttempts(currentUserId).catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
@@ -461,11 +377,8 @@ class SvtMainViewModel(
         pendingAsAttempts + remote
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    private val remoteStudentResources: StateFlow<List<CourseResource>> = combine(approvedClassId, _streamRetryTrigger) { classId, tick ->
-        classId to tick
-    }.flatMapLatest { (classId, _) ->
-        if (classId != null) repository.observeStudentResources(classId)
-            .catchFirestoreStreamError(emptyList(), "resources")
+    private val remoteStudentResources: StateFlow<List<CourseResource>> = approvedClassId.flatMapLatest { classId ->
+        if (classId != null) repository.observeStudentResources(classId).catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
@@ -483,11 +396,8 @@ class SvtMainViewModel(
         byId.values.toList()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    private val remoteStudentVideoTracking: StateFlow<List<VideoTracking>> = combine(isApprovedStudent, _streamRetryTrigger) { approved, tick ->
-        approved to tick
-    }.flatMapLatest { (approved, _) ->
-        if (approved) repository.observeStudentVideoTracking(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "video_tracking")
+    private val remoteStudentVideoTracking: StateFlow<List<VideoTracking>> = isApprovedStudent.flatMapLatest { approved ->
+        if (approved) repository.observeStudentVideoTracking(currentUserId).catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
@@ -514,51 +424,37 @@ class SvtMainViewModel(
         filterVideoOnlyTrackings(trackings, resources)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val studentAnnouncements: StateFlow<List<Announcement>> = combine(approvedClassId, _streamRetryTrigger) { classId, tick ->
-        classId to tick
-    }.flatMapLatest { (classId, _) ->
-        if (classId != null) repository.observeStudentAnnouncements(classId)
-            .catchFirestoreStreamError(emptyList(), "announcements")
+    val studentAnnouncements: StateFlow<List<Announcement>> = approvedClassId.flatMapLatest { classId ->
+        if (classId != null) repository.observeStudentAnnouncements(classId).catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val studentMessages: StateFlow<List<PrivateMessage>> = combine(isApprovedStudent, _streamRetryTrigger) { approved, tick ->
-        approved to tick
-    }.flatMapLatest { (approved, _) ->
-        if (approved) repository.observeStudentMessages(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "private_messages")
+    val studentMessages: StateFlow<List<PrivateMessage>> = isApprovedStudent.flatMapLatest { approved ->
+        if (approved) repository.observeStudentMessages(currentUserId).catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val studentCustomGlossary: StateFlow<List<CustomGlossaryEntry>> = combine(isApprovedStudent, _streamRetryTrigger) { approved, tick ->
-        approved to tick
-    }.flatMapLatest { (approved, _) ->
-        if (approved) repository.observeStudentGlossaryEntries(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "glossary_entries")
+    val studentCustomGlossary: StateFlow<List<CustomGlossaryEntry>> = isApprovedStudent.flatMapLatest { approved ->
+        if (approved) repository.observeStudentGlossaryEntries(currentUserId).catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    val studentNotifications: StateFlow<List<StudentNotification>> = combine(roleFlow, _streamRetryTrigger) { role, tick ->
-        role to tick
-    }.flatMapLatest { (role, _) ->
+    val studentNotifications: StateFlow<List<StudentNotification>> = roleFlow.flatMapLatest { role ->
         if (role == "student") repository.observeStudentNotifications(currentUserId)
-            .catchFirestoreStreamError(emptyList(), "notifications")
+            .catch { emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     val appUpdates: StateFlow<List<AppUpdateRelease>> = combine(
         roleFlow,
-        studentEnrollment,
-        _streamRetryTrigger
-    ) { role, enrollment, _ ->
+        studentEnrollment
+    ) { role, enrollment ->
         role to enrollment
     }.flatMapLatest { (role, enrollment) ->
         when {
-            role == "teacher" -> repository.observeTeacherAppUpdates(currentUserId)
-                .catchFirestoreStreamError(emptyList(), "app_updates")
+            role == "teacher" -> repository.observeTeacherAppUpdates(currentUserId).catch { emit(emptyList()) }
             role == "student" && enrollment?.status == "approved" && enrollment.classId.isNotBlank() ->
-                repository.observeClassAppUpdates(enrollment.classId)
-                    .catchFirestoreStreamError(emptyList(), "app_updates")
+                repository.observeClassAppUpdates(enrollment.classId).catch { emit(emptyList()) }
             else -> flowOf(emptyList())
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
@@ -627,22 +523,6 @@ class SvtMainViewModel(
 
     fun clearError() {
         _actionError.value = null
-    }
-
-    fun clearStreamSyncError() {
-        _streamSyncError.value = null
-    }
-
-    fun retryProfileLoad() {
-        _streamSyncError.value = null
-        _profileRetryTrigger.value += 1
-    }
-
-    fun retryAllStreams() {
-        _streamSyncError.value = null
-        _actionError.value = null
-        _profileRetryTrigger.value += 1
-        _streamRetryTrigger.value += 1
     }
 
     fun clearStatusMessage() {

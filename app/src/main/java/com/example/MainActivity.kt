@@ -69,7 +69,6 @@ import com.example.ui.screens.DeviceLockedBlockedScreen
 import com.example.ui.screens.GuestMainDashboardScreen
 import com.example.ui.screens.MainDashboardScreen
 import com.example.ui.screens.PendingApprovalScreen
-import com.example.ui.screens.ProfileLoadErrorScreen
 import com.example.ui.screens.QrJoinClassScreen
 import com.example.ui.screens.TeacherPendingApprovalScreen
 import com.example.ui.screens.TermsAcceptanceScreen
@@ -490,16 +489,29 @@ private fun AuthenticatedSvtFlow(
         }
 
         is ProfileGateState.Error -> {
-            ProfileLoadErrorScreen(
-                errorMessage = onboardingLocalError ?: actionError ?: state.message,
+            val fallbackMassar = studentRoster?.massarNumber?.takeIf { it.isNotBlank() } ?: authDraft.massarNumber
+            val resolvedDefaultEmail = authDraft.email.ifBlank {
+                currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
+            }.ifBlank {
+                if (authDraft.role == "student" || studentRoster != null) {
+                    AuthSessionDraft.defaultStudentTaalimEmail(fallbackMassar)
+                } else ""
+            }
+            AccountSetupScreen(
+                defaultName = authDraft.fullName.ifBlank { currentUser.displayName.orEmpty() },
+                defaultRole = authDraft.role,
+                defaultMassar = authDraft.massarNumber,
+                defaultEmail = resolvedDefaultEmail,
+                defaultPhone = authDraft.phoneNumber,
+                defaultEstablishment = authDraft.establishment,
+                studentRoster = studentRoster,
+                hasPendingQrToken = authDraft.pendingClassQrToken.isNotBlank(),
                 currentLanguage = currentLanguage,
                 onLanguageSelected = onLanguageSelected,
-                onRetry = {
-                    viewModel.clearError()
-                    onboardingLocalError = null
-                    viewModel.retryProfileLoad()
-                },
-                onSignOut = onSignOut
+                onSubmit = handleAccountSetupSubmit,
+                onSignOut = onSignOut,
+                isSubmitting = isSettingUpProfile,
+                serverError = onboardingLocalError ?: actionError ?: state.message
             )
         }
 
