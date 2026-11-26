@@ -189,6 +189,7 @@ fun MainDashboardScreen(
     val isAdminVerified by viewModel.isVerifiedOwnerAdmin.collectAsStateWithLifecycle()
     val allTeachersForAdmin by viewModel.allTeachersForAdmin.collectAsStateWithLifecycle()
     val actionError by viewModel.actionError.collectAsStateWithLifecycle()
+    val streamSyncError by viewModel.streamSyncError.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
     var dismissedUpdateId by rememberSaveable { mutableStateOf<String?>(null) }
     var promptErrorsQuizId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -429,6 +430,16 @@ fun MainDashboardScreen(
                             isSyncing = isSyncingOffline,
                             onSyncNow = { viewModel.syncPendingOfflineData(context) }
                         )
+                    }
+
+                    AnimatedVisibility(visible = !streamSyncError.isNullOrBlank()) {
+                        streamSyncError?.let { syncErr ->
+                            StreamSyncErrorBanner(
+                                errorDetail = syncErr,
+                                onRetry = { viewModel.retryAllStreams() },
+                                onDismiss = { viewModel.clearStreamSyncError() }
+                            )
+                        }
                     }
 
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -1238,3 +1249,59 @@ private fun AppUpdateAvailableBanner(
         }
     }
 }
+
+@Composable
+private fun StreamSyncErrorBanner(
+    errorDetail: String,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("stream_sync_error_banner")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CloudOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(20.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(id = R.string.firestore_sync_warning_banner),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Text(
+                    text = errorDetail,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f),
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            TextButton(onClick = onRetry) {
+                Text(
+                    text = stringResource(id = R.string.retry_action),
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = stringResource(id = R.string.close),
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        }
+    }
+}
+

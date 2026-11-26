@@ -78,6 +78,8 @@ service cloud.firestore {
              (data.unlockedBadgeIds.size() == 0 || data.unlockedBadgeIds[0] is string) &&
              (!('boundDeviceId' in data) || (data.boundDeviceId is string && data.boundDeviceId.size() <= 128 && (data.boundDeviceId == '' || data.boundDeviceId.matches('^[a-zA-Z0-9_\\-]+$')))) &&
              (!('boundDeviceModel' in data) || (data.boundDeviceModel is string && data.boundDeviceModel.size() <= 100)) &&
+             (!('boundWebDeviceId' in data) || (data.boundWebDeviceId is string && data.boundWebDeviceId.size() <= 128 && (data.boundWebDeviceId == '' || data.boundWebDeviceId.matches('^[a-zA-Z0-9_\\-]+$')))) &&
+             (!('boundWebDeviceModel' in data) || (data.boundWebDeviceModel is string && data.boundWebDeviceModel.size() <= 100)) &&
              isValidTimestamp(data.createdAt) &&
              isValidTimestamp(data.updatedAt);
     }
@@ -320,7 +322,7 @@ service cloud.firestore {
                        request.auth.uid == userId &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll(['userId', 'fullName', 'phoneNumber', 'role', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'createdAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['userId', 'fullName', 'phoneNumber', 'role', 'massarNumber', 'birthDate', 'email', 'establishment', 'teacherStatus', 'mustChangePassword', 'acceptedTerms', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'boundDeviceId', 'boundDeviceModel', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'fullName', 'phoneNumber', 'role', 'massarNumber', 'birthDate', 'email', 'establishment', 'teacherStatus', 'mustChangePassword', 'acceptedTerms', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'boundDeviceId', 'boundDeviceModel', 'boundWebDeviceId', 'boundWebDeviceModel', 'createdAt', 'updatedAt']) &&
                        isValidUserProfile(incoming()) &&
                        (
                          incoming().role != 'teacher' ||
@@ -341,7 +343,7 @@ service cloud.firestore {
                        (
                          (
                            (request.auth.uid == userId || isAdmin()) &&
-                           incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'massarNumber', 'birthDate', 'email', 'establishment', 'teacherStatus', 'mustChangePassword', 'acceptedTerms', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'boundDeviceId', 'boundDeviceModel', 'updatedAt']) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'massarNumber', 'birthDate', 'email', 'establishment', 'teacherStatus', 'mustChangePassword', 'acceptedTerms', 'avatarUrl', 'xp', 'loginStreak', 'lastLoginDate', 'unlockedBadgeIds', 'boundDeviceId', 'boundDeviceModel', 'boundWebDeviceId', 'boundWebDeviceModel', 'updatedAt']) &&
                            (
                              isAdmin() ||
                              (
@@ -358,15 +360,27 @@ service cloud.firestore {
                                incoming().boundDeviceId == existing().boundDeviceId &&
                                (!('boundDeviceModel' in existing()) || incoming().boundDeviceModel == existing().boundDeviceModel)
                              )
+                           ) &&
+                           (
+                             isAdmin() ||
+                             existing().role != 'student' ||
+                             !('boundWebDeviceId' in existing()) ||
+                             existing().boundWebDeviceId == '' ||
+                             (
+                               incoming().boundWebDeviceId == existing().boundWebDeviceId &&
+                               (!('boundWebDeviceModel' in existing()) || incoming().boundWebDeviceModel == existing().boundWebDeviceModel)
+                             )
                            )
                          ) ||
                          (
                            existing().role == 'student' &&
                            exists(/databases/$(database)/documents/enrollments/$(userId)) &&
                            get(/databases/$(database)/documents/enrollments/$(userId)).data.teacherId == request.auth.uid &&
-                           incoming().diff(existing()).affectedKeys().hasOnly(['boundDeviceId', 'boundDeviceModel', 'updatedAt']) &&
-                           incoming().boundDeviceId == '' &&
-                           incoming().boundDeviceModel == ''
+                           incoming().diff(existing()).affectedKeys().hasOnly(['boundDeviceId', 'boundDeviceModel', 'boundWebDeviceId', 'boundWebDeviceModel', 'updatedAt']) &&
+                           (!('boundDeviceId' in incoming()) || incoming().boundDeviceId == '') &&
+                           (!('boundDeviceModel' in incoming()) || incoming().boundDeviceModel == '') &&
+                           (!('boundWebDeviceId' in incoming()) || incoming().boundWebDeviceId == '') &&
+                           (!('boundWebDeviceModel' in incoming()) || incoming().boundWebDeviceModel == '')
                          )
                        );
 

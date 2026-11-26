@@ -489,8 +489,8 @@
     <string name="device_lock_blocked_body">For security reasons, each student account works on a single phone only. This account is already linked to: %1$s.</string>
     <string name="device_lock_teacher_hint">If you changed phones, ask your teacher to unlink your previous device in Profile → Student list.</string>
     <string name="device_lock_reset_button">Unlink phone</string>
-    <string name="device_lock_reset_confirm">Allow %1$s to sign in from a new phone? The previous device lock will be cleared.</string>
-    <string name="device_lock_reset_success">Student phone unlinked successfully.</string>
+    <string name="device_lock_reset_confirm">Allow %1$s to sign in from a new device (Android and iPhone/Web)? Previous device locks will be cleared.</string>
+    <string name="device_lock_reset_success">Student devices (Android and iPhone/Web) unlinked successfully.</string>
     <string name="teacher_lab_themes_title">SVT Lab themes for this class</string>
     <string name="teacher_lab_themes_desc">Choose which SVT themes appear to students of this class in the SVT Lab tab.</string>
     <string name="teacher_lab_themes_min_one">At least one SVT theme must stay enabled.</string>
@@ -892,4 +892,11 @@
     <string name="svt_tool_neuro_state_subthreshold">Resting (-70 mV): stimulus too weak to open Na⁺ channels</string>
     <string name="svt_tool_neuro_state_no_ca">Synaptic / troponin block: missing Ca²⁺ ions</string>
     <string name="svt_tool_neuro_state_no_atp">Muscle fatigue: insufficient ATP for myosin head stroke</string>
+
+    <string name="profile_load_error_title">Unable to load your profile</string>
+    <string name="profile_load_error_body">Your cloud data has not been deleted, but the secure database connection temporarily failed. Please check your connection and try again.</string>
+    <string name="retry_action">Retry</string>
+    <string name="firestore_stream_error">Firestore read error (%1$s): %2$s</string>
+    <string name="firestore_sync_warning_banner">Sync interrupted: some cloud data could not be loaded.</string>
+    <string name="firestore_server_empty_after_cache">%1$d class(es) came from local cache, but the Firestore server returned 0 classes for this account (%2$s).</string>
 </resources>

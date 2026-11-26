@@ -682,172 +682,237 @@ export function subscribeUserProfile(
 
 export function subscribeStudentEnrollment(
   studentId: string,
-  onData: (enr: Enrollment | null) => void
+  onData: (enr: Enrollment | null) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
-  return onSnapshot(doc(db, 'enrollments', studentId), (snap) => {
-    onData(snap.exists() ? mapEnrollment(snap.id, snap.data()) : null);
-  });
+  return onSnapshot(
+    doc(db, 'enrollments', studentId),
+    (snap) => {
+      onData(snap.exists() ? mapEnrollment(snap.id, snap.data()) : null);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribeStudentClass(
   classId: string,
-  onData: (cls: SvtClass | null) => void
+  onData: (cls: SvtClass | null) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
-  return onSnapshot(doc(db, 'classes', classId), (snap) => {
-    onData(snap.exists() ? mapClass(snap.id, snap.data()) : null);
-  });
+  return onSnapshot(
+    doc(db, 'classes', classId),
+    (snap) => {
+      onData(snap.exists() ? mapClass(snap.id, snap.data()) : null);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribeTeacherClasses(
   teacherId: string,
-  onData: (classes: SvtClass[]) => void
+  onData: (classes: SvtClass[]) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
   const q = query(collection(db, 'classes'), where('teacherId', '==', teacherId));
-  return onSnapshot(q, (snap) => {
-    const list = snap.docs.map((d) => mapClass(d.id, d.data()));
-    list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
-    onData(list);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => mapClass(d.id, d.data()));
+      list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+      onData(list);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribeTeacherEnrollments(
   teacherId: string,
-  onData: (items: Enrollment[]) => void
+  onData: (items: Enrollment[]) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
   const q = query(collection(db, 'enrollments'), where('teacherId', '==', teacherId));
-  return onSnapshot(q, (snap) => {
-    onData(snap.docs.map((d) => mapEnrollment(d.id, d.data())));
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      onData(snap.docs.map((d) => mapEnrollment(d.id, d.data())));
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribeTeacherRoster(
   teacherId: string,
-  onData: (items: RosterStudent[]) => void
+  onData: (items: RosterStudent[]) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
   const q = query(collection(db, 'class_rosters'), where('teacherId', '==', teacherId));
-  return onSnapshot(q, (snap) => {
-    const list = snap.docs.map((d) => mapRoster(d.id, d.data()));
-    list.sort((a, b) => a.fullName.localeCompare(b.fullName));
-    onData(list);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => mapRoster(d.id, d.data()));
+      list.sort((a, b) => a.fullName.localeCompare(b.fullName));
+      onData(list);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribeClassQuizzes(
   params: { role: UserRole; userId: string; classId?: string },
-  onData: (quizzes: Quiz[]) => void
+  onData: (quizzes: Quiz[]) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
   const q =
     params.role === 'teacher'
       ? query(collection(db, 'quizzes'), where('teacherId', '==', params.userId))
       : query(collection(db, 'quizzes'), where('classId', '==', params.classId || ''));
-  return onSnapshot(q, (snap) => {
-    const list = snap.docs.map((d) => mapQuiz(d.id, d.data()));
-    list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
-    onData(list);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => mapQuiz(d.id, d.data()));
+      list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+      onData(list);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribeQuizAttempts(
   params: { role: UserRole; userId: string },
-  onData: (attempts: QuizAttempt[]) => void
+  onData: (attempts: QuizAttempt[]) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
   const field = params.role === 'teacher' ? 'teacherId' : 'studentId';
   const q = query(collection(db, 'quiz_attempts'), where(field, '==', params.userId));
-  return onSnapshot(q, (snap) => {
-    const list = snap.docs.map((d) => mapAttempt(d.id, d.data()));
-    list.sort((a, b) => b.submittedAtMillis - a.submittedAtMillis);
-    onData(list);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => mapAttempt(d.id, d.data()));
+      list.sort((a, b) => b.submittedAtMillis - a.submittedAtMillis);
+      onData(list);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribeResources(
   params: { role: UserRole; userId: string; classId?: string },
-  onData: (items: CourseResource[]) => void
+  onData: (items: CourseResource[]) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
   const q =
     params.role === 'teacher'
       ? query(collection(db, 'resources'), where('teacherId', '==', params.userId))
       : query(collection(db, 'resources'), where('classId', '==', params.classId || ''));
-  return onSnapshot(q, (snap) => {
-    const list = snap.docs.map((d) => mapResource(d.id, d.data()));
-    list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
-    onData(list);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => mapResource(d.id, d.data()));
+      list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+      onData(list);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribeVideoTracking(
   params: { role: UserRole; userId: string },
-  onData: (items: VideoTracking[]) => void
+  onData: (items: VideoTracking[]) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
   const field = params.role === 'teacher' ? 'teacherId' : 'studentId';
   const q = query(collection(db, 'video_tracking'), where(field, '==', params.userId));
-  return onSnapshot(q, (snap) => {
-    onData(snap.docs.map((d) => mapVideoTracking(d.id, d.data())));
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      onData(snap.docs.map((d) => mapVideoTracking(d.id, d.data())));
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribeAnnouncements(
   params: { role: UserRole; userId: string; classId?: string },
-  onData: (items: Announcement[]) => void
+  onData: (items: Announcement[]) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
   const q =
     params.role === 'teacher'
       ? query(collection(db, 'announcements'), where('teacherId', '==', params.userId))
       : query(collection(db, 'announcements'), where('classId', '==', params.classId || ''));
-  return onSnapshot(q, (snap) => {
-    const list = snap.docs.map((d) => mapAnnouncement(d.id, d.data()));
-    list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
-    onData(list);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => mapAnnouncement(d.id, d.data()));
+      list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+      onData(list);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribePrivateMessages(
   params: { role: UserRole; userId: string },
-  onData: (items: PrivateMessage[]) => void
+  onData: (items: PrivateMessage[]) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
   const field = params.role === 'teacher' ? 'teacherId' : 'studentId';
   const q = query(collection(db, 'private_messages'), where(field, '==', params.userId));
-  return onSnapshot(q, (snap) => {
-    const list = snap.docs.map((d) => mapPrivateMessage(d.id, d.data()));
-    list.sort((a, b) => a.createdAtMillis - b.createdAtMillis);
-    onData(list);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => mapPrivateMessage(d.id, d.data()));
+      list.sort((a, b) => a.createdAtMillis - b.createdAtMillis);
+      onData(list);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribeStudentNotifications(
   studentId: string,
-  onData: (items: StudentNotification[]) => void
+  onData: (items: StudentNotification[]) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
   const q = query(collection(db, 'student_notifications'), where('studentId', '==', studentId));
-  return onSnapshot(q, (snap) => {
-    const list = snap.docs.map((d) => mapNotification(d.id, d.data()));
-    list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
-    onData(list);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => mapNotification(d.id, d.data()));
+      list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+      onData(list);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 export function subscribeAdminTeacherRequests(
-  onData: (teachers: UserProfile[]) => void
+  onData: (teachers: UserProfile[]) => void,
+  onError?: (e: Error) => void
 ): Unsubscribe {
   const { db } = requireFirebase();
   const q = query(collection(db, 'users'), where('role', '==', 'teacher'));
-  return onSnapshot(q, (snap) => {
-    const list = snap.docs.map((d) => mapUserProfile(d.id, d.data()));
-    list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
-    onData(list);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs.map((d) => mapUserProfile(d.id, d.data()));
+      list.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+      onData(list);
+    },
+    (err) => onError?.(err)
+  );
 }
 
 // ---------- STUDENT MUTATIONS ----------

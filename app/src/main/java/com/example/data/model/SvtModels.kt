@@ -27,6 +27,8 @@ data class UserProfile(
     val unlockedBadgeIds: List<String> = emptyList(),
     val boundDeviceId: String = "",
     val boundDeviceModel: String = "",
+    val boundWebDeviceId: String = "",
+    val boundWebDeviceModel: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )

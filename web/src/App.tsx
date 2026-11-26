@@ -104,6 +104,9 @@ export const App: React.FC = () => {
   const [fbUser, setFbUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
 
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [guestBannerToast, setGuestBannerToast] = useState<string | null>(null);
@@ -168,6 +171,8 @@ export const App: React.FC = () => {
       if (!user) {
         setProfile(null);
         setProfileLoaded(false);
+        setProfileError(null);
+        setSyncError(null);
         setEnrollment(null);
         setEnrollmentLoaded(false);
         setStudentClass(null);
@@ -183,40 +188,72 @@ export const App: React.FC = () => {
     });
   }, []);
 
+  const reportSyncError = (label: string) => (err: Error) => {
+    console.error(`Firestore listener error (${label}):`, err);
+    setSyncError((prev) => prev || `${label} : ${err.message}`);
+  };
+
   // Subscribe User Profile
   useEffect(() => {
     if (!fbUser || isGuestMode) return;
     setProfileLoaded(false);
-    return subscribeUserProfile(fbUser.uid, (p) => {
-      setProfile(p);
-      setProfileLoaded(true);
-      if (p && p.role === 'student' && !p.boundDeviceId) {
-        bindCurrentWebDeviceIfEmpty(p).catch(() => {});
+    setProfileError(null);
+    return subscribeUserProfile(
+      fbUser.uid,
+      (p) => {
+        setProfile(p);
+        setProfileLoaded(true);
+        setProfileError(null);
+        if (p && p.role === 'student' && !p.boundDeviceId) {
+          bindCurrentWebDeviceIfEmpty(p).catch(() => {});
+        }
+      },
+      (err) => {
+        console.error('Profile listener error:', err);
+        setProfileError(err.message);
+        setProfileLoaded(true);
       }
-    });
-  }, [fbUser?.uid, isGuestMode]);
+    );
+  }, [fbUser?.uid, isGuestMode, retryTick]);
 
   // Subscribe Enrollment (Student) or Classes/Enrollments/Roster (Teacher)
   useEffect(() => {
     if (!profile || isGuestMode) return;
+    setSyncError(null);
     if (profile.role === 'student') {
       setEnrollmentLoaded(false);
-      return subscribeStudentEnrollment(profile.userId, (enr) => {
-        setEnrollment(enr);
-        setEnrollmentLoaded(true);
-      });
+      return subscribeStudentEnrollment(
+        profile.userId,
+        (enr) => {
+          setEnrollment(enr);
+          setEnrollmentLoaded(true);
+        },
+        reportSyncError('enrollment')
+      );
     } else if (profile.teacherStatus === 'approved') {
-      const unsubCls = subscribeTeacherClasses(profile.userId, (cls) => {
-        setTeacherClasses(cls);
-        setSelectedClassId((prev) =>
-          prev && cls.some((c) => c.id === prev) ? prev : cls[0]?.id || null
-        );
-      });
-      const unsubEnr = subscribeTeacherEnrollments(profile.userId, setTeacherEnrollments);
-      const unsubRos = subscribeTeacherRoster(profile.userId, setTeacherRoster);
+      const unsubCls = subscribeTeacherClasses(
+        profile.userId,
+        (cls) => {
+          setTeacherClasses(cls);
+          setSelectedClassId((prev) =>
+            prev && cls.some((c) => c.id === prev) ? prev : cls[0]?.id || null
+          );
+        },
+        reportSyncError('classes')
+      );
+      const unsubEnr = subscribeTeacherEnrollments(
+        profile.userId,
+        setTeacherEnrollments,
+        reportSyncError('enrollments')
+      );
+      const unsubRos = subscribeTeacherRoster(
+        profile.userId,
+        setTeacherRoster,
+        reportSyncError('class_rosters')
+      );
       const unsubAdmin =
         profile.email.toLowerCase() === OWNER_ADMIN_EMAIL
-          ? subscribeAdminTeacherRequests(setAdminTeachers)
+          ? subscribeAdminTeacherRequests(setAdminTeachers, reportSyncError('users'))
           : () => {};
       return () => {
         unsubCls();
@@ -225,15 +262,19 @@ export const App: React.FC = () => {
         unsubAdmin();
       };
     }
-  }, [profile?.userId, profile?.role, profile?.teacherStatus, isGuestMode]);
+  }, [profile?.userId, profile?.role, profile?.teacherStatus, isGuestMode, retryTick]);
 
   // Subscribe student class doc for visibleLabDomains
   useEffect(() => {
     if (!profile || profile.role !== 'student' || !enrollment || enrollment.status !== 'approved' || isGuestMode) {
       return;
     }
-    return subscribeStudentClass(enrollment.classId, setStudentClass);
-  }, [profile?.userId, enrollment?.classId, enrollment?.status, isGuestMode]);
+    return subscribeStudentClass(
+      enrollment.classId,
+      setStudentClass,
+      reportSyncError('student_class')
+    );
+  }, [profile?.userId, enrollment?.classId, enrollment?.status, isGuestMode, retryTick]);
 
   // Subscribe Class Content (Quizzes, Attempts, Resources, VideoTracking, Announcements, Messages, Notifications)
   useEffect(() => {
@@ -242,20 +283,39 @@ export const App: React.FC = () => {
       if (!enrollment || enrollment.status !== 'approved') return;
       const u1 = subscribeClassQuizzes(
         { role: 'student', userId: profile.userId, classId: enrollment.classId },
-        setQuizzes
+        setQuizzes,
+        reportSyncError('quizzes')
       );
-      const u2 = subscribeQuizAttempts({ role: 'student', userId: profile.userId }, setAttempts);
+      const u2 = subscribeQuizAttempts(
+        { role: 'student', userId: profile.userId },
+        setAttempts,
+        reportSyncError('quiz_attempts')
+      );
       const u3 = subscribeResources(
         { role: 'student', userId: profile.userId, classId: enrollment.classId },
-        setResources
+        setResources,
+        reportSyncError('resources')
       );
-      const u4 = subscribeVideoTracking({ role: 'student', userId: profile.userId }, setVideoTracking);
+      const u4 = subscribeVideoTracking(
+        { role: 'student', userId: profile.userId },
+        setVideoTracking,
+        reportSyncError('video_tracking')
+      );
       const u5 = subscribeAnnouncements(
         { role: 'student', userId: profile.userId, classId: enrollment.classId },
-        setAnnouncements
+        setAnnouncements,
+        reportSyncError('announcements')
       );
-      const u6 = subscribePrivateMessages({ role: 'student', userId: profile.userId }, setMessages);
-      const u7 = subscribeStudentNotifications(profile.userId, setNotifications);
+      const u6 = subscribePrivateMessages(
+        { role: 'student', userId: profile.userId },
+        setMessages,
+        reportSyncError('private_messages')
+      );
+      const u7 = subscribeStudentNotifications(
+        profile.userId,
+        setNotifications,
+        reportSyncError('notifications')
+      );
       return () => {
         u1();
         u2();
@@ -266,12 +326,36 @@ export const App: React.FC = () => {
         u7();
       };
     } else if (profile.teacherStatus === 'approved') {
-      const u1 = subscribeClassQuizzes({ role: 'teacher', userId: profile.userId }, setQuizzes);
-      const u2 = subscribeQuizAttempts({ role: 'teacher', userId: profile.userId }, setAttempts);
-      const u3 = subscribeResources({ role: 'teacher', userId: profile.userId }, setResources);
-      const u4 = subscribeVideoTracking({ role: 'teacher', userId: profile.userId }, setVideoTracking);
-      const u5 = subscribeAnnouncements({ role: 'teacher', userId: profile.userId }, setAnnouncements);
-      const u6 = subscribePrivateMessages({ role: 'teacher', userId: profile.userId }, setMessages);
+      const u1 = subscribeClassQuizzes(
+        { role: 'teacher', userId: profile.userId },
+        setQuizzes,
+        reportSyncError('quizzes')
+      );
+      const u2 = subscribeQuizAttempts(
+        { role: 'teacher', userId: profile.userId },
+        setAttempts,
+        reportSyncError('quiz_attempts')
+      );
+      const u3 = subscribeResources(
+        { role: 'teacher', userId: profile.userId },
+        setResources,
+        reportSyncError('resources')
+      );
+      const u4 = subscribeVideoTracking(
+        { role: 'teacher', userId: profile.userId },
+        setVideoTracking,
+        reportSyncError('video_tracking')
+      );
+      const u5 = subscribeAnnouncements(
+        { role: 'teacher', userId: profile.userId },
+        setAnnouncements,
+        reportSyncError('announcements')
+      );
+      const u6 = subscribePrivateMessages(
+        { role: 'teacher', userId: profile.userId },
+        setMessages,
+        reportSyncError('private_messages')
+      );
       return () => {
         u1();
         u2();
@@ -288,6 +372,7 @@ export const App: React.FC = () => {
     enrollment?.classId,
     enrollment?.status,
     isGuestMode,
+    retryTick,
   ]);
 
   const showGuestBlocked = () => {
@@ -353,6 +438,41 @@ export const App: React.FC = () => {
     return (
       <div className="min-h-screen-safe flex items-center justify-center bg-svt-bg text-svt-primary font-display font-bold">
         {tr.loading}
+      </div>
+    );
+  }
+
+  // Profile Read Failure Guard (never send existing users to ProfileSetupScreen on error)
+  if (!isGuestMode && fbUser && profileError && !profile) {
+    return (
+      <div className="min-h-screen-safe flex items-center justify-center bg-svt-bg p-4 pt-safe pb-safe">
+        <div className="w-full max-w-md space-y-4 rounded-3xl border border-svt-error/30 bg-svt-surface p-6 text-center shadow-md">
+          <h1 className="font-display text-lg font-bold text-svt-error">
+            Impossible de charger votre profil
+          </h1>
+          <p className="text-xs text-svt-onSurfaceVariant">
+            Vos données dans le cloud n’ont pas été supprimées, mais la lecture Firestore a échoué :
+          </p>
+          <div className="rounded-xl bg-svt-error/10 p-3 text-xs font-semibold text-svt-error">
+            {profileError}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => auth?.signOut()}
+              className="min-h-[46px] flex-1 rounded-2xl border border-svt-outline/30 text-xs font-bold"
+            >
+              {tr.signOut}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRetryTick((t) => t + 1)}
+              className="min-h-[46px] flex-1 rounded-2xl bg-svt-primary text-xs font-bold text-svt-onPrimary"
+            >
+              Réessayer
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -464,6 +584,21 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen-safe flex flex-col bg-svt-bg text-svt-onSurface">
+      {!isGuestMode && syncError && (
+        <div className="bg-svt-error/15 px-4 py-2 text-xs font-semibold text-svt-error flex items-center justify-between gap-2">
+          <span>Erreur de synchronisation Firestore : {syncError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setSyncError(null);
+              setRetryTick((t) => t + 1);
+            }}
+            className="shrink-0 rounded-xl bg-svt-error px-3 py-1 text-[11px] font-bold text-white"
+          >
+            Réessayer
+          </button>
+        </div>
+      )}
       {/* Top Bar with iOS Safe Area */}
       <header className="sticky top-0 z-30 border-b border-svt-outline/15 bg-svt-surface/90 pt-safe backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-2.5 sm:px-5">
