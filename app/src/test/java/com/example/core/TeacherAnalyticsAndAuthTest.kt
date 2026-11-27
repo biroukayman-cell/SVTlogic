@@ -510,5 +510,25 @@ class TeacherAnalyticsAndAuthTest {
         assertEquals(listOf("s3"), metrics.inactiveStudents.map { it.studentId })
         assertTrue(metrics.inactiveStudents.first().isInactive)
     }
+
+    @Test
+    fun `QrCodeUtils parses native BIOTERRE payloads and Web URL QR invites`() {
+        val native = QrCodeUtils.parseScanPayload("BIOTERRE:SVT_TOKEN_1|J1001")
+        assertEquals("SVT_TOKEN_1", native.classToken)
+        assertEquals("J1001", native.massarNumber)
+
+        val webQrParam = QrCodeUtils.parseScanPayload("https://bioterre.example.app/?qr=BIOTERRE%3ASVT_TOKEN_2%7CK2002")
+        assertEquals("SVT_TOKEN_2", webQrParam.classToken)
+        assertEquals("K2002", webQrParam.massarNumber)
+
+        val webSeparateParams = QrCodeUtils.parseScanPayload("https://bioterre.example.app/join?token=SVT_TOKEN_3&massar=M3003")
+        assertEquals("SVT_TOKEN_3", webSeparateParams.classToken)
+        assertEquals("M3003", webSeparateParams.massarNumber)
+
+        val webCodeOnly = QrCodeUtils.parseScanPayload("https://bioterre.example.app/?code=SVT_TOKEN_4")
+        assertEquals("SVT_TOKEN_4", webCodeOnly.classToken)
+        assertEquals(null, webCodeOnly.massarNumber)
+    }
 }
+
 

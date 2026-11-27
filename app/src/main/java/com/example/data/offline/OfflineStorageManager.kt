@@ -530,6 +530,8 @@ class OfflineStorageManager(
             query = query.whereEqualTo("teacherId", userId)
         } else if (classId.isNotBlank()) {
             query = query.whereEqualTo("classId", classId)
+        } else {
+            throw LocalUriUnavailableException("Missing classId or teacher ownership for chunk download ($chunkResourceId)")
         }
         val snap = query
             .get()

@@ -4,6 +4,7 @@ import android.util.Base64
 import android.util.Log
 import com.example.core.AppLanguage
 import com.example.core.clearAppCheckTokenStore
+import com.example.core.isQuotaExceededError
 import com.example.data.model.QuizQuestion
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
@@ -16,6 +17,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
+import java.util.Locale
 
 data class GeneratedQuizDraft(
     val title: String,
@@ -34,7 +36,22 @@ class AiAppCheckException(cause: Throwable) : IllegalStateException(
     cause
 )
 
+class AiQuotaExceededException(cause: Throwable) : IllegalStateException(
+    cause.message ?: "AI quota exceeded",
+    cause
+)
+
 class SvtAiRepository {
+
+    private val definitionCacheLock = Any()
+    private val definitionCache = object : LinkedHashMap<String, SvtTermLookupResult>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, SvtTermLookupResult>?): Boolean {
+            return size > MAX_DEFINITION_CACHE_ENTRIES
+        }
+    }
+
+    @Volatile
+    private var lastForceRefreshAtMs: Long = 0L
 
     private val quizSchema = Schema.obj(
         properties = mapOf(
@@ -137,6 +154,9 @@ class SvtAiRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (primaryError: Exception) {
+            if (isQuotaExceededError(primaryError)) {
+                throw AiQuotaExceededException(primaryError)
+            }
             Log.w(TAG, "Primary model ($PRIMARY_MODEL) failed, checking App Check & fallback ($FALLBACK_MODEL)", primaryError)
             if (isAppCheckOrTokenError(primaryError)) {
                 try {
@@ -148,6 +168,9 @@ class SvtAiRepository {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (refreshError: Exception) {
+                    if (isQuotaExceededError(refreshError)) {
+                        throw AiQuotaExceededException(refreshError)
+                    }
                     if (isAppCheckOrTokenError(refreshError)) {
                         throw (refreshError as? AiAppCheckException) ?: AiAppCheckException(refreshError)
                     }
@@ -162,6 +185,9 @@ class SvtAiRepository {
                 throw e
             } catch (fallbackError: Exception) {
                 Log.e(TAG, "Fallback AI model failed", fallbackError)
+                if (isQuotaExceededError(fallbackError)) {
+                    throw AiQuotaExceededException(fallbackError)
+                }
                 if (isAppCheckOrTokenError(fallbackError) || isAppCheckOrTokenError(primaryError)) {
                     val cause = (fallbackError as? AiAppCheckException)
                         ?: (primaryError as? AiAppCheckException)
@@ -178,6 +204,11 @@ class SvtAiRepository {
         language: AppLanguage
     ): SvtTermLookupResult {
         val cleanQuery = query.trim()
+        val cacheKey = buildDefinitionCacheKey(cleanQuery, language)
+        synchronized(definitionCacheLock) {
+            definitionCache[cacheKey]?.let { return it }
+        }
+
         val langInstruction = when (language) {
             AppLanguage.FR -> "Respond in French."
             AppLanguage.AR -> "Respond in Modern Standard Arabic (العربية الفصحى العلمية)."
@@ -195,48 +226,71 @@ class SvtAiRepository {
                - Set "definition" to ONLY a clear, precise scientific definition (1 to 3 sentences). Do NOT add examples, tips, study advice, greetings, or anything other than the definition.
         """.trimIndent()
 
-        try {
+        val result = try {
             ensureAppCheckTokenReady(forceRefresh = false)
-            return lookupDefinitionWithModel(definitionPrimaryModel, prompt)
+            lookupDefinitionWithModel(definitionPrimaryModel, prompt)
         } catch (e: TimeoutCancellationException) {
             Log.e(TAG, "Primary definition model timed out", e)
             throw IllegalStateException("Search timed out after 60s. Please retry.", e)
         } catch (e: CancellationException) {
             throw e
         } catch (primaryError: Exception) {
+            if (isQuotaExceededError(primaryError)) {
+                throw AiQuotaExceededException(primaryError)
+            }
             Log.w(TAG, "Primary definition model failed, checking App Check & fallback", primaryError)
             if (isAppCheckOrTokenError(primaryError)) {
                 try {
                     ensureAppCheckTokenReady(forceRefresh = true)
-                    return lookupDefinitionWithModel(definitionPrimaryModel, prompt)
+                    lookupDefinitionWithModel(definitionPrimaryModel, prompt)
                 } catch (e: TimeoutCancellationException) {
                     Log.e(TAG, "Refreshed definition model timed out", e)
                     throw IllegalStateException("Search timed out after 60s. Please retry.", e)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (refreshError: Exception) {
+                    if (isQuotaExceededError(refreshError)) {
+                        throw AiQuotaExceededException(refreshError)
+                    }
                     if (isAppCheckOrTokenError(refreshError)) {
                         throw (refreshError as? AiAppCheckException) ?: AiAppCheckException(refreshError)
                     }
+                    tryFallbackDefinition(prompt, primaryError)
                 }
+            } else {
+                tryFallbackDefinition(prompt, primaryError)
             }
-            return try {
-                lookupDefinitionWithModel(definitionFallbackModel, prompt)
-            } catch (e: TimeoutCancellationException) {
-                Log.e(TAG, "Fallback definition model timed out", e)
-                throw IllegalStateException("Search timed out after 60s. Please retry.", e)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (fallbackError: Exception) {
-                Log.e(TAG, "Fallback definition model failed", fallbackError)
-                if (isAppCheckOrTokenError(fallbackError) || isAppCheckOrTokenError(primaryError)) {
-                    val cause = (fallbackError as? AiAppCheckException)
-                        ?: (primaryError as? AiAppCheckException)
-                        ?: AiAppCheckException(fallbackError)
-                    throw cause
-                }
-                throw fallbackError
+        }
+
+        synchronized(definitionCacheLock) {
+            definitionCache[cacheKey] = result
+        }
+        return result
+    }
+
+    private suspend fun tryFallbackDefinition(
+        prompt: String,
+        primaryError: Exception
+    ): SvtTermLookupResult {
+        return try {
+            lookupDefinitionWithModel(definitionFallbackModel, prompt)
+        } catch (e: TimeoutCancellationException) {
+            Log.e(TAG, "Fallback definition model timed out", e)
+            throw IllegalStateException("Search timed out after 60s. Please retry.", e)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (fallbackError: Exception) {
+            Log.e(TAG, "Fallback definition model failed", fallbackError)
+            if (isQuotaExceededError(fallbackError)) {
+                throw AiQuotaExceededException(fallbackError)
             }
+            if (isAppCheckOrTokenError(fallbackError) || isAppCheckOrTokenError(primaryError)) {
+                val cause = (fallbackError as? AiAppCheckException)
+                    ?: (primaryError as? AiAppCheckException)
+                    ?: AiAppCheckException(fallbackError)
+                throw cause
+            }
+            throw fallbackError
         }
     }
 
@@ -304,8 +358,15 @@ class SvtAiRepository {
             null
         } ?: return
 
-        if (forceRefresh) {
-            clearAppCheckTokenStore(firebaseApp.applicationContext, firebaseApp.persistenceKey)
+        var effectiveForceRefresh = forceRefresh
+        if (effectiveForceRefresh) {
+            val now = System.currentTimeMillis()
+            if (now - lastForceRefreshAtMs < FORCE_REFRESH_COOLDOWN_MS) {
+                effectiveForceRefresh = false
+            } else {
+                lastForceRefreshAtMs = now
+                clearAppCheckTokenStore(firebaseApp.applicationContext, firebaseApp.persistenceKey)
+            }
         }
 
         val appCheck = try {
@@ -316,11 +377,14 @@ class SvtAiRepository {
 
         val tokenResult = try {
             withTimeout(12_000L) {
-                appCheck.getAppCheckToken(forceRefresh).await()
+                appCheck.getAppCheckToken(effectiveForceRefresh).await()
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            if (isQuotaExceededError(e)) {
+                throw AiQuotaExceededException(e)
+            }
             throw AiAppCheckException(e)
         }
 
@@ -329,9 +393,11 @@ class SvtAiRepository {
             throw AiAppCheckException(IllegalStateException("App Check token is empty"))
         }
         extractDummyTokenError(rawToken)?.let { embeddedError ->
-            throw AiAppCheckException(
-                IllegalStateException("App Check / reCAPTCHA verification failed: $embeddedError")
-            )
+            val errEx = IllegalStateException("App Check / reCAPTCHA verification failed: $embeddedError")
+            if (isQuotaExceededError(errEx)) {
+                throw AiQuotaExceededException(errEx)
+            }
+            throw AiAppCheckException(errEx)
         }
     }
 
@@ -339,6 +405,12 @@ class SvtAiRepository {
         private const val TAG = "SvtAiRepository"
         private const val PRIMARY_MODEL = "gemini-3.8-flash"
         private const val FALLBACK_MODEL = "gemini-3.5-flash-lite"
+        private const val MAX_DEFINITION_CACHE_ENTRIES = 100
+        private const val FORCE_REFRESH_COOLDOWN_MS = 30_000L
+
+        internal fun buildDefinitionCacheKey(query: String, language: AppLanguage): String {
+            return "${language.name}:${query.trim().lowercase(Locale.ROOT)}"
+        }
 
         internal fun extractDummyTokenError(token: String): String? {
             val trimmed = token.trim()
@@ -352,6 +424,7 @@ class SvtAiRepository {
         }
 
         fun isAppCheckOrTokenError(error: Throwable): Boolean {
+            if (isQuotaExceededError(error)) return false
             return generateSequence(error) { it.cause }.any { cause ->
                 val cls = cause::class.java.name
                 val msg = cause.message.orEmpty()
@@ -362,8 +435,7 @@ class SvtAiRepository {
                     msg.contains("attestation", ignoreCase = true) ||
                     msg.contains("app token", ignoreCase = true) ||
                     msg.contains("firebase token", ignoreCase = true) ||
-                    msg.contains("recaptcha", ignoreCase = true) ||
-                    msg.contains("Too many attempts", ignoreCase = true)
+                    msg.contains("recaptcha", ignoreCase = true)
             }
         }
     }

@@ -19,7 +19,11 @@ import com.example.core.SvtBackgroundNotificationWorker
 import com.example.core.SvtLabLogic
 import com.example.core.TeacherAnalyticsLogic
 import com.example.core.appCheckDiagnosticTag
+import com.example.core.isPermissionDeniedError
+import com.example.core.isQuotaExceededError
+import com.example.core.userFriendlyFirestoreErrorMessage
 import com.example.data.ai.AiAppCheckException
+import com.example.data.ai.AiQuotaExceededException
 import com.example.data.ai.GeneratedQuizDraft
 import com.example.data.ai.SvtAiRepository
 import com.example.data.badges.SvtBadgeDefinition
@@ -50,6 +54,7 @@ import com.example.data.repository.SvtRepository
 import com.example.data.svt.SvtDomain
 import com.google.firebase.Firebase
 import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
@@ -60,20 +65,26 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
+import java.util.Locale
 
 sealed interface ProfileGateState {
     data object Loading : ProfileGateState
@@ -141,8 +152,30 @@ class SvtMainViewModel(
     private val _isAcceptingTerms = MutableStateFlow(false)
     val isAcceptingTerms: StateFlow<Boolean> = _isAcceptingTerms.asStateFlow()
 
+    private val _sessionEnded = MutableStateFlow(false)
     private val _profileRetryTrigger = MutableStateFlow(0)
     private val _authReloadTick = MutableStateFlow(0)
+
+    private val authActiveForUserFlow: Flow<Boolean> = callbackFlow {
+        val auth = Firebase.auth
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            trySend(firebaseAuth.currentUser?.uid == currentUserId)
+        }
+        trySend(auth.currentUser?.uid == currentUserId)
+        auth.addAuthStateListener(listener)
+        awaitClose { auth.removeAuthStateListener(listener) }
+    }.distinctUntilChanged()
+
+    private val isSessionActiveFlow: StateFlow<Boolean> = combine(
+        _sessionEnded,
+        authActiveForUserFlow
+    ) { ended, authMatches ->
+        !ended && authMatches
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = !_sessionEnded.value && Firebase.auth.currentUser?.uid == currentUserId
+    )
 
     val isOwnerAdminEmail: StateFlow<Boolean> = _authReloadTick.map {
         Firebase.auth.currentUser?.email.equals(
@@ -151,7 +184,7 @@ class SvtMainViewModel(
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000L),
+        started = SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS),
         initialValue = Firebase.auth.currentUser?.email.equals(
             SvtBackgroundNotificationWorker.OWNER_ADMIN_EMAIL,
             ignoreCase = true
@@ -165,7 +198,7 @@ class SvtMainViewModel(
             u.isEmailVerified
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000L),
+        started = SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS),
         initialValue = Firebase.auth.currentUser?.let { u ->
             u.email.equals(SvtBackgroundNotificationWorker.OWNER_ADMIN_EMAIL, ignoreCase = true) &&
                 u.isEmailVerified
@@ -173,21 +206,31 @@ class SvtMainViewModel(
     )
 
     val profileState: StateFlow<ProfileGateState> = combine(
-        _profileRetryTrigger.flatMapLatest {
-            repository.observeUserProfile(currentUserId)
-                .map<UserProfile?, Result<UserProfile?>> { Result.success(it) }
-                .catch { error ->
-                    val fsErr = generateSequence(error) { it.cause }
-                        .filterIsInstance<FirebaseFirestoreException>()
-                        .firstOrNull()
-                    if (fsErr == null && error is CancellationException) throw error
-                    Log.w(TAG, "Profile stream error", fsErr ?: error)
-                    emit(Result.failure(fsErr ?: error))
+        combine(
+            isSessionActiveFlow,
+            _profileRetryTrigger
+        ) { active, trigger -> active to trigger }
+            .flatMapLatest { (active, _) ->
+                if (!active) {
+                    flowOf(Result.success<UserProfile?>(null))
+                } else {
+                    repository.observeUserProfile(currentUserId)
+                        .map<UserProfile?, Result<UserProfile?>> { Result.success(it) }
+                        .catch { error ->
+                            val fsErr = generateSequence(error) { it.cause }
+                                .filterIsInstance<FirebaseFirestoreException>()
+                                .firstOrNull()
+                            if (fsErr == null && error is CancellationException) throw error
+                            Log.w(TAG, "Profile stream error", fsErr ?: error)
+                            emit(Result.failure(fsErr ?: error))
+                        }
                 }
-        },
+            },
+        isSessionActiveFlow,
         _optimisticProfile,
         _optimisticAvatarUrl
-    ) { remoteResult, optimistic, optimisticAvatar ->
+    ) { remoteResult, active, optimistic, optimisticAvatar ->
+        if (!active) return@combine ProfileGateState.Loading
         remoteResult.fold(
             onSuccess = { remote ->
                 val base = remote ?: optimistic
@@ -216,13 +259,19 @@ class SvtMainViewModel(
                     } else optimistic
                     ProfileGateState.Ready(withAvatar)
                 } else {
-                    ProfileGateState.Error(err.message ?: "Error loading profile")
+                    ProfileGateState.Error(
+                        userFriendlyFirestoreErrorMessage(
+                            context,
+                            err,
+                            err.message ?: "Error loading profile"
+                        )
+                    )
                 }
             }
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000L),
+        started = SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS),
         initialValue = ProfileGateState.Loading
     )
 
@@ -230,109 +279,144 @@ class SvtMainViewModel(
         (state as? ProfileGateState.Ready)?.profile?.role
     }
 
+    private val canTeacherAccessFlow: Flow<Boolean> = combine(
+        isSessionActiveFlow,
+        profileState,
+        isVerifiedOwnerAdmin
+    ) { active, state, verifiedAdmin ->
+        if (!active) return@combine false
+        val profile = (state as? ProfileGateState.Ready)?.profile ?: return@combine false
+        profile.role == "teacher" && (profile.teacherStatus == "approved" || verifiedAdmin)
+    }.distinctUntilChanged()
+
     val allTeachersForAdmin: StateFlow<List<UserProfile>> = combine(
+        isSessionActiveFlow,
         roleFlow,
         isVerifiedOwnerAdmin
-    ) { role, isVerifiedAdmin ->
-        role == "teacher" && isVerifiedAdmin
-    }.flatMapLatest { eligible ->
+    ) { active, role, isVerifiedAdmin ->
+        active && role == "teacher" && isVerifiedAdmin
+    }.distinctUntilChanged().flatMapLatest { eligible ->
         if (eligible) repository.observeAllTeachers().catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    // Teacher streams
-    val teacherClasses: StateFlow<List<SvtClass>> = roleFlow.flatMapLatest { role ->
-        if (role == "teacher") repository.observeTeacherClasses(currentUserId)
+    // Teacher streams (strictly gated on active session + approved teacher or verified admin)
+    val teacherClasses: StateFlow<List<SvtClass>> = canTeacherAccessFlow.flatMapLatest { eligible ->
+        if (eligible) repository.observeTeacherClasses(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    val teacherEnrollments: StateFlow<List<Enrollment>> = roleFlow.flatMapLatest { role ->
-        if (role == "teacher") repository.observeTeacherEnrollments(currentUserId)
+    val teacherEnrollments: StateFlow<List<Enrollment>> = canTeacherAccessFlow.flatMapLatest { eligible ->
+        if (eligible) repository.observeTeacherEnrollments(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    val teacherQuizzes: StateFlow<List<Quiz>> = roleFlow.flatMapLatest { role ->
-        if (role == "teacher") repository.observeTeacherQuizzes(currentUserId)
+    val teacherQuizzes: StateFlow<List<Quiz>> = canTeacherAccessFlow.flatMapLatest { eligible ->
+        if (eligible) repository.observeTeacherQuizzes(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    val teacherAttempts: StateFlow<List<QuizAttempt>> = roleFlow.flatMapLatest { role ->
-        if (role == "teacher") repository.observeTeacherAttempts(currentUserId)
+    val teacherAttempts: StateFlow<List<QuizAttempt>> = canTeacherAccessFlow.flatMapLatest { eligible ->
+        if (eligible) repository.observeTeacherAttempts(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    val teacherResources: StateFlow<List<CourseResource>> = roleFlow.flatMapLatest { role ->
-        if (role == "teacher") repository.observeTeacherResources(currentUserId)
+    val teacherResources: StateFlow<List<CourseResource>> = canTeacherAccessFlow.flatMapLatest { eligible ->
+        if (eligible) repository.observeTeacherResources(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    val teacherVideoTracking: StateFlow<List<VideoTracking>> = roleFlow.flatMapLatest { role ->
-        if (role == "teacher") repository.observeTeacherVideoTracking(currentUserId)
+    val teacherVideoTracking: StateFlow<List<VideoTracking>> = canTeacherAccessFlow.flatMapLatest { eligible ->
+        if (eligible) repository.observeTeacherVideoTracking(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    val teacherAnnouncements: StateFlow<List<Announcement>> = roleFlow.flatMapLatest { role ->
-        if (role == "teacher") repository.observeTeacherAnnouncements(currentUserId)
+    val teacherAnnouncements: StateFlow<List<Announcement>> = canTeacherAccessFlow.flatMapLatest { eligible ->
+        if (eligible) repository.observeTeacherAnnouncements(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    val teacherMessages: StateFlow<List<PrivateMessage>> = roleFlow.flatMapLatest { role ->
-        if (role == "teacher") repository.observeTeacherMessages(currentUserId)
+    val teacherMessages: StateFlow<List<PrivateMessage>> = canTeacherAccessFlow.flatMapLatest { eligible ->
+        if (eligible) repository.observeTeacherMessages(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    val teacherRoster: StateFlow<List<RosterStudent>> = roleFlow.flatMapLatest { role ->
-        if (role == "teacher") repository.observeTeacherRoster(currentUserId)
+    val teacherRoster: StateFlow<List<RosterStudent>> = canTeacherAccessFlow.flatMapLatest { eligible ->
+        if (eligible) repository.observeTeacherRoster(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    val teacherEstablishments: StateFlow<List<Establishment>> = roleFlow.flatMapLatest { role ->
-        if (role == "teacher") repository.observeTeacherEstablishments(currentUserId)
+    val teacherEstablishments: StateFlow<List<Establishment>> = canTeacherAccessFlow.flatMapLatest { eligible ->
+        if (eligible) repository.observeTeacherEstablishments(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    val teacherCustomGlossary: StateFlow<List<CustomGlossaryEntry>> = roleFlow.flatMapLatest { role ->
-        if (role == "teacher") repository.observeTeacherGlossaryEntries(currentUserId)
+    val teacherCustomGlossary: StateFlow<List<CustomGlossaryEntry>> = canTeacherAccessFlow.flatMapLatest { eligible ->
+        if (eligible) repository.observeTeacherGlossaryEntries(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     // Student streams
-    val studentRoster: StateFlow<RosterStudent?> = repository.observeStudentRoster(currentUserId)
-        .catch { emit(null) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+    val studentRoster: StateFlow<RosterStudent?> = combine(
+        isSessionActiveFlow,
+        profileState
+    ) { active, state ->
+        active &&
+            state !is ProfileGateState.Loading &&
+            state !is ProfileGateState.Error &&
+            ((state as? ProfileGateState.Ready)?.profile?.role != "teacher")
+    }.distinctUntilChanged().flatMapLatest { eligible ->
+        if (eligible) repository.observeStudentRoster(currentUserId)
+            .catch { emit(null) }
+        else flowOf(null)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), null)
 
     val studentEnrollment: StateFlow<Enrollment?> = combine(
-        roleFlow.flatMapLatest { role ->
-            if (role == "student") repository.observeStudentEnrollment(currentUserId)
-                .catch { emit(null) }
-            else flowOf(null)
-        },
+        combine(
+            isSessionActiveFlow,
+            roleFlow
+        ) { active, role -> active && role == "student" }
+            .distinctUntilChanged()
+            .flatMapLatest { eligible ->
+                if (eligible) repository.observeStudentEnrollment(currentUserId)
+                    .onEach { remote ->
+                        if (remote != null) {
+                            _optimisticEnrollment.value = null
+                        }
+                    }
+                    .catch { emit(null) }
+                else flowOf(null)
+            },
+        isSessionActiveFlow,
         _optimisticEnrollment
-    ) { remote, optimistic ->
-        remote ?: optimistic
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+    ) { remote, active, optimistic ->
+        if (!active) null else (remote ?: optimistic)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), null)
 
-    private val approvedClassId = studentEnrollment.map { enr ->
-        if (enr?.status == "approved" && enr.classId.isNotBlank()) enr.classId else null
-    }
+    private val approvedClassId = combine(
+        isSessionActiveFlow,
+        studentEnrollment
+    ) { active, enr ->
+        if (active && enr?.status == "approved" && enr.classId.isNotBlank()) enr.classId else null
+    }.distinctUntilChanged()
 
-    private val isApprovedStudent = approvedClassId.map { it != null }
+    private val isApprovedStudent = approvedClassId.map { it != null }.distinctUntilChanged()
 
     val studentClass: StateFlow<SvtClass?> = approvedClassId.flatMapLatest { classId ->
         if (classId != null) repository.observeClassById(classId).catch { emit(null) }
         else flowOf(null)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), null)
 
     val studentAllowedLabDomains: StateFlow<Set<SvtDomain>> = studentClass.map { cls ->
         if (cls == null) {
@@ -340,12 +424,12 @@ class SvtMainViewModel(
         } else {
             SvtLabLogic.resolveVisibleLabDomains(cls.visibleLabDomains)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), SvtDomain.entries.toSet())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), SvtDomain.entries.toSet())
 
     private val remoteStudentQuizzes: StateFlow<List<Quiz>> = approvedClassId.flatMapLatest { classId ->
         if (classId != null) repository.observeStudentQuizzes(classId).catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val studentQuizzes: StateFlow<List<Quiz>> = combine(
         remoteStudentQuizzes,
@@ -359,12 +443,12 @@ class SvtMainViewModel(
             }
         }
         byId.values.toList()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     private val remoteStudentAttempts: StateFlow<List<QuizAttempt>> = isApprovedStudent.flatMapLatest { approved ->
         if (approved) repository.observeStudentAttempts(currentUserId).catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val studentAttempts: StateFlow<List<QuizAttempt>> = combine(
         remoteStudentAttempts,
@@ -375,12 +459,12 @@ class SvtMainViewModel(
             .filterNot { remoteQuizIds.contains(it.quizId) }
             .map { it.toQuizAttempt() }
         pendingAsAttempts + remote
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     private val remoteStudentResources: StateFlow<List<CourseResource>> = approvedClassId.flatMapLatest { classId ->
         if (classId != null) repository.observeStudentResources(classId).catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val studentResources: StateFlow<List<CourseResource>> = combine(
         remoteStudentResources,
@@ -394,12 +478,12 @@ class SvtMainViewModel(
             }
         }
         byId.values.toList()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     private val remoteStudentVideoTracking: StateFlow<List<VideoTracking>> = isApprovedStudent.flatMapLatest { approved ->
         if (approved) repository.observeStudentVideoTracking(currentUserId).catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val studentVideoTracking: StateFlow<List<VideoTracking>> = combine(
         remoteStudentVideoTracking,
@@ -415,49 +499,55 @@ class SvtMainViewModel(
             }
         }
         byResId.values.toList()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val studentVideoOnlyTracking: StateFlow<List<VideoTracking>> = combine(
         studentVideoTracking,
         studentResources
     ) { trackings, resources ->
         filterVideoOnlyTrackings(trackings, resources)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val studentAnnouncements: StateFlow<List<Announcement>> = approvedClassId.flatMapLatest { classId ->
         if (classId != null) repository.observeStudentAnnouncements(classId).catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val studentMessages: StateFlow<List<PrivateMessage>> = isApprovedStudent.flatMapLatest { approved ->
         if (approved) repository.observeStudentMessages(currentUserId).catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val studentCustomGlossary: StateFlow<List<CustomGlossaryEntry>> = isApprovedStudent.flatMapLatest { approved ->
         if (approved) repository.observeStudentGlossaryEntries(currentUserId).catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
-    val studentNotifications: StateFlow<List<StudentNotification>> = roleFlow.flatMapLatest { role ->
-        if (role == "student") repository.observeStudentNotifications(currentUserId)
+    val studentNotifications: StateFlow<List<StudentNotification>> = combine(
+        isSessionActiveFlow,
+        roleFlow
+    ) { active, role ->
+        active && role == "student"
+    }.distinctUntilChanged().flatMapLatest { eligible ->
+        if (eligible) repository.observeStudentNotifications(currentUserId)
             .catch { emit(emptyList()) }
         else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val appUpdates: StateFlow<List<AppUpdateRelease>> = combine(
-        roleFlow,
-        studentEnrollment
-    ) { role, enrollment ->
-        role to enrollment
-    }.flatMapLatest { (role, enrollment) ->
+        isSessionActiveFlow,
+        canTeacherAccessFlow,
+        approvedClassId
+    ) { active, teacherOk, classId ->
+        Triple(active, teacherOk, classId)
+    }.distinctUntilChanged().flatMapLatest { (active, teacherOk, classId) ->
         when {
-            role == "teacher" -> repository.observeTeacherAppUpdates(currentUserId).catch { emit(emptyList()) }
-            role == "student" && enrollment?.status == "approved" && enrollment.classId.isNotBlank() ->
-                repository.observeClassAppUpdates(enrollment.classId).catch { emit(emptyList()) }
+            !active -> flowOf(emptyList())
+            teacherOk -> repository.observeTeacherAppUpdates(currentUserId).catch { emit(emptyList()) }
+            classId != null -> repository.observeClassAppUpdates(classId).catch { emit(emptyList()) }
             else -> flowOf(emptyList())
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     private val _selectedEstablishmentId = MutableStateFlow<String?>(null)
     val selectedEstablishmentId: StateFlow<String?> = combine(
@@ -470,13 +560,13 @@ class SvtMainViewModel(
             establishments.any { it.id == chosen } -> chosen
             else -> null
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), null)
 
     private val _selectedClassId = MutableStateFlow<String?>(null)
     val selectedClassId: StateFlow<String?> = combine(teacherClasses, _selectedClassId) { classes, chosen ->
         if (chosen != null && classes.any { it.id == chosen }) chosen
         else classes.firstOrNull()?.id
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), null)
 
     private val _actionError = MutableStateFlow<String?>(null)
     val actionError: StateFlow<String?> = _actionError.asStateFlow()
@@ -493,6 +583,7 @@ class SvtMainViewModel(
     private val _labSvtSearchState = MutableStateFlow<LabSvtSearchState>(LabSvtSearchState.Idle)
     val labSvtSearchState: StateFlow<LabSvtSearchState> = _labSvtSearchState.asStateFlow()
     private var labSearchJob: Job? = null
+    private var lastLabSearchKey: String? = null
 
     private val _isImportingRoster = MutableStateFlow(false)
     val isImportingRoster: StateFlow<Boolean> = _isImportingRoster.asStateFlow()
@@ -504,8 +595,10 @@ class SvtMainViewModel(
 
     init {
         viewModelScope.launch {
-            isOnline.collect { online ->
-                if (online) {
+            combine(isOnline, isSessionActiveFlow, isApprovedStudent) { online, active, approved ->
+                online && active && approved
+            }.distinctUntilChanged().collect { readyToSync ->
+                if (readyToSync) {
                     syncPendingOfflineData(context)
                 }
             }
@@ -514,7 +607,21 @@ class SvtMainViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        _sessionEnded.value = true
+        labSearchJob?.cancel()
         connectivityObserver.stop()
+    }
+
+    fun endSession() {
+        _sessionEnded.value = true
+        labSearchJob?.cancel()
+        labSearchJob = null
+    }
+
+    fun retryProfileLoad() {
+        _actionError.value = null
+        _authReloadTick.value += 1
+        _profileRetryTrigger.value += 1
     }
 
     fun selectClass(classId: String) {
@@ -540,6 +647,7 @@ class SvtMainViewModel(
     fun clearLabSvtSearch() {
         labSearchJob?.cancel()
         labSearchJob = null
+        lastLabSearchKey = null
         _labSvtSearchState.value = LabSvtSearchState.Idle
     }
 
@@ -548,6 +656,7 @@ class SvtMainViewModel(
         if (!SvtLabLogic.isSearchableSvtQuery(cleanQuery)) {
             labSearchJob?.cancel()
             labSearchJob = null
+            lastLabSearchKey = null
             _labSvtSearchState.value = if (cleanQuery.isBlank()) {
                 LabSvtSearchState.Idle
             } else {
@@ -559,6 +668,7 @@ class SvtMainViewModel(
         if (!isOnline.value) {
             labSearchJob?.cancel()
             labSearchJob = null
+            lastLabSearchKey = null
             _labSvtSearchState.value = LabSvtSearchState.Error(
                 query = cleanQuery,
                 message = context.getString(R.string.svt_glossary_offline_miss),
@@ -567,7 +677,18 @@ class SvtMainViewModel(
             return
         }
 
+        val searchKey = "${language.name}:${cleanQuery.lowercase(Locale.ROOT)}"
+        val currentState = _labSvtSearchState.value
+        if (searchKey == lastLabSearchKey &&
+            (currentState is LabSvtSearchState.Loading ||
+                currentState is LabSvtSearchState.Definition ||
+                currentState is LabSvtSearchState.NonSvtRejected)
+        ) {
+            return
+        }
+
         labSearchJob?.cancel()
+        lastLabSearchKey = searchKey
         labSearchJob = viewModelScope.launch {
             _labSvtSearchState.value = LabSvtSearchState.Loading
             try {
@@ -583,18 +704,27 @@ class SvtMainViewModel(
                 }
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: AiQuotaExceededException) {
+                lastLabSearchKey = null
+                _labSvtSearchState.value = LabSvtSearchState.Error(
+                    query = cleanQuery,
+                    message = context.getString(R.string.quota_exceeded_ai_error),
+                    isOfflineOrAppCheck = false
+                )
             } catch (_: AiAppCheckException) {
+                lastLabSearchKey = null
                 _labSvtSearchState.value = LabSvtSearchState.Error(
                     query = cleanQuery,
                     message = context.getString(R.string.svt_glossary_offline_miss),
                     isOfflineOrAppCheck = true
                 )
             } catch (e: Exception) {
+                lastLabSearchKey = null
                 _labSvtSearchState.value = LabSvtSearchState.Error(
                     query = cleanQuery,
                     message = context.getString(
                         R.string.svt_glossary_lookup_error,
-                        e.localizedMessage ?: "Error"
+                        userFriendlyFirestoreErrorMessage(context, e, e.localizedMessage ?: "Error")
                     ),
                     isOfflineOrAppCheck = false
                 )
@@ -648,7 +778,7 @@ class SvtMainViewModel(
                             studentName = createdProfile.fullName,
                             studentPhone = createdProfile.phoneNumber,
                             massarNumber = createdProfile.massarNumber,
-                            qrToken = cleanToken
+                            qrToken = code.id.ifBlank { cleanToken }
                         )
                         _optimisticEnrollment.value = enrollment
                     }
@@ -666,7 +796,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage ?: "Failed to create profile"
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Failed to create profile")
                 onComplete(false)
             } finally {
                 _isSettingUpProfile.value = false
@@ -698,7 +828,8 @@ class SvtMainViewModel(
                     phoneNumber = phone,
                     avatarUrl = avatarUrl,
                     birthDate = birthDate,
-                    email = cleanEmail
+                    email = cleanEmail,
+                    skipQrLockCheck = currentProfile != null
                 )
                 uiContext?.let { ctx ->
                     BiometricAuthHelper.updateDisplayNameIfSaved(ctx, currentUserId, effectiveName)
@@ -728,7 +859,11 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage ?: "Failed to update profile"
+                _actionError.value = userFriendlyFirestoreErrorMessage(
+                    uiContext ?: context,
+                    e,
+                    "Failed to update profile"
+                )
             }
         }
     }
@@ -767,7 +902,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -780,7 +915,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -794,7 +929,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -811,7 +946,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -830,7 +965,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage ?: "Failed to accept terms"
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Failed to accept terms")
                 onComplete(false)
             } finally {
                 _isAcceptingTerms.value = false
@@ -1029,7 +1164,11 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage ?: uiContext.getString(R.string.auth_error_generic)
+                _actionError.value = userFriendlyFirestoreErrorMessage(
+                    uiContext,
+                    e,
+                    uiContext.getString(R.string.auth_error_generic)
+                )
             }
         }
     }
@@ -1098,7 +1237,7 @@ class SvtMainViewModel(
                         studentName = studentName,
                         studentPhone = studentPhone,
                         massarNumber = massarNumber,
-                        qrToken = cleanToken
+                        qrToken = code.id.ifBlank { cleanToken }
                     )
                     _optimisticEnrollment.value = enrollment
                     onResult(true)
@@ -1106,7 +1245,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage ?: invalidCodeMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, invalidCodeMessage)
                 onResult(false)
             } finally {
                 _isJoiningClass.value = false
@@ -1122,7 +1261,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Error")
             }
         }
     }
@@ -1162,7 +1301,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -1179,7 +1318,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -1209,7 +1348,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -1232,7 +1371,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -1248,7 +1387,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -1278,7 +1417,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Error")
             }
         }
     }
@@ -1306,7 +1445,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -1318,7 +1457,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Error")
             }
         }
     }
@@ -1330,7 +1469,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Failed to approve enrollment")
             }
         }
     }
@@ -1338,16 +1477,12 @@ class SvtMainViewModel(
     fun approveAllPending(enrollments: List<Enrollment>, notifTitle: String, notifBody: String) {
         if (enrollments.isEmpty()) return
         viewModelScope.launch {
-            var count = 0
             try {
-                for (enrollment in enrollments) {
-                    repository.approveStudentEnrollment(enrollment, notifTitle, notifBody)
-                    count++
-                }
+                repository.approvePendingEnrollmentsBatch(enrollments, notifTitle, notifBody)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Failed to approve enrollments")
             }
         }
     }
@@ -1359,7 +1494,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Failed to reject enrollment")
             }
         }
     }
@@ -1371,7 +1506,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Failed to delete student")
             }
         }
     }
@@ -1450,7 +1585,11 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage ?: uiContext.getString(R.string.excel_read_error)
+                _actionError.value = userFriendlyFirestoreErrorMessage(
+                    uiContext,
+                    e,
+                    uiContext.getString(R.string.excel_read_error)
+                )
             } finally {
                 runCatching { provisionerAuth.signOut() }
                 _isImportingRoster.value = false
@@ -1484,7 +1623,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Error")
             }
         }
     }
@@ -1497,6 +1636,8 @@ class SvtMainViewModel(
                 _aiQuizState.value = AiQuizState.Success(draft)
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: AiQuotaExceededException) {
+                _aiQuizState.value = AiQuizState.Error(context.getString(R.string.quota_exceeded_ai_error))
             } catch (e: AiAppCheckException) {
                 val rawDetail = e.cause?.localizedMessage ?: e.localizedMessage.orEmpty()
                 val diag = appCheckDiagnosticTag()
@@ -1504,7 +1645,9 @@ class SvtMainViewModel(
                 val base = context.getString(R.string.quiz_ai_error_appcheck)
                 _aiQuizState.value = AiQuizState.Error("$base\n($detail)")
             } catch (e: Exception) {
-                _aiQuizState.value = AiQuizState.Error(e.localizedMessage ?: "AI generation error")
+                _aiQuizState.value = AiQuizState.Error(
+                    userFriendlyFirestoreErrorMessage(context, e, "AI generation error")
+                )
             }
         }
     }
@@ -1578,7 +1721,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -1590,7 +1733,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Error")
             }
         }
     }
@@ -1604,7 +1747,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -1617,7 +1760,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -1718,10 +1861,26 @@ class SvtMainViewModel(
         }
     }
 
+    private fun isPermanentOfflineSyncFailure(error: Throwable): Boolean {
+        if (isPermissionDeniedError(error)) return true
+        val fsCode = generateSequence(error) { it.cause }
+            .filterIsInstance<FirebaseFirestoreException>()
+            .firstOrNull()?.code
+        return fsCode == FirebaseFirestoreException.Code.INVALID_ARGUMENT ||
+            fsCode == FirebaseFirestoreException.Code.NOT_FOUND ||
+            fsCode == FirebaseFirestoreException.Code.ALREADY_EXISTS ||
+            fsCode == FirebaseFirestoreException.Code.FAILED_PRECONDITION
+    }
+
     fun syncPendingOfflineData(uiContext: Context) {
-        if (!isOnline.value) return
+        if (!isOnline.value || _sessionEnded.value) return
+        if (Firebase.auth.currentUser?.uid != currentUserId) return
+        if (studentEnrollment.value?.status != "approved") return
         viewModelScope.launch {
             syncMutex.withLock {
+                if (!isOnline.value || _sessionEnded.value) return@withLock
+                if (Firebase.auth.currentUser?.uid != currentUserId) return@withLock
+                if (studentEnrollment.value?.status != "approved") return@withLock
                 val attemptsToSync = offlineStorage.pendingAttempts.value
                 val trackingsToSync = offlineStorage.pendingVideoTrackings.value
                 if (attemptsToSync.isEmpty() && trackingsToSync.isEmpty()) return@withLock
@@ -1729,8 +1888,10 @@ class SvtMainViewModel(
                 _isSyncingOffline.value = true
                 var syncedCount = 0
                 var lastTeacherId = ""
+                var quotaExhausted = false
                 try {
                     for (pending in attemptsToSync) {
+                        if (quotaExhausted || _sessionEnded.value) break
                         try {
                             repository.syncPendingQuizAttempt(
                                 attemptId = pending.attemptId,
@@ -1750,22 +1911,46 @@ class SvtMainViewModel(
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
-                            Log.w(TAG, "Failed syncing pending attempt ${pending.attemptId}", e)
+                            if (isQuotaExceededError(e)) {
+                                quotaExhausted = true
+                                _actionError.value = uiContext.getString(R.string.quota_exceeded_error)
+                                break
+                            }
+                            if (isPermanentOfflineSyncFailure(e)) {
+                                Log.w(TAG, "Dropping unrecoverable pending attempt ${pending.attemptId}", e)
+                                offlineStorage.removePendingAttempt(pending.attemptId)
+                            } else {
+                                Log.w(TAG, "Failed syncing pending attempt ${pending.attemptId}", e)
+                            }
                         }
                     }
 
                     for (tracking in trackingsToSync) {
+                        if (quotaExhausted || _sessionEnded.value) break
                         try {
-                            val existing = remoteStudentVideoTracking.value.firstOrNull {
+                            val remoteExisting = remoteStudentVideoTracking.value.firstOrNull {
                                 it.resourceId == tracking.resource.id
+                            }
+                            val metrics = SvtRepository.computeVideoTrackingMetrics(
+                                positionSeconds = tracking.maxPositionSeconds,
+                                totalDurationSeconds = tracking.totalDurationSeconds,
+                                resourceDurationSeconds = tracking.resource.durationSeconds,
+                                prevPositionSeconds = remoteExisting?.maxPositionSeconds ?: 0L,
+                                prevPercentage = remoteExisting?.watchedPercentage ?: 0.0,
+                                watchedPercentOverride = tracking.watchedPercentageOverride.takeIf { it > 0.0 }
+                            )
+                            if (remoteExisting != null && SvtRepository.shouldSkipVideoTrackingSync(remoteExisting, metrics)) {
+                                offlineStorage.removePendingVideoTracking(tracking.resource.id)
+                                continue
                             }
                             repository.upsertVideoTracking(
                                 resource = tracking.resource,
                                 studentName = tracking.studentName,
                                 positionSeconds = tracking.maxPositionSeconds,
                                 totalDurationSeconds = tracking.totalDurationSeconds,
-                                existingTracking = existing,
-                                watchedPercentOverride = tracking.watchedPercentageOverride.takeIf { it > 0.0 }
+                                existingTracking = remoteExisting,
+                                watchedPercentOverride = tracking.watchedPercentageOverride.takeIf { it > 0.0 },
+                                knownRemoteExists = remoteExisting != null
                             )
                             offlineStorage.removePendingVideoTracking(tracking.resource.id)
                             lastTeacherId = tracking.resource.teacherId
@@ -1773,11 +1958,21 @@ class SvtMainViewModel(
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
-                            Log.w(TAG, "Failed syncing pending video tracking ${tracking.resource.id}", e)
+                            if (isQuotaExceededError(e)) {
+                                quotaExhausted = true
+                                _actionError.value = uiContext.getString(R.string.quota_exceeded_error)
+                                break
+                            }
+                            if (isPermanentOfflineSyncFailure(e)) {
+                                Log.w(TAG, "Dropping unrecoverable pending tracking ${tracking.resource.id}", e)
+                                offlineStorage.removePendingVideoTracking(tracking.resource.id)
+                            } else {
+                                Log.w(TAG, "Failed syncing pending video tracking ${tracking.resource.id}", e)
+                            }
                         }
                     }
 
-                    if (syncedCount > 0) {
+                    if (syncedCount > 0 && !quotaExhausted) {
                         _statusMessage.value = uiContext.getString(R.string.offline_sync_completed, syncedCount)
                         val profile = (profileState.value as? ProfileGateState.Ready)?.profile
                         if (profile != null && profile.role == "student") {
@@ -1859,7 +2054,11 @@ class SvtMainViewModel(
             } catch (_: ResourceReadException) {
                 _actionError.value = uiContext.getString(R.string.resource_read_error)
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage ?: uiContext.getString(R.string.resource_read_error)
+                _actionError.value = userFriendlyFirestoreErrorMessage(
+                    uiContext,
+                    e,
+                    uiContext.getString(R.string.resource_read_error)
+                )
             } finally {
                 _isUploadingResource.value = false
             }
@@ -1874,7 +2073,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Error")
             }
         }
     }
@@ -1904,10 +2103,14 @@ class SvtMainViewModel(
             } catch (_: LocalUriUnavailableException) {
                 _actionError.value = uiContext.getString(R.string.resource_legacy_local_uri_error)
             } catch (e: Exception) {
-                _actionError.value = uiContext.getString(
-                    R.string.offline_download_error,
-                    e.localizedMessage ?: "Error"
-                )
+                _actionError.value = if (isQuotaExceededError(e)) {
+                    uiContext.getString(R.string.quota_exceeded_error)
+                } else {
+                    uiContext.getString(
+                        R.string.offline_download_error,
+                        e.localizedMessage ?: "Error"
+                    )
+                }
             }
         }
     }
@@ -1919,7 +2122,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Error")
             }
         }
     }
@@ -1939,10 +2142,14 @@ class SvtMainViewModel(
             } catch (_: LocalUriUnavailableException) {
                 _actionError.value = uiContext.getString(R.string.resource_legacy_local_uri_error)
             } catch (e: Exception) {
-                _actionError.value = uiContext.getString(
-                    R.string.offline_download_error,
-                    e.localizedMessage ?: "Error"
-                )
+                _actionError.value = if (isQuotaExceededError(e)) {
+                    uiContext.getString(R.string.quota_exceeded_error)
+                } else {
+                    uiContext.getString(
+                        R.string.offline_download_error,
+                        e.localizedMessage ?: "Error"
+                    )
+                }
             }
         }
     }
@@ -1962,6 +2169,7 @@ class SvtMainViewModel(
 
         val existing = studentVideoTracking.value.firstOrNull { it.resourceId == resource.id }
         if (existing != null && existing.watchedPercentage >= 100.0) return
+        val remoteExisting = remoteStudentVideoTracking.value.firstOrNull { it.resourceId == resource.id }
 
         viewModelScope.launch {
             if (!isOnline.value) {
@@ -1980,7 +2188,9 @@ class SvtMainViewModel(
             try {
                 repository.recordFileOpenedTracking(
                     resource = resource,
-                    studentName = profile.fullName
+                    studentName = profile.fullName,
+                    existingTracking = remoteExisting,
+                    knownRemoteExists = remoteExisting != null
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -2013,6 +2223,19 @@ class SvtMainViewModel(
         if (!hasProgress) return
 
         val existing = studentVideoTracking.value.firstOrNull { it.resourceId == resource.id }
+        val metrics = SvtRepository.computeVideoTrackingMetrics(
+            positionSeconds = positionSeconds,
+            totalDurationSeconds = durationSeconds,
+            resourceDurationSeconds = resource.durationSeconds,
+            prevPositionSeconds = existing?.maxPositionSeconds ?: 0L,
+            prevPercentage = existing?.watchedPercentage ?: 0.0,
+            watchedPercentOverride = watchedPercentOverride
+        )
+        if (SvtRepository.shouldSkipVideoTrackingSync(existing, metrics)) {
+            return
+        }
+
+        val remoteExisting = remoteStudentVideoTracking.value.firstOrNull { it.resourceId == resource.id }
         val safeOverride = watchedPercentOverride?.coerceIn(0.0, 100.0) ?: 0.0
         viewModelScope.launch {
             if (!isOnline.value) {
@@ -2020,8 +2243,8 @@ class SvtMainViewModel(
                     PendingVideoTracking(
                         resource = resource,
                         studentName = profile.fullName,
-                        maxPositionSeconds = positionSeconds,
-                        totalDurationSeconds = durationSeconds,
+                        maxPositionSeconds = metrics.maxPositionSeconds,
+                        totalDurationSeconds = metrics.durationSeconds,
                         updatedAtMillis = System.currentTimeMillis(),
                         watchedPercentageOverride = safeOverride
                     )
@@ -2034,20 +2257,23 @@ class SvtMainViewModel(
                     studentName = profile.fullName,
                     positionSeconds = positionSeconds,
                     totalDurationSeconds = durationSeconds,
-                    existingTracking = existing,
-                    watchedPercentOverride = watchedPercentOverride
+                    existingTracking = remoteExisting ?: existing,
+                    watchedPercentOverride = watchedPercentOverride,
+                    knownRemoteExists = remoteExisting != null
                 )
-                val mergedTrackings = filterVideoOnlyTrackings(
-                    studentVideoTracking.value.filterNot { it.resourceId == resource.id } + updated,
-                    studentResources.value
-                )
-                evaluateAndNotifyBadges(
-                    uiContext = uiContext,
-                    profile = profile,
-                    attempts = studentAttempts.value,
-                    trackings = mergedTrackings,
-                    teacherId = resource.teacherId
-                )
+                if (updated.status == "completed" && existing?.status != "completed") {
+                    val mergedTrackings = filterVideoOnlyTrackings(
+                        studentVideoTracking.value.filterNot { it.resourceId == resource.id } + updated,
+                        studentResources.value
+                    )
+                    evaluateAndNotifyBadges(
+                        uiContext = uiContext,
+                        profile = profile,
+                        attempts = studentAttempts.value,
+                        trackings = mergedTrackings,
+                        teacherId = resource.teacherId
+                    )
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -2056,8 +2282,8 @@ class SvtMainViewModel(
                     PendingVideoTracking(
                         resource = resource,
                         studentName = profile.fullName,
-                        maxPositionSeconds = positionSeconds,
-                        totalDurationSeconds = durationSeconds,
+                        maxPositionSeconds = metrics.maxPositionSeconds,
+                        totalDurationSeconds = metrics.durationSeconds,
                         updatedAtMillis = System.currentTimeMillis(),
                         watchedPercentageOverride = safeOverride
                     )
@@ -2089,7 +2315,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Error")
             }
         }
     }
@@ -2102,13 +2328,14 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
 
     fun sendMessageAsStudent(content: String) {
         val enrollment = studentEnrollment.value ?: return
+        if (enrollment.status != "approved") return
         val profile = (profileState.value as? ProfileGateState.Ready)?.profile ?: return
         if (content.isBlank()) return
         viewModelScope.launch {
@@ -2124,7 +2351,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Error")
             }
         }
     }
@@ -2151,7 +2378,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Error")
             }
         }
     }
@@ -2172,7 +2399,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -2219,7 +2446,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -2234,7 +2461,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -2328,7 +2555,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(uiContext, e, "Error")
             }
         }
     }
@@ -2340,7 +2567,7 @@ class SvtMainViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionError.value = e.localizedMessage
+                _actionError.value = userFriendlyFirestoreErrorMessage(context, e, "Error")
             }
         }
     }
@@ -2352,6 +2579,7 @@ class SvtMainViewModel(
 
     companion object {
         private const val TAG = "SvtMainViewModel"
+        private const val STREAM_STOP_TIMEOUT_MS = 30_000L
 
         fun filterVideoOnlyTrackings(
             trackings: List<VideoTracking>,

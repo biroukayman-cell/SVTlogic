@@ -1130,7 +1130,10 @@ private fun VideoPlayerTrackingDialog(
         }
     }
 
-    fun dispatchPlayerProgress(forceEnded: Boolean = false) {
+    var lastDispatchedPosSec by remember(playbackUri) { mutableStateOf(0L) }
+    var lastDispatchedPct by remember(playbackUri) { mutableStateOf(0.0) }
+
+    fun dispatchPlayerProgress(forceEnded: Boolean = false, forceCheckpoint: Boolean = false) {
         val rawDurMs = player.duration.takeIf { it > 0L }
         val durMs = (rawDurMs ?: (resource.durationSeconds.coerceAtLeast(1L) * 1000L)).coerceAtLeast(1000L)
         val durSec = ((durMs + 500L) / 1000L).coerceAtLeast(1L)
@@ -1139,7 +1142,20 @@ private fun VideoPlayerTrackingDialog(
         if (!ended && posMs <= 0L) return
         val posSec = if (ended) durSec else ((posMs + 500L) / 1000L).coerceIn(1L, durSec)
         val pctExact = if (ended) 100.0 else ((posMs.toDouble() / durMs.toDouble()) * 100.0).coerceIn(0.0, 100.0)
-        onProgressUpdate(posSec, durSec, pctExact)
+        val posDelta = posSec - lastDispatchedPosSec
+        val pctDelta = pctExact - lastDispatchedPct
+        val shouldSync = if (ended) {
+            lastDispatchedPct < 100.0 || posSec > lastDispatchedPosSec
+        } else if (forceCheckpoint) {
+            posSec > lastDispatchedPosSec || pctDelta >= 1.0
+        } else {
+            posDelta >= 15L || pctDelta >= 5.0 || (lastDispatchedPosSec == 0L && posSec >= 5L)
+        }
+        if (shouldSync) {
+            lastDispatchedPosSec = maxOf(lastDispatchedPosSec, posSec)
+            lastDispatchedPct = maxOf(lastDispatchedPct, pctExact)
+            onProgressUpdate(posSec, durSec, pctExact)
+        }
     }
 
     DisposableEffect(player) {
@@ -1150,13 +1166,16 @@ private fun VideoPlayerTrackingDialog(
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
-                    dispatchPlayerProgress(forceEnded = true)
+                    dispatchPlayerProgress(forceEnded = true, forceCheckpoint = true)
                 }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (!isPlaying) {
-                    dispatchPlayerProgress(forceEnded = player.playbackState == Player.STATE_ENDED)
+                    dispatchPlayerProgress(
+                        forceEnded = player.playbackState == Player.STATE_ENDED,
+                        forceCheckpoint = true
+                    )
                 }
             }
         }
@@ -1167,16 +1186,19 @@ private fun VideoPlayerTrackingDialog(
                 player.playWhenReady
             )
             player.removeListener(listener)
-            dispatchPlayerProgress(forceEnded = player.playbackState == Player.STATE_ENDED)
+            dispatchPlayerProgress(
+                forceEnded = player.playbackState == Player.STATE_ENDED,
+                forceCheckpoint = true
+            )
             player.release()
         }
     }
 
     LaunchedEffect(player) {
         while (true) {
-            delay(1500L)
+            delay(5000L)
             if (player.isPlaying) {
-                dispatchPlayerProgress(forceEnded = false)
+                dispatchPlayerProgress(forceEnded = false, forceCheckpoint = false)
             }
         }
     }

@@ -16,6 +16,8 @@ import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 import java.util.concurrent.TimeUnit
 
@@ -46,6 +48,7 @@ class SvtBackgroundNotificationWorker(
                 val snap = db.collection("student_notifications")
                     .whereEqualTo("studentId", uid)
                     .whereEqualTo("isRead", false)
+                    .limit(WORKER_QUERY_LIMIT)
                     .get()
                     .await()
                 val unseen = snap.documents.filter { !seenStore.hasSeen("stu_${it.id}") }
@@ -79,6 +82,7 @@ class SvtBackgroundNotificationWorker(
                     val unreadMsgsSnap = db.collection("private_messages")
                         .whereEqualTo("teacherId", uid)
                         .whereEqualTo("isRead", false)
+                        .limit(WORKER_QUERY_LIMIT)
                         .get()
                         .await()
                     val unseenStudentMsgs = unreadMsgsSnap.documents.filter { doc ->
@@ -104,6 +108,7 @@ class SvtBackgroundNotificationWorker(
                     val pendingEnrollSnap = db.collection("enrollments")
                         .whereEqualTo("teacherId", uid)
                         .whereEqualTo("status", "pending")
+                        .limit(WORKER_QUERY_LIMIT)
                         .get()
                         .await()
                     val unseenEnrolls = pendingEnrollSnap.documents.filter { !seenStore.hasSeen("enr_${it.id}") }
@@ -122,6 +127,7 @@ class SvtBackgroundNotificationWorker(
                     val pendingTeachersSnap = db.collection("users")
                         .whereEqualTo("role", "teacher")
                         .whereEqualTo("teacherStatus", "pending")
+                        .limit(WORKER_QUERY_LIMIT)
                         .get()
                         .await()
                     val unseenTeachers = pendingTeachersSnap.documents.filter { !seenStore.hasSeen("tch_${it.id}") }
@@ -138,15 +144,55 @@ class SvtBackgroundNotificationWorker(
             }
 
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "Background notification check skipped: ${e.message}")
-            Result.retry()
+            if (shouldRetryWorkerException(e, runAttemptCount)) {
+                Result.retry()
+            } else {
+                Result.failure()
+            }
         }
     }
 
     companion object {
         private const val TAG = "SvtBgNotifWorker"
+        private const val WORKER_QUERY_LIMIT = 25L
         const val OWNER_ADMIN_EMAIL = "biroukayman@gmail.com"
+
+        internal fun shouldRetryWorkerException(error: Throwable, runAttemptCount: Int): Boolean {
+            if (runAttemptCount >= 2) return false
+            if (isQuotaExceededError(error)) return false
+            val fsError = generateSequence(error) { it.cause }
+                .filterIsInstance<FirebaseFirestoreException>()
+                .firstOrNull()
+            if (fsError != null) {
+                return shouldRetryWorkerFirestoreCodeName(fsError.code.name, runAttemptCount)
+            }
+            return if (isPermissionDeniedError(error)) {
+                false
+            } else {
+                error is java.io.IOException
+            }
+        }
+
+        internal fun shouldRetryWorkerFirestoreCodeName(codeName: String?, runAttemptCount: Int): Boolean {
+            if (runAttemptCount >= 2) return false
+            return when (codeName) {
+                "RESOURCE_EXHAUSTED",
+                "PERMISSION_DENIED",
+                "UNAUTHENTICATED",
+                "FAILED_PRECONDITION",
+                "INVALID_ARGUMENT",
+                "NOT_FOUND",
+                "ALREADY_EXISTS" -> false
+                "UNAVAILABLE",
+                "DEADLINE_EXCEEDED",
+                "ABORTED" -> true
+                else -> false
+            }
+        }
     }
 }
 
@@ -179,34 +225,54 @@ internal class SeenBackgroundNotifStore(context: Context, uid: String) {
 object NotificationSyncScheduler {
     private const val PERIODIC_WORK_NAME = "bioterre_bg_notifications_periodic"
     private const val ONESHOT_WORK_NAME = "bioterre_bg_notifications_immediate"
+    private const val SYNC_META_PREFS = "bioterre_bg_sync_meta"
+    private const val KEY_LAST_LEAVE_CHECK_MS = "last_leave_check_ms"
+    internal const val LEAVE_CHECK_COOLDOWN_MS = 10L * 60L * 1000L
+
+    internal fun shouldScheduleLeaveCheck(
+        nowMs: Long,
+        lastScheduledMs: Long,
+        cooldownMs: Long = LEAVE_CHECK_COOLDOWN_MS
+    ): Boolean {
+        return lastScheduledMs <= 0L || (nowMs - lastScheduledMs) >= cooldownMs
+    }
 
     fun schedulePeriodicSync(context: Context) {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
         val request = PeriodicWorkRequestBuilder<SvtBackgroundNotificationWorker>(
-            15, TimeUnit.MINUTES
+            60, TimeUnit.MINUTES
         )
             .setConstraints(constraints)
             .build()
         WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
             PERIODIC_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             request
         )
     }
 
     fun scheduleBackgroundCheckOnLeave(context: Context) {
+        val appCtx = context.applicationContext
+        val prefs = appCtx.getSharedPreferences(SYNC_META_PREFS, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val lastMs = prefs.getLong(KEY_LAST_LEAVE_CHECK_MS, 0L)
+        if (!shouldScheduleLeaveCheck(now, lastMs)) {
+            return
+        }
+        prefs.edit().putLong(KEY_LAST_LEAVE_CHECK_MS, now).apply()
+
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
         val request = OneTimeWorkRequestBuilder<SvtBackgroundNotificationWorker>()
             .setConstraints(constraints)
-            .setInitialDelay(20, TimeUnit.SECONDS)
+            .setInitialDelay(45, TimeUnit.SECONDS)
             .build()
-        WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+        WorkManager.getInstance(appCtx).enqueueUniqueWork(
             ONESHOT_WORK_NAME,
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP,
             request
         )
     }

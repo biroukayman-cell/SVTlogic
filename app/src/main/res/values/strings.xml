@@ -892,4 +892,10 @@
     <string name="svt_tool_neuro_state_subthreshold">Repos (-70 mV) : stimulation insuffisante pour ouvrir les canaux Na⁺</string>
     <string name="svt_tool_neuro_state_no_ca">Blocage synaptique/troponine : manque de Ca²⁺</string>
     <string name="svt_tool_neuro_state_no_atp">Fatigue musculaire : manque d\'ATP pour le pivotement de la myosine</string>
+
+    <string name="quota_exceeded_error">Limite quotidienne du serveur Firebase atteinte pour le moment. Réessayez plus tard ou passez au forfait supérieur.</string>
+    <string name="quota_exceeded_ai_error">Limite quotidienne de requêtes IA atteinte. Utilisez le glossaire hors ligne ou réessayez plus tard.</string>
+    <string name="permission_denied_error">Accès refusé par le serveur (permissions insuffisantes). Vérifiez votre statut de compte ou reconnectez-vous.</string>
+    <string name="profile_load_error_title">Impossible de charger votre profil</string>
+    <string name="profile_load_retry_btn">Réessayer</string>
 </resources>

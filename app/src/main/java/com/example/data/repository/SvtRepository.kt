@@ -8,6 +8,8 @@ import com.example.R
 import com.example.core.AppUpdateUrlHelper
 import com.example.core.OperationType
 import com.example.core.handleFirestoreError
+import com.example.core.isPermissionDeniedError
+import com.example.core.isQuotaExceededError
 import com.example.data.badges.BadgeEngine
 import com.example.data.badges.SvtBadgeDefinition
 import com.example.data.model.Announcement
@@ -36,6 +38,7 @@ import com.google.firebase.firestore.DocumentSnapshot.ServerTimestampBehavior
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.firestore.WriteBatch
 import com.google.firebase.firestore.snapshots
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -102,15 +105,61 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 .filterIsInstance<FirebaseFirestoreException>()
                 .firstOrNull()
             val code = fsErr?.code
+            if (code == FirebaseFirestoreException.Code.RESOURCE_EXHAUSTED) {
+                return@retryWhen false
+            }
             val isTransient = code == FirebaseFirestoreException.Code.UNAVAILABLE ||
                 code == FirebaseFirestoreException.Code.DEADLINE_EXCEEDED ||
                 code == FirebaseFirestoreException.Code.ABORTED ||
-                (code == FirebaseFirestoreException.Code.PERMISSION_DENIED && attempt < 2L)
-            if (isTransient && attempt < 4L) {
+                (code == FirebaseFirestoreException.Code.PERMISSION_DENIED && attempt < 1L)
+            if (isTransient && attempt < 3L) {
                 delay(650L * (attempt + 1L))
                 true
             } else {
                 false
+            }
+        }
+    }
+
+    private suspend fun commitWriteOpsChunked(ops: List<(WriteBatch) -> Unit>) {
+        if (ops.isEmpty()) return
+        ops.chunked(FIRESTORE_BATCH_SAFE_LIMIT).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { applyOp -> applyOp(batch) }
+            batch.commit().await()
+        }
+    }
+
+    private suspend fun commitBackfillOpsSafely(
+        updates: List<Pair<com.google.firebase.firestore.DocumentReference, Map<String, Any>>>
+    ) {
+        if (updates.isEmpty()) return
+        updates.chunked(FIRESTORE_BATCH_SAFE_LIMIT).forEach { chunk ->
+            try {
+                val batch = db.batch()
+                chunk.forEach { (ref, map) -> batch.update(ref, map) }
+                batch.commit().await()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (isQuotaExceededError(e)) throw e
+                val fsCode = generateSequence<Throwable>(e) { it.cause }
+                    .filterIsInstance<FirebaseFirestoreException>()
+                    .firstOrNull()?.code
+                val isBatchValidationOrPerm = isPermissionDeniedError(e) ||
+                    fsCode == FirebaseFirestoreException.Code.INVALID_ARGUMENT ||
+                    fsCode == FirebaseFirestoreException.Code.NOT_FOUND
+                if (!isBatchValidationOrPerm) throw e
+                // Legacy invalid docs can reject an entire batch; apply individually so valid docs still update
+                for ((ref, map) in chunk) {
+                    try {
+                        ref.update(map).await()
+                    } catch (singleErr: CancellationException) {
+                        throw singleErr
+                    } catch (singleErr: Exception) {
+                        if (isQuotaExceededError(singleErr)) throw singleErr
+                    }
+                }
             }
         }
     }
@@ -150,15 +199,17 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val uid = requireUserId()
         val today = todayDateString()
         val docRef = db.collection("users").document(uid)
-        val cleanMassar = massarNumber.trim()
-        val cleanBirthDate = birthDate.trim()
+        val cleanFullName = clampMinMax(fullName, "Utilisateur SVT", 2, 100)
+        val cleanPhone = phoneNumber.trim().take(30)
+        val cleanMassar = massarNumber.trim().take(40)
+        val cleanBirthDate = birthDate.trim().take(30)
         val rawEmail = email.trim()
-        val cleanEmail = if (role == "student" && rawEmail.isBlank()) {
+        val cleanEmail = (if (role == "student" && rawEmail.isBlank()) {
             com.example.core.AuthSessionDraft.defaultStudentTaalimEmail(cleanMassar)
         } else {
             rawEmail
-        }
-        val cleanEstablishment = establishment.trim()
+        }).take(150)
+        val cleanEstablishment = establishment.trim().take(150)
         val currentAuthUser = auth.currentUser
         val isVerifiedOwnerAdmin = currentAuthUser?.email.equals("biroukayman@gmail.com", ignoreCase = true) &&
             currentAuthUser?.isEmailVerified == true
@@ -168,12 +219,12 @@ class SvtRepository(private val db: FirebaseFirestore) {
             "approved"
         }
         val acceptedTerms = role != "student"
-        val cleanDeviceId = if (role == "student") boundDeviceId.trim() else ""
-        val cleanDeviceModel = if (role == "student") boundDeviceModel.trim().take(96) else ""
+        val cleanDeviceId = if (role == "student") sanitizeId(boundDeviceId, 128) else ""
+        val cleanDeviceModel = if (role == "student") boundDeviceModel.trim().take(100) else ""
         val payload = mutableMapOf<String, Any>(
             "userId" to uid,
-            "fullName" to fullName.trim(),
-            "phoneNumber" to phoneNumber.trim(),
+            "fullName" to cleanFullName,
+            "phoneNumber" to cleanPhone,
             "role" to role,
             "massarNumber" to cleanMassar,
             "birthDate" to cleanBirthDate,
@@ -197,12 +248,56 @@ class SvtRepository(private val db: FirebaseFirestore) {
             payload["boundDeviceModel"] = cleanDeviceModel
         }
         try {
+            val existingSnap = runCatching { docRef.get().await() }.getOrNull()
+            if (existingSnap != null && existingSnap.exists()) {
+                val updates = mutableMapOf<String, Any>(
+                    "fullName" to cleanFullName,
+                    "phoneNumber" to cleanPhone,
+                    "massarNumber" to cleanMassar,
+                    "birthDate" to cleanBirthDate,
+                    "email" to cleanEmail,
+                    "establishment" to cleanEstablishment,
+                    "mustChangePassword" to mustChangePassword,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+                if (!avatarUrl.isNullOrBlank()) {
+                    updates["avatarUrl"] = avatarUrl
+                }
+                val existingBoundId = existingSnap.getString("boundDeviceId").orEmpty().trim()
+                if (existingBoundId.isBlank() && cleanDeviceId.isNotBlank()) {
+                    updates["boundDeviceId"] = cleanDeviceId
+                    updates["boundDeviceModel"] = cleanDeviceModel
+                }
+                docRef.update(updates).await()
+                val existingObj = existingSnap.toObject(UserProfile::class.java, ServerTimestampBehavior.ESTIMATE)
+                return UserProfile(
+                    id = uid,
+                    userId = uid,
+                    fullName = cleanFullName,
+                    phoneNumber = cleanPhone,
+                    role = existingObj?.role ?: role,
+                    massarNumber = cleanMassar,
+                    birthDate = cleanBirthDate,
+                    email = cleanEmail,
+                    establishment = cleanEstablishment,
+                    teacherStatus = existingObj?.teacherStatus ?: teacherStatus,
+                    mustChangePassword = mustChangePassword,
+                    acceptedTerms = existingObj?.acceptedTerms ?: acceptedTerms,
+                    avatarUrl = avatarUrl?.takeIf { it.isNotBlank() } ?: existingObj?.avatarUrl,
+                    xp = existingObj?.xp ?: 0L,
+                    loginStreak = existingObj?.loginStreak ?: 1L,
+                    lastLoginDate = existingObj?.lastLoginDate ?: today,
+                    unlockedBadgeIds = existingObj?.unlockedBadgeIds ?: emptyList(),
+                    boundDeviceId = existingBoundId.ifBlank { cleanDeviceId },
+                    boundDeviceModel = if (existingBoundId.isBlank()) cleanDeviceModel else existingObj?.boundDeviceModel.orEmpty()
+                )
+            }
             docRef.set(payload).await()
             return UserProfile(
                 id = uid,
                 userId = uid,
-                fullName = fullName.trim(),
-                phoneNumber = phoneNumber.trim(),
+                fullName = cleanFullName,
+                phoneNumber = cleanPhone,
                 role = role,
                 massarNumber = cleanMassar,
                 birthDate = cleanBirthDate,
@@ -229,8 +324,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
 
     suspend fun bindStudentDeviceIfUnbound(deviceId: String, deviceModel: String): Boolean {
         val uid = requireUserId()
-        val cleanId = deviceId.trim()
-        val cleanModel = deviceModel.trim().take(96)
+        val cleanId = sanitizeId(deviceId, 128)
+        val cleanModel = deviceModel.trim().take(100)
         require(cleanId.isNotBlank()) { "Device ID cannot be blank" }
         val docRef = db.collection("users").document(uid)
         return try {
@@ -281,41 +376,47 @@ class SvtRepository(private val db: FirebaseFirestore) {
         avatarUrl: String?,
         birthDate: String? = null,
         mustChangePassword: Boolean? = null,
-        email: String? = null
+        email: String? = null,
+        skipQrLockCheck: Boolean = false
     ) {
         val uid = requireUserId()
         val docRef = db.collection("users").document(uid)
 
         // Prevent name change if student registered via teacher QR code
-        val existingEnrollment = runCatching {
-            db.collection("enrollments").document(uid).get().await()
-        }.getOrNull()
-        val enrolledViaQr = existingEnrollment?.exists() == true &&
-            !existingEnrollment.getString("qrToken").isNullOrBlank()
-        val effectiveName = if (enrolledViaQr) {
-            val currentSnap = runCatching { docRef.get().await() }.getOrNull()
-            val storedName = currentSnap?.getString("fullName").orEmpty().trim()
-            storedName.ifBlank { fullName.trim() }
-        } else {
+        val effectiveName = if (skipQrLockCheck) {
             fullName.trim()
+        } else {
+            val existingEnrollment = runCatching {
+                db.collection("enrollments").document(uid).get().await()
+            }.getOrNull()
+            val enrolledViaQr = existingEnrollment?.exists() == true &&
+                !existingEnrollment.getString("qrToken").isNullOrBlank()
+            if (enrolledViaQr) {
+                val currentSnap = runCatching { docRef.get().await() }.getOrNull()
+                val storedName = currentSnap?.getString("fullName").orEmpty().trim()
+                storedName.ifBlank { fullName.trim() }
+            } else {
+                fullName.trim()
+            }
         }
 
+        val clampedName = clampMinMax(effectiveName, "Utilisateur SVT", 2, 100)
         val updates = mutableMapOf<String, Any>(
-            "fullName" to effectiveName,
-            "phoneNumber" to phoneNumber.trim(),
+            "fullName" to clampedName,
+            "phoneNumber" to phoneNumber.trim().take(30),
             "updatedAt" to FieldValue.serverTimestamp()
         )
         if (!avatarUrl.isNullOrBlank()) {
             updates["avatarUrl"] = avatarUrl
         }
         if (birthDate != null) {
-            updates["birthDate"] = birthDate.trim()
+            updates["birthDate"] = birthDate.trim().take(30)
         }
         if (mustChangePassword != null) {
             updates["mustChangePassword"] = mustChangePassword
         }
         if (email != null) {
-            updates["email"] = email.trim()
+            updates["email"] = email.trim().take(150)
         }
         try {
             docRef.update(updates).await()
@@ -530,7 +631,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
     ): Establishment {
         val uid = requireUserId()
         val estId = "est_${UUID.randomUUID().toString().take(8)}"
-        val cleanTeacher = teacherName.trim().ifBlank { "Professeur" }.take(120)
+        val cleanTeacher = teacherName.trim().ifBlank { "Professeur" }.take(100)
         val cleanName = name.trim().take(120)
         val cleanCity = city.trim().take(100)
         require(cleanName.length >= 2) { "Establishment name must be at least 2 characters" }
@@ -573,30 +674,34 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
         val docRef = db.collection("establishments").document(establishmentId)
         try {
-            val batch = db.batch()
-            batch.update(
-                docRef,
-                mapOf(
-                    "name" to cleanName,
-                    "city" to cleanCity,
-                    "updatedAt" to FieldValue.serverTimestamp()
+            val ops = mutableListOf<(WriteBatch) -> Unit>()
+            ops += { batch ->
+                batch.update(
+                    docRef,
+                    mapOf(
+                        "name" to cleanName,
+                        "city" to cleanCity,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
                 )
-            )
+            }
             val linkedClasses = db.collection("classes")
                 .whereEqualTo("teacherId", uid)
                 .whereEqualTo("establishmentId", establishmentId)
                 .get()
                 .await()
             for (clsDoc in linkedClasses.documents) {
-                batch.update(
-                    clsDoc.reference,
-                    mapOf(
-                        "establishmentName" to cleanName,
-                        "updatedAt" to FieldValue.serverTimestamp()
+                ops += { batch ->
+                    batch.update(
+                        clsDoc.reference,
+                        mapOf(
+                            "establishmentName" to cleanName,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
                     )
-                )
+                }
             }
-            batch.commit().await()
+            commitWriteOpsChunked(ops)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -610,24 +715,26 @@ class SvtRepository(private val db: FirebaseFirestore) {
         if (establishmentId.isBlank()) return
         val docRef = db.collection("establishments").document(establishmentId)
         try {
-            val batch = db.batch()
-            batch.delete(docRef)
+            val ops = mutableListOf<(WriteBatch) -> Unit>()
+            ops += { batch -> batch.delete(docRef) }
             val linkedClasses = db.collection("classes")
                 .whereEqualTo("teacherId", uid)
                 .whereEqualTo("establishmentId", establishmentId)
                 .get()
                 .await()
             for (clsDoc in linkedClasses.documents) {
-                batch.update(
-                    clsDoc.reference,
-                    mapOf(
-                        "establishmentId" to "",
-                        "establishmentName" to "",
-                        "updatedAt" to FieldValue.serverTimestamp()
+                ops += { batch ->
+                    batch.update(
+                        clsDoc.reference,
+                        mapOf(
+                            "establishmentId" to "",
+                            "establishmentName" to "",
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
                     )
-                )
+                }
             }
-            batch.commit().await()
+            commitWriteOpsChunked(ops)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -649,15 +756,19 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val qrToken = "SVT-${UUID.randomUUID().toString().replace("-", "").take(8).uppercase(Locale.US)}"
         val classRef = db.collection("classes").document(classId)
         val codeRef = db.collection("class_codes").document(qrToken)
+        val cleanTeacher = teacherName.trim().ifBlank { "Professeur" }.take(100)
+        val cleanName = clampMinMax(name, "Classe SVT", 2, 100)
+        val cleanYear = clampMinMax(academicYear, "2025-2026", 2, 30)
+        val cleanLevel = level.trim().ifBlank { "SVT" }.take(50)
         val cleanEstId = establishmentId.trim().take(128)
         val cleanEstName = if (cleanEstId.isNotEmpty()) establishmentName.trim().take(120) else ""
 
         val classPayload = mapOf(
             "teacherId" to uid,
-            "teacherName" to teacherName.trim(),
-            "name" to name.trim(),
-            "academicYear" to academicYear.trim(),
-            "level" to level.trim(),
+            "teacherName" to cleanTeacher,
+            "name" to cleanName,
+            "academicYear" to cleanYear,
+            "level" to cleanLevel,
             "qrToken" to qrToken,
             "establishmentId" to cleanEstId,
             "establishmentName" to cleanEstName,
@@ -667,10 +778,10 @@ class SvtRepository(private val db: FirebaseFirestore) {
         )
         val codePayload = mapOf(
             "classId" to classId,
-            "className" to name.trim(),
-            "academicYear" to academicYear.trim(),
+            "className" to cleanName,
+            "academicYear" to cleanYear,
             "teacherId" to uid,
-            "teacherName" to teacherName.trim(),
+            "teacherName" to cleanTeacher,
             "createdAt" to FieldValue.serverTimestamp()
         )
 
@@ -682,10 +793,10 @@ class SvtRepository(private val db: FirebaseFirestore) {
             return SvtClass(
                 id = classId,
                 teacherId = uid,
-                teacherName = teacherName.trim(),
-                name = name.trim(),
-                academicYear = academicYear.trim(),
-                level = level.trim(),
+                teacherName = cleanTeacher,
+                name = cleanName,
+                academicYear = cleanYear,
+                level = cleanLevel,
                 qrToken = qrToken,
                 establishmentId = cleanEstId,
                 establishmentName = cleanEstName,
@@ -708,9 +819,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
         establishmentName: String
     ) {
         requireUserId()
-        val cleanName = name.trim().take(120)
-        val cleanLevel = level.trim().take(80)
-        val cleanYear = academicYear.trim().take(40)
+        val cleanName = name.trim().take(100)
+        val cleanLevel = level.trim().ifBlank { "SVT" }.take(50)
+        val cleanYear = academicYear.trim().ifBlank { "2025-2026" }.take(30)
         val cleanEstId = establishmentId.trim().take(128)
         val cleanEstName = if (cleanEstId.isNotEmpty()) establishmentName.trim().take(120) else ""
         require(svtClass.id.isNotBlank() && cleanName.length >= 2) {
@@ -718,7 +829,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
         val classRef = db.collection("classes").document(svtClass.id)
         try {
-            val codeRef = if (svtClass.qrToken.isNotBlank()) {
+            val needsCodeUpdate = svtClass.qrToken.isNotBlank() &&
+                (svtClass.name.trim() != cleanName || svtClass.academicYear.trim() != cleanYear)
+            val codeRef = if (needsCodeUpdate) {
                 db.collection("class_codes").document(svtClass.qrToken)
             } else {
                 null
@@ -806,10 +919,18 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val classId = svtClass.id
         require(classId.isNotBlank()) { "Class ID cannot be blank" }
         try {
-            val docRefsToDelete = mutableListOf(
-                db.collection("classes").document(classId),
-                db.collection("class_codes").document(svtClass.qrToken)
-            )
+            val docRefsToDelete = mutableListOf<com.google.firebase.firestore.DocumentReference>()
+            val classRef = db.collection("classes").document(classId)
+            if (runCatching { classRef.get().await().exists() }.getOrDefault(true)) {
+                docRefsToDelete += classRef
+            }
+            val token = svtClass.qrToken.trim()
+            if (token.isNotBlank()) {
+                val codeRef = db.collection("class_codes").document(token)
+                if (runCatching { codeRef.get().await().exists() }.getOrDefault(false)) {
+                    docRefsToDelete += codeRef
+                }
+            }
             val collectionsByClass = listOf(
                 "enrollments",
                 "class_rosters",
@@ -886,17 +1007,19 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val uid = requireUserId()
         val docRef = db.collection("enrollments").document(uid)
         val existing = runCatching { docRef.get().await() }.getOrNull()
-        val resolvedToken = qrToken.trim().ifBlank { classCode.id.trim() }
+        val resolvedToken = classCode.id.trim().ifBlank { qrToken.trim() }.take(64)
         val status = if (resolvedToken.isNotBlank()) "approved" else "pending"
-        val cleanName = studentName.trim().ifBlank { "Élève SVT" }
-        val cleanPhone = studentPhone.trim()
-        val cleanMassar = massarNumber.trim()
+        val cleanName = clampMinMax(studentName, "Élève SVT", 2, 100)
+        val cleanPhone = studentPhone.trim().take(30)
+        val cleanMassar = massarNumber.trim().take(40)
+        val cleanClassName = clampMinMax(classCode.className, "Classe SVT", 2, 100)
+        val cleanTeacherName = classCode.teacherName.trim().ifBlank { "Professeur" }.take(100)
         val payload = mutableMapOf<String, Any>(
             "studentId" to uid,
             "classId" to classCode.classId,
-            "className" to classCode.className,
+            "className" to cleanClassName,
             "teacherId" to classCode.teacherId,
-            "teacherName" to classCode.teacherName,
+            "teacherName" to cleanTeacherName,
             "studentName" to cleanName,
             "studentPhone" to cleanPhone,
             "massarNumber" to cleanMassar,
@@ -912,14 +1035,28 @@ class SvtRepository(private val db: FirebaseFirestore) {
             if (existing != null && existing.exists()) {
                 docRef.delete().await()
             }
-            docRef.set(payload).await()
+            try {
+                docRef.set(payload).await()
+            } catch (e: Exception) {
+                if (existing == null && isPermissionDeniedError(e)) {
+                    // Handle stale server enrollment doc when cache/get missed it
+                    val deleted = runCatching { docRef.delete().await() }.isSuccess
+                    if (deleted) {
+                        docRef.set(payload).await()
+                    } else {
+                        throw e
+                    }
+                } else {
+                    throw e
+                }
+            }
             return Enrollment(
                 id = uid,
                 studentId = uid,
                 classId = classCode.classId,
-                className = classCode.className,
+                className = cleanClassName,
                 teacherId = classCode.teacherId,
-                teacherName = classCode.teacherName,
+                teacherName = cleanTeacherName,
                 studentName = cleanName,
                 studentPhone = cleanPhone,
                 massarNumber = cleanMassar,
@@ -952,70 +1089,116 @@ class SvtRepository(private val db: FirebaseFirestore) {
         notifTitle: String,
         notifBody: String
     ) {
-        val uid = requireUserId()
-        val enrollRef = db.collection("enrollments").document(enrollment.studentId)
-        try {
-            val batch = db.batch()
-            batch.update(
-                enrollRef,
-                mapOf(
-                    "status" to "approved",
-                    "validatedAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-            )
+        approvePendingEnrollmentsBatch(
+            enrollments = listOf(enrollment),
+            notifTitle = notifTitle,
+            notifBody = notifBody
+        )
+    }
 
-            // Sync approvedStudentIds onto existing quizzes, resources, and announcements of the class
-            val classScopedCollections = listOf("quizzes", "resources", "announcements")
-            for (col in classScopedCollections) {
-                val docs = db.collection(col)
-                    .whereEqualTo("teacherId", uid)
-                    .whereEqualTo("classId", enrollment.classId)
-                    .get()
-                    .await()
-                for (doc in docs.documents) {
+    suspend fun approvePendingEnrollmentsBatch(
+        enrollments: List<Enrollment>,
+        notifTitle: String,
+        notifBody: String
+    ) {
+        val uid = requireUserId()
+        val distinctEnrollments = enrollments
+            .filter { it.studentId.isNotBlank() }
+            .distinctBy { it.studentId }
+        if (distinctEnrollments.isEmpty()) return
+
+        val cleanNotifTitle = notifTitle.trim().ifBlank { "BioTerre SVT" }.take(200)
+        val cleanNotifBody = notifBody.trim().ifBlank { cleanNotifTitle }.take(1000)
+        val firstPath = "enrollments/${distinctEnrollments.first().studentId}"
+        try {
+            val criticalOps = mutableListOf<(WriteBatch) -> Unit>()
+
+            // 1. Approve each enrollment and create its welcome notification first
+            for (enrollment in distinctEnrollments) {
+                val enrollRef = db.collection("enrollments").document(enrollment.studentId)
+                criticalOps += { batch ->
                     batch.update(
-                        doc.reference,
+                        enrollRef,
                         mapOf(
-                            "approvedStudentIds" to FieldValue.arrayUnion(enrollment.studentId),
+                            "status" to "approved",
+                            "validatedAt" to FieldValue.serverTimestamp(),
                             "updatedAt" to FieldValue.serverTimestamp()
                         )
                     )
                 }
+                val notifRef = db.collection("student_notifications").document()
+                criticalOps += { batch ->
+                    batch.set(
+                        notifRef,
+                        mapOf(
+                            "studentId" to enrollment.studentId,
+                            "teacherId" to uid,
+                            "type" to "enrollment",
+                            "title" to cleanNotifTitle,
+                            "body" to cleanNotifBody,
+                            "isRead" to false,
+                            "createdAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+            }
+            commitWriteOpsChunked(criticalOps)
+
+            // 2. Backfill approvedStudentIds separately so a legacy invalid doc cannot block approval
+            val backfillUpdates = mutableListOf<Pair<com.google.firebase.firestore.DocumentReference, Map<String, Any>>>()
+            val classScopedCollections = listOf("quizzes", "resources", "announcements")
+            val byClass = distinctEnrollments.groupBy { it.classId }
+            for ((classId, classEnrollments) in byClass) {
+                if (classId.isBlank()) continue
+                val studentIds = classEnrollments.map { it.studentId }.distinct()
+                for (col in classScopedCollections) {
+                    val docs = db.collection(col)
+                        .whereEqualTo("teacherId", uid)
+                        .whereEqualTo("classId", classId)
+                        .get()
+                        .await()
+                    for (doc in docs.documents) {
+                        if (col == "resources" && !isDocSafeForResourceUpdate(doc)) continue
+                        val existingIds = (doc.get("approvedStudentIds") as? List<*>)
+                            ?.mapNotNull { it as? String }
+                            .orEmpty()
+                        val remainingSlots = (100 - existingIds.size).coerceAtLeast(0)
+                        if (remainingSlots <= 0) continue
+                        val toAdd = studentIds.filterNot { it in existingIds }.take(remainingSlots)
+                        if (toAdd.isEmpty()) continue
+                        backfillUpdates += doc.reference to mapOf(
+                            "approvedStudentIds" to FieldValue.arrayUnion(*toAdd.toTypedArray()),
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    }
+                }
             }
 
+            // 3. Query teacher glossary_entries only ONCE for all approved students
+            val allStudentIds = distinctEnrollments.map { it.studentId }.distinct()
             val glossaryDocs = db.collection("glossary_entries")
                 .whereEqualTo("teacherId", uid)
                 .get()
                 .await()
             for (doc in glossaryDocs.documents) {
-                batch.update(
-                    doc.reference,
-                    mapOf(
-                        "approvedStudentIds" to FieldValue.arrayUnion(enrollment.studentId),
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
+                val existingIds = (doc.get("approvedStudentIds") as? List<*>)
+                    ?.mapNotNull { it as? String }
+                    .orEmpty()
+                val remainingSlots = (500 - existingIds.size).coerceAtLeast(0)
+                if (remainingSlots <= 0) continue
+                val toAdd = allStudentIds.filterNot { it in existingIds }.take(remainingSlots)
+                if (toAdd.isEmpty()) continue
+                backfillUpdates += doc.reference to mapOf(
+                    "approvedStudentIds" to FieldValue.arrayUnion(*toAdd.toTypedArray()),
+                    "updatedAt" to FieldValue.serverTimestamp()
                 )
             }
 
-            val notifRef = db.collection("student_notifications").document()
-            batch.set(
-                notifRef,
-                mapOf(
-                    "studentId" to enrollment.studentId,
-                    "teacherId" to uid,
-                    "type" to "enrollment",
-                    "title" to notifTitle,
-                    "body" to notifBody,
-                    "isRead" to false,
-                    "createdAt" to FieldValue.serverTimestamp()
-                )
-            )
-            batch.commit().await()
+            commitBackfillOpsSafely(backfillUpdates)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.UPDATE, enrollRef.path)
+            handleFirestoreError(e, OperationType.UPDATE, firstPath)
             throw e
         }
     }
@@ -1043,40 +1226,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val uid = requireUserId()
         val studentId = enrollment.studentId
         try {
-            val batch = db.batch()
-            batch.delete(db.collection("enrollments").document(studentId))
-
-            val classScopedCollections = listOf("quizzes", "resources", "announcements")
-            for (col in classScopedCollections) {
-                val docs = db.collection(col)
-                    .whereEqualTo("teacherId", uid)
-                    .whereEqualTo("classId", enrollment.classId)
-                    .get()
-                    .await()
-                for (doc in docs.documents) {
-                    batch.update(
-                        doc.reference,
-                        mapOf(
-                            "approvedStudentIds" to FieldValue.arrayRemove(studentId),
-                            "updatedAt" to FieldValue.serverTimestamp()
-                        )
-                    )
-                }
-            }
-
-            val glossaryDocs = db.collection("glossary_entries")
-                .whereEqualTo("teacherId", uid)
-                .get()
-                .await()
-            for (doc in glossaryDocs.documents) {
-                batch.update(
-                    doc.reference,
-                    mapOf(
-                        "approvedStudentIds" to FieldValue.arrayRemove(studentId),
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
-                )
-            }
+            val criticalOps = mutableListOf<(WriteBatch) -> Unit>()
+            criticalOps += { batch -> batch.delete(db.collection("enrollments").document(studentId)) }
 
             val studentOwnedCollections = listOf(
                 "quiz_attempts",
@@ -1090,7 +1241,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
                     .get()
                     .await()
                 for (doc in docs.documents) {
-                    batch.delete(doc.reference)
+                    val docRef = doc.reference
+                    criticalOps += { batch -> batch.delete(docRef) }
                 }
             }
 
@@ -1101,9 +1253,47 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 .get()
                 .await()
             for (doc in rosterDocs.documents) {
-                batch.delete(doc.reference)
+                val docRef = doc.reference
+                criticalOps += { batch -> batch.delete(docRef) }
             }
-            batch.commit().await()
+            commitWriteOpsChunked(criticalOps)
+
+            val backfillUpdates = mutableListOf<Pair<com.google.firebase.firestore.DocumentReference, Map<String, Any>>>()
+            val classScopedCollections = listOf("quizzes", "resources", "announcements")
+            for (col in classScopedCollections) {
+                val docs = db.collection(col)
+                    .whereEqualTo("teacherId", uid)
+                    .whereEqualTo("classId", enrollment.classId)
+                    .get()
+                    .await()
+                for (doc in docs.documents) {
+                    if (col == "resources" && !isDocSafeForResourceUpdate(doc)) continue
+                    val existingIds = (doc.get("approvedStudentIds") as? List<*>)
+                        ?.mapNotNull { it as? String }
+                        .orEmpty()
+                    if (studentId !in existingIds) continue
+                    backfillUpdates += doc.reference to mapOf(
+                        "approvedStudentIds" to FieldValue.arrayRemove(studentId),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                }
+            }
+
+            val glossaryDocs = db.collection("glossary_entries")
+                .whereEqualTo("teacherId", uid)
+                .get()
+                .await()
+            for (doc in glossaryDocs.documents) {
+                val existingIds = (doc.get("approvedStudentIds") as? List<*>)
+                    ?.mapNotNull { it as? String }
+                    .orEmpty()
+                if (studentId !in existingIds) continue
+                backfillUpdates += doc.reference to mapOf(
+                    "approvedStudentIds" to FieldValue.arrayRemove(studentId),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            }
+            commitBackfillOpsSafely(backfillUpdates)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1176,7 +1366,12 @@ class SvtRepository(private val db: FirebaseFirestore) {
     ): String {
         val uid = requireUserId()
         val quizRef = db.collection("quizzes").document()
-        val questionMaps = questions.map { q ->
+        val cleanTitle = clampMinMax(title, "QCM SVT", 2, 200)
+        val cleanDesc = description.trim().take(1000)
+        val cleanChapter = chapterSvt.trim().ifBlank { "SVT" }.take(150)
+        val cleanNotifTitle = notifTitle.trim().ifBlank { cleanTitle }.take(200)
+        val cleanNotifBody = notifBody.trim().ifBlank { cleanTitle }.take(1000)
+        val questionMaps = questions.take(20).map { q ->
             buildMap<String, Any> {
                 put("questionText", q.questionText.trim())
                 put("options", q.options.map { it.trim() })
@@ -1191,9 +1386,9 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val payload = mapOf(
             "classId" to classId,
             "teacherId" to uid,
-            "title" to title.trim(),
-            "description" to description.trim(),
-            "chapterSvt" to chapterSvt.trim(),
+            "title" to cleanTitle,
+            "description" to cleanDesc,
+            "chapterSvt" to cleanChapter,
             "questions" to questionMaps,
             "approvedStudentIds" to approvedStudentIds.distinct().take(100),
             "isPublished" to true,
@@ -1202,24 +1397,26 @@ class SvtRepository(private val db: FirebaseFirestore) {
             "updatedAt" to FieldValue.serverTimestamp()
         )
         try {
-            val batch = db.batch()
-            batch.set(quizRef, payload)
+            val ops = mutableListOf<(WriteBatch) -> Unit>()
+            ops += { batch -> batch.set(quizRef, payload) }
             for (studentId in approvedStudentIds.distinct()) {
                 val notifRef = db.collection("student_notifications").document()
-                batch.set(
-                    notifRef,
-                    mapOf(
-                        "studentId" to studentId,
-                        "teacherId" to uid,
-                        "type" to "quiz",
-                        "title" to notifTitle,
-                        "body" to notifBody,
-                        "isRead" to false,
-                        "createdAt" to FieldValue.serverTimestamp()
+                ops += { batch ->
+                    batch.set(
+                        notifRef,
+                        mapOf(
+                            "studentId" to studentId,
+                            "teacherId" to uid,
+                            "type" to "quiz",
+                            "title" to cleanNotifTitle,
+                            "body" to cleanNotifBody,
+                            "isRead" to false,
+                            "createdAt" to FieldValue.serverTimestamp()
+                        )
                     )
-                )
+                }
             }
-            batch.commit().await()
+            commitWriteOpsChunked(ops)
             return quizRef.id
         } catch (e: CancellationException) {
             throw e
@@ -1283,7 +1480,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
         attemptId: String? = null
     ): QuizAttempt {
         val uid = requireUserId()
-        val answersRecords = quiz.questions.mapIndexed { index, q ->
+        val limitedQuestions = quiz.questions.take(20)
+        val answersRecords = limitedQuestions.mapIndexed { index, q ->
             val selected = selectedAnswers.getOrElse(index) { -1 }
             val isCorrect = selected == q.correctIndex
             val timeSpent = perQuestionSeconds.getOrElse(index) { 0L }.coerceAtLeast(0L)
@@ -1294,11 +1492,14 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 timeSpentSeconds = timeSpent
             )
         }
-        val score = answersRecords.count { it.isCorrect }.toDouble()
-        val maxScore = quiz.questions.size.coerceAtLeast(1).toDouble()
+        val maxScore = limitedQuestions.size.coerceIn(1, 1000).toDouble()
+        val score = answersRecords.count { it.isCorrect }.toDouble().coerceIn(0.0, maxScore)
+        val safeQuizTitle = quiz.title.trim().ifBlank { "QCM SVT" }.take(200)
+        val safeStudentName = studentName.trim().ifBlank { "Élève" }.take(100)
+        val safeDuration = totalDurationSeconds.coerceIn(0L, 86400L)
 
         val attemptRef = if (!attemptId.isNullOrBlank()) {
-            db.collection("quiz_attempts").document(attemptId)
+            db.collection("quiz_attempts").document(sanitizeId(attemptId, 128))
         } else {
             db.collection("quiz_attempts").document()
         }
@@ -1312,14 +1513,14 @@ class SvtRepository(private val db: FirebaseFirestore) {
         }
         val payload = mapOf(
             "quizId" to quiz.id,
-            "quizTitle" to quiz.title,
+            "quizTitle" to safeQuizTitle,
             "classId" to quiz.classId,
             "teacherId" to quiz.teacherId,
             "studentId" to uid,
-            "studentName" to studentName,
+            "studentName" to safeStudentName,
             "score" to score,
             "maxScore" to maxScore,
-            "totalDurationSeconds" to totalDurationSeconds.coerceAtLeast(0L),
+            "totalDurationSeconds" to safeDuration,
             "answers" to answerMaps,
             "completedAt" to FieldValue.serverTimestamp(),
             "createdAt" to FieldValue.serverTimestamp()
@@ -1329,14 +1530,14 @@ class SvtRepository(private val db: FirebaseFirestore) {
             return QuizAttempt(
                 id = attemptRef.id,
                 quizId = quiz.id,
-                quizTitle = quiz.title,
+                quizTitle = safeQuizTitle,
                 classId = quiz.classId,
                 teacherId = quiz.teacherId,
                 studentId = uid,
-                studentName = studentName,
+                studentName = safeStudentName,
                 score = score,
                 maxScore = maxScore,
-                totalDurationSeconds = totalDurationSeconds,
+                totalDurationSeconds = safeDuration,
                 answers = answersRecords
             )
         } catch (e: CancellationException) {
@@ -1360,25 +1561,32 @@ class SvtRepository(private val db: FirebaseFirestore) {
         answers: List<QuestionAnswerRecord>
     ): QuizAttempt {
         val uid = requireUserId()
-        val attemptRef = db.collection("quiz_attempts").document(attemptId)
+        val safeAttemptId = sanitizeId(attemptId, 128)
+        val attemptRef = db.collection("quiz_attempts").document(safeAttemptId)
+        val safeQuizTitle = quizTitle.trim().ifBlank { "QCM SVT" }.take(200)
+        val safeStudentName = studentName.trim().ifBlank { "Élève" }.take(100)
+        val safeMaxScore = maxScore.coerceIn(1.0, 1000.0)
+        val safeScore = score.coerceIn(0.0, safeMaxScore)
+        val safeDuration = totalDurationSeconds.coerceIn(0L, 86400L)
+        val safeAnswers = answers.take(20)
         try {
             val existing = runCatching { attemptRef.get().await() }.getOrNull()
             if (existing != null && existing.exists()) {
                 return QuizAttempt(
-                    id = attemptId,
+                    id = safeAttemptId,
                     quizId = quizId,
-                    quizTitle = quizTitle,
+                    quizTitle = safeQuizTitle,
                     classId = classId,
                     teacherId = teacherId,
                     studentId = uid,
-                    studentName = studentName,
-                    score = score,
-                    maxScore = maxScore,
-                    totalDurationSeconds = totalDurationSeconds,
-                    answers = answers
+                    studentName = safeStudentName,
+                    score = safeScore,
+                    maxScore = safeMaxScore,
+                    totalDurationSeconds = safeDuration,
+                    answers = safeAnswers
                 )
             }
-            val answerMaps = answers.map { rec ->
+            val answerMaps = safeAnswers.map { rec ->
                 mapOf(
                     "questionIndex" to rec.questionIndex,
                     "selectedIndex" to rec.selectedIndex,
@@ -1388,31 +1596,31 @@ class SvtRepository(private val db: FirebaseFirestore) {
             }
             val payload = mapOf(
                 "quizId" to quizId,
-                "quizTitle" to quizTitle,
+                "quizTitle" to safeQuizTitle,
                 "classId" to classId,
                 "teacherId" to teacherId,
                 "studentId" to uid,
-                "studentName" to studentName,
-                "score" to score,
-                "maxScore" to maxScore,
-                "totalDurationSeconds" to totalDurationSeconds.coerceAtLeast(0L),
+                "studentName" to safeStudentName,
+                "score" to safeScore,
+                "maxScore" to safeMaxScore,
+                "totalDurationSeconds" to safeDuration,
                 "answers" to answerMaps,
                 "completedAt" to FieldValue.serverTimestamp(),
                 "createdAt" to FieldValue.serverTimestamp()
             )
             attemptRef.set(payload).await()
             return QuizAttempt(
-                id = attemptId,
+                id = safeAttemptId,
                 quizId = quizId,
-                quizTitle = quizTitle,
+                quizTitle = safeQuizTitle,
                 classId = classId,
                 teacherId = teacherId,
                 studentId = uid,
-                studentName = studentName,
-                score = score,
-                maxScore = maxScore,
-                totalDurationSeconds = totalDurationSeconds,
-                answers = answers
+                studentName = safeStudentName,
+                score = safeScore,
+                maxScore = safeMaxScore,
+                totalDurationSeconds = safeDuration,
+                answers = safeAnswers
             )
         } catch (e: CancellationException) {
             throw e
@@ -1485,38 +1693,45 @@ class SvtRepository(private val db: FirebaseFirestore) {
     ): String {
         val uid = requireUserId()
         val resRef = db.collection("resources").document()
+        val cleanTitle = clampMinMax(title, "Ressource SVT", 2, 200)
+        val cleanDesc = description.trim().take(1000)
+        val cleanUrl = fileUrl.trim().take(1000)
+        val cleanNotifTitle = notifTitle.trim().ifBlank { cleanTitle }.take(200)
+        val cleanNotifBody = notifBody.trim().ifBlank { cleanTitle }.take(1000)
         val payload = mapOf(
             "classId" to classId,
             "teacherId" to uid,
-            "title" to title.trim(),
-            "description" to description.trim(),
+            "title" to cleanTitle,
+            "description" to cleanDesc,
             "type" to type,
-            "fileUrl" to fileUrl.trim(),
-            "durationSeconds" to durationSeconds.coerceAtLeast(0L),
+            "fileUrl" to cleanUrl,
+            "durationSeconds" to durationSeconds.coerceIn(0L, 86400L),
             "approvedStudentIds" to approvedStudentIds.distinct().take(100),
             "isDownloadable" to isDownloadable,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
         try {
-            val batch = db.batch()
-            batch.set(resRef, payload)
+            val ops = mutableListOf<(WriteBatch) -> Unit>()
+            ops += { batch -> batch.set(resRef, payload) }
             for (studentId in approvedStudentIds.distinct()) {
                 val notifRef = db.collection("student_notifications").document()
-                batch.set(
-                    notifRef,
-                    mapOf(
-                        "studentId" to studentId,
-                        "teacherId" to uid,
-                        "type" to "resource",
-                        "title" to notifTitle,
-                        "body" to notifBody,
-                        "isRead" to false,
-                        "createdAt" to FieldValue.serverTimestamp()
+                ops += { batch ->
+                    batch.set(
+                        notifRef,
+                        mapOf(
+                            "studentId" to studentId,
+                            "teacherId" to uid,
+                            "type" to "resource",
+                            "title" to cleanNotifTitle,
+                            "body" to cleanNotifBody,
+                            "isRead" to false,
+                            "createdAt" to FieldValue.serverTimestamp()
+                        )
                     )
-                )
+                }
             }
-            batch.commit().await()
+            commitWriteOpsChunked(ops)
             return resRef.id
         } catch (e: CancellationException) {
             throw e
@@ -1621,37 +1836,43 @@ class SvtRepository(private val db: FirebaseFirestore) {
             }
 
             val chunkSchemeUrl = "${OfflineStorageManager.FIRESTORE_CHUNK_SCHEME}://${OfflineStorageManager.FIRESTORE_CHUNK_HOST}/$resourceId?ext=$ext"
+            val cleanTitle = clampMinMax(title, "Ressource SVT", 2, 200)
+            val cleanDesc = description.trim().take(1000)
+            val cleanNotifTitle = notifTitle.trim().ifBlank { cleanTitle }.take(200)
+            val cleanNotifBody = notifBody.trim().ifBlank { cleanTitle }.take(1000)
             val payload = mapOf(
                 "classId" to classId,
                 "teacherId" to uid,
-                "title" to title.trim(),
-                "description" to description.trim(),
+                "title" to cleanTitle,
+                "description" to cleanDesc,
                 "type" to type,
-                "fileUrl" to chunkSchemeUrl,
-                "durationSeconds" to durationSeconds.coerceAtLeast(0L),
+                "fileUrl" to chunkSchemeUrl.take(1000),
+                "durationSeconds" to durationSeconds.coerceIn(0L, 86400L),
                 "approvedStudentIds" to approvedStudentIds.distinct().take(100),
                 "isDownloadable" to isDownloadable,
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
-            val batch = db.batch()
-            batch.set(resRef, payload)
+            val ops = mutableListOf<(WriteBatch) -> Unit>()
+            ops += { batch -> batch.set(resRef, payload) }
             for (studentId in approvedStudentIds.distinct()) {
                 val notifRef = db.collection("student_notifications").document()
-                batch.set(
-                    notifRef,
-                    mapOf(
-                        "studentId" to studentId,
-                        "teacherId" to uid,
-                        "type" to "resource",
-                        "title" to notifTitle,
-                        "body" to notifBody,
-                        "isRead" to false,
-                        "createdAt" to FieldValue.serverTimestamp()
+                ops += { batch ->
+                    batch.set(
+                        notifRef,
+                        mapOf(
+                            "studentId" to studentId,
+                            "teacherId" to uid,
+                            "type" to "resource",
+                            "title" to cleanNotifTitle,
+                            "body" to cleanNotifBody,
+                            "isRead" to false,
+                            "createdAt" to FieldValue.serverTimestamp()
+                        )
                     )
-                )
+                }
             }
-            batch.commit().await()
+            commitWriteOpsChunked(ops)
             return resourceId
         } catch (e: CancellationException) {
             throw e
@@ -1726,7 +1947,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
         positionSeconds: Long,
         totalDurationSeconds: Long,
         existingTracking: VideoTracking?,
-        watchedPercentOverride: Double? = null
+        watchedPercentOverride: Double? = null,
+        knownRemoteExists: Boolean = false
     ): VideoTracking = videoTrackingMutex.withLock {
         val uid = requireUserId()
         val trackingId = "${resource.id}_$uid"
@@ -1734,18 +1956,27 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val safeStudentName = studentName.trim().ifBlank { "Élève" }.take(100)
 
         try {
-            val existingSnap = runCatching { docRef.get().await() }.getOrNull()
-            val docExists = existingSnap?.exists() == true
-            val remotePrevPos = if (docExists) {
-                existingSnap?.getLong("maxPositionSeconds") ?: 0L
-            } else 0L
-            val remotePrevPct = if (docExists) {
-                existingSnap?.getDouble("watchedPercentage") ?: 0.0
-            } else 0.0
+            val docExists: Boolean
+            val remotePrevPos: Long
+            val remotePrevPct: Double
+            if (knownRemoteExists && existingTracking != null) {
+                docExists = true
+                remotePrevPos = existingTracking.maxPositionSeconds
+                remotePrevPct = existingTracking.watchedPercentage
+            } else {
+                val existingSnap = runCatching { docRef.get().await() }.getOrNull()
+                docExists = existingSnap?.exists() == true
+                remotePrevPos = if (docExists) {
+                    existingSnap?.getLong("maxPositionSeconds") ?: 0L
+                } else 0L
+                remotePrevPct = if (docExists) {
+                    existingSnap?.getDouble("watchedPercentage") ?: 0.0
+                } else 0.0
+            }
 
             val prevMax = maxOf(existingTracking?.maxPositionSeconds ?: 0L, remotePrevPos)
             val prevPct = maxOf(existingTracking?.watchedPercentage ?: 0.0, remotePrevPct)
-            val (safeDuration, maxPos, pct, status) = computeVideoTrackingMetrics(
+            val metrics = computeVideoTrackingMetrics(
                 positionSeconds = positionSeconds,
                 totalDurationSeconds = totalDurationSeconds,
                 resourceDurationSeconds = resource.durationSeconds,
@@ -1753,22 +1984,34 @@ class SvtRepository(private val db: FirebaseFirestore) {
                 prevPercentage = prevPct,
                 watchedPercentOverride = watchedPercentOverride
             )
+            val (safeDuration, maxPos, pct, status) = metrics
+
+            if (docExists && shouldSkipVideoTrackingSync(existingTracking, metrics)) {
+                return@withLock existingTracking!!.copy(
+                    studentName = safeStudentName,
+                    maxPositionSeconds = maxPos,
+                    durationSeconds = safeDuration,
+                    watchedPercentage = pct,
+                    status = status
+                )
+            }
+
+            val createPayload = mapOf(
+                "resourceId" to resource.id,
+                "classId" to resource.classId,
+                "teacherId" to resource.teacherId,
+                "studentId" to uid,
+                "studentName" to safeStudentName,
+                "maxPositionSeconds" to maxPos,
+                "durationSeconds" to safeDuration,
+                "watchedPercentage" to pct,
+                "status" to status,
+                "lastWatchedAt" to FieldValue.serverTimestamp(),
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
 
             if (!docExists) {
-                val createPayload = mapOf(
-                    "resourceId" to resource.id,
-                    "classId" to resource.classId,
-                    "teacherId" to resource.teacherId,
-                    "studentId" to uid,
-                    "studentName" to safeStudentName,
-                    "maxPositionSeconds" to maxPos,
-                    "durationSeconds" to safeDuration,
-                    "watchedPercentage" to pct,
-                    "status" to status,
-                    "lastWatchedAt" to FieldValue.serverTimestamp(),
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
                 docRef.set(createPayload).await()
             } else {
                 val updatePayload = mapOf(
@@ -1780,7 +2023,15 @@ class SvtRepository(private val db: FirebaseFirestore) {
                     "lastWatchedAt" to FieldValue.serverTimestamp(),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
-                docRef.update(updatePayload).await()
+                try {
+                    docRef.update(updatePayload).await()
+                } catch (e: FirebaseFirestoreException) {
+                    if (e.code == FirebaseFirestoreException.Code.NOT_FOUND) {
+                        docRef.set(createPayload).await()
+                    } else {
+                        throw e
+                    }
+                }
             }
             return@withLock VideoTracking(
                 id = trackingId,
@@ -1804,15 +2055,18 @@ class SvtRepository(private val db: FirebaseFirestore) {
 
     suspend fun recordFileOpenedTracking(
         resource: CourseResource,
-        studentName: String
+        studentName: String,
+        existingTracking: VideoTracking? = null,
+        knownRemoteExists: Boolean = false
     ): VideoTracking {
         return upsertVideoTracking(
             resource = resource,
             studentName = studentName,
             positionSeconds = 1L,
             totalDurationSeconds = 1L,
-            existingTracking = null,
-            watchedPercentOverride = 100.0
+            existingTracking = existingTracking,
+            watchedPercentOverride = 100.0,
+            knownRemoteExists = knownRemoteExists
         )
     }
 
@@ -1853,34 +2107,40 @@ class SvtRepository(private val db: FirebaseFirestore) {
     ) {
         val uid = requireUserId()
         val annRef = db.collection("announcements").document()
+        val cleanTitle = clampMinMax(title, "Annonce SVT", 2, 200)
+        val cleanContent = content.trim().ifBlank { cleanTitle }.take(4000)
+        val cleanNotifTitle = notifTitle.trim().ifBlank { cleanTitle }.take(200)
+        val cleanNotifBody = notifBody.trim().ifBlank { cleanContent }.take(1000)
         val payload = mapOf(
             "classId" to classId,
             "teacherId" to uid,
-            "title" to title.trim(),
-            "content" to content.trim(),
+            "title" to cleanTitle,
+            "content" to cleanContent,
             "approvedStudentIds" to approvedStudentIds.distinct().take(100),
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
         try {
-            val batch = db.batch()
-            batch.set(annRef, payload)
+            val ops = mutableListOf<(WriteBatch) -> Unit>()
+            ops += { batch -> batch.set(annRef, payload) }
             for (studentId in approvedStudentIds.distinct()) {
                 val notifRef = db.collection("student_notifications").document()
-                batch.set(
-                    notifRef,
-                    mapOf(
-                        "studentId" to studentId,
-                        "teacherId" to uid,
-                        "type" to "announcement",
-                        "title" to notifTitle,
-                        "body" to notifBody,
-                        "isRead" to false,
-                        "createdAt" to FieldValue.serverTimestamp()
+                ops += { batch ->
+                    batch.set(
+                        notifRef,
+                        mapOf(
+                            "studentId" to studentId,
+                            "teacherId" to uid,
+                            "type" to "announcement",
+                            "title" to cleanNotifTitle,
+                            "body" to cleanNotifBody,
+                            "isRead" to false,
+                            "createdAt" to FieldValue.serverTimestamp()
+                        )
                     )
-                )
+                }
             }
-            batch.commit().await()
+            commitWriteOpsChunked(ops)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1941,14 +2201,16 @@ class SvtRepository(private val db: FirebaseFirestore) {
     ) {
         val uid = requireUserId()
         val msgRef = db.collection("private_messages").document()
+        val cleanStudentName = studentName.trim().ifBlank { "Élève" }.take(100)
+        val cleanContent = content.trim().take(2000)
         val payload = mapOf(
             "classId" to classId,
             "teacherId" to teacherId,
             "studentId" to studentId,
-            "studentName" to studentName,
+            "studentName" to cleanStudentName,
             "senderId" to uid,
             "senderRole" to senderRole,
-            "content" to content.trim(),
+            "content" to cleanContent,
             "isRead" to false,
             "createdAt" to FieldValue.serverTimestamp()
         )
@@ -1963,8 +2225,8 @@ class SvtRepository(private val db: FirebaseFirestore) {
                         "studentId" to studentId,
                         "teacherId" to teacherId,
                         "type" to "message",
-                        "title" to notifTitleForStudent,
-                        "body" to content.trim().take(120),
+                        "title" to notifTitleForStudent.trim().take(200),
+                        "body" to cleanContent.take(1000).take(120),
                         "isRead" to false,
                         "createdAt" to FieldValue.serverTimestamp()
                     )
@@ -1984,11 +2246,11 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val unread = messages.filter { !it.isRead && it.id.isNotBlank() }
         if (unread.isEmpty()) return
         try {
-            val batch = db.batch()
-            unread.take(100).forEach { msg ->
-                batch.update(db.collection("private_messages").document(msg.id), "isRead", true)
+            val ops: List<(WriteBatch) -> Unit> = unread.map { msg ->
+                val ref = db.collection("private_messages").document(msg.id)
+                return@map { batch: WriteBatch -> batch.update(ref, "isRead", true) }
             }
-            batch.commit().await()
+            commitWriteOpsChunked(ops)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -2048,7 +2310,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
     ): CustomGlossaryEntry {
         val uid = requireUserId()
         val entryId = "gloss_${UUID.randomUUID().toString().take(8)}"
-        val cleanTeacher = teacherName.trim().ifBlank { "Professeur" }.take(120)
+        val cleanTeacher = teacherName.trim().ifBlank { "Professeur" }.take(100)
         val cleanDomain = domain.trim().takeIf { it in SvtClass.DEFAULT_LAB_DOMAINS } ?: "NERVOUS_MUSCULAR"
         val cleanTerm = term.trim().take(120)
         val cleanDef = definition.trim().take(1500)
@@ -2129,12 +2391,14 @@ class SvtRepository(private val db: FirebaseFirestore) {
     ) {
         requireUserId()
         val notifRef = db.collection("student_notifications").document()
+        val cleanTitle = title.trim().ifBlank { "BioTerre SVT" }.take(200)
+        val cleanBody = body.trim().ifBlank { cleanTitle }.take(1000)
         val payload = mapOf(
             "studentId" to studentId,
-            "teacherId" to teacherId,
+            "teacherId" to teacherId.trim().take(128),
             "type" to "badge",
-            "title" to title,
-            "body" to body,
+            "title" to cleanTitle,
+            "body" to cleanBody,
             "isRead" to false,
             "createdAt" to FieldValue.serverTimestamp()
         )
@@ -2152,11 +2416,11 @@ class SvtRepository(private val db: FirebaseFirestore) {
         val unread = notifications.filter { !it.isRead && it.id.isNotBlank() }
         if (unread.isEmpty()) return
         try {
-            val batch = db.batch()
-            unread.take(100).forEach { notif ->
-                batch.update(db.collection("student_notifications").document(notif.id), "isRead", true)
+            val ops: List<(WriteBatch) -> Unit> = unread.map { notif ->
+                val ref = db.collection("student_notifications").document(notif.id)
+                return@map { batch: WriteBatch -> batch.update(ref, "isRead", true) }
             }
-            batch.commit().await()
+            commitWriteOpsChunked(ops)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -2193,37 +2457,43 @@ class SvtRepository(private val db: FirebaseFirestore) {
 
     suspend fun saveRosterStudent(roster: RosterStudent): RosterStudent {
         val uid = requireUserId()
-        val safeDocId = roster.id.ifBlank { "${roster.classId}_${roster.massarNumber}" }
-            .replace(Regex("[^a-zA-Z0-9_-]"), "_")
-            .take(120)
+        val safeDocId = sanitizeId(roster.id.ifBlank { "${roster.classId}_${roster.massarNumber}" }, 120)
         val docRef = db.collection("class_rosters").document(safeDocId)
+        val cleanClassName = clampMinMax(roster.className, "Classe SVT", 2, 100)
+        val cleanTeacherName = roster.teacherName.trim().ifBlank { "Professeur" }.take(100)
+        val cleanQrToken = clampMinMax(roster.qrToken, "SVT000", 6, 64)
+        val cleanFullName = clampMinMax(roster.fullName, "Élève SVT", 2, 100)
+        val cleanMassar = clampMinMax(roster.massarNumber, "M0", 2, 40)
+        val cleanProvPass = clampMinMax(roster.provisionalPassword, "Svt123", 6, 64)
+        val cleanStudentUid = roster.studentUid.trim().take(128)
+        val cleanQrPayload = clampMinMax(roster.qrPayload, cleanQrToken, 6, 160)
         try {
             val existing = runCatching { docRef.get().await() }.getOrNull()
             if (existing != null && existing.exists()) {
                 val updates = mapOf(
-                    "className" to roster.className.trim(),
-                    "teacherName" to roster.teacherName.trim(),
-                    "qrToken" to roster.qrToken.trim(),
-                    "fullName" to roster.fullName.trim(),
-                    "massarNumber" to roster.massarNumber.trim(),
-                    "provisionalPassword" to roster.provisionalPassword,
-                    "studentUid" to roster.studentUid,
-                    "qrPayload" to roster.qrPayload,
+                    "className" to cleanClassName,
+                    "teacherName" to cleanTeacherName,
+                    "qrToken" to cleanQrToken,
+                    "fullName" to cleanFullName,
+                    "massarNumber" to cleanMassar,
+                    "provisionalPassword" to cleanProvPass,
+                    "studentUid" to cleanStudentUid,
+                    "qrPayload" to cleanQrPayload,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
                 docRef.update(updates).await()
             } else {
                 val payload = mapOf(
                     "classId" to roster.classId,
-                    "className" to roster.className.trim(),
+                    "className" to cleanClassName,
                     "teacherId" to uid,
-                    "teacherName" to roster.teacherName.trim(),
-                    "qrToken" to roster.qrToken.trim(),
-                    "fullName" to roster.fullName.trim(),
-                    "massarNumber" to roster.massarNumber.trim(),
-                    "provisionalPassword" to roster.provisionalPassword,
-                    "studentUid" to roster.studentUid,
-                    "qrPayload" to roster.qrPayload,
+                    "teacherName" to cleanTeacherName,
+                    "qrToken" to cleanQrToken,
+                    "fullName" to cleanFullName,
+                    "massarNumber" to cleanMassar,
+                    "provisionalPassword" to cleanProvPass,
+                    "studentUid" to cleanStudentUid,
+                    "qrPayload" to cleanQrPayload,
                     "createdAt" to FieldValue.serverTimestamp(),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
@@ -2312,14 +2582,14 @@ class SvtRepository(private val db: FirebaseFirestore) {
     ): String {
         val uid = requireUserId()
         val updateRef = db.collection("app_updates").document()
-        val normalizedUrl = AppUpdateUrlHelper.normalizeDownloadUrl(downloadUrl)
+        val normalizedUrl = AppUpdateUrlHelper.normalizeDownloadUrl(downloadUrl).take(1000)
         val payload = mapOf(
             "classId" to classId,
             "teacherId" to uid,
-            "teacherName" to teacherName.trim().ifBlank { "Professeur" },
-            "versionCode" to versionCode,
-            "versionName" to versionName.trim(),
-            "releaseNotes" to releaseNotes.trim(),
+            "teacherName" to teacherName.trim().ifBlank { "Professeur" }.take(100),
+            "versionCode" to versionCode.coerceIn(1, 1_000_000),
+            "versionName" to versionName.trim().ifBlank { "1.0" }.take(40),
+            "releaseNotes" to releaseNotes.trim().take(2000),
             "downloadUrl" to normalizedUrl,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
@@ -2329,24 +2599,26 @@ class SvtRepository(private val db: FirebaseFirestore) {
             val cleanNotifBody = notifBody.trim().take(1000)
             val targets = approvedStudentIds.distinct()
             if (targets.isNotEmpty() && cleanNotifTitle.isNotEmpty() && cleanNotifBody.isNotEmpty()) {
-                val batch = db.batch()
-                batch.set(updateRef, payload)
-                for (studentId in targets.take(400)) {
+                val ops = mutableListOf<(WriteBatch) -> Unit>()
+                ops += { batch -> batch.set(updateRef, payload) }
+                for (studentId in targets) {
                     val notifRef = db.collection("student_notifications").document()
-                    batch.set(
-                        notifRef,
-                        mapOf(
-                            "studentId" to studentId,
-                            "teacherId" to uid,
-                            "type" to "announcement",
-                            "title" to cleanNotifTitle,
-                            "body" to cleanNotifBody,
-                            "isRead" to false,
-                            "createdAt" to FieldValue.serverTimestamp()
+                    ops += { batch ->
+                        batch.set(
+                            notifRef,
+                            mapOf(
+                                "studentId" to studentId,
+                                "teacherId" to uid,
+                                "type" to "announcement",
+                                "title" to cleanNotifTitle,
+                                "body" to cleanNotifBody,
+                                "isRead" to false,
+                                "createdAt" to FieldValue.serverTimestamp()
+                            )
                         )
-                    )
+                    }
                 }
-                batch.commit().await()
+                commitWriteOpsChunked(ops)
             } else {
                 updateRef.set(payload).await()
             }
@@ -2392,6 +2664,60 @@ class SvtRepository(private val db: FirebaseFirestore) {
 
     companion object {
         const val MAX_CHUNKED_UPLOAD_BYTES: Long = 20L * 1024L * 1024L
+        private const val FIRESTORE_BATCH_SAFE_LIMIT = 400
+        private val VALID_RESOURCE_URL_REGEX =
+            Regex("^(https://.+|firestore://resource_chunks/[a-zA-Z0-9_-]+.*)")
+        private val INVALID_ID_CHARS_REGEX = Regex("[^a-zA-Z0-9_-]")
+
+        internal fun sanitizeId(raw: String, maxLen: Int = 128): String {
+            return raw.trim().replace(INVALID_ID_CHARS_REGEX, "_").take(maxLen)
+        }
+
+        internal fun clampMinMax(
+            raw: String,
+            fallback: String,
+            minLen: Int,
+            maxLen: Int
+        ): String {
+            val cleaned = raw.trim()
+            val candidate = when {
+                cleaned.isBlank() -> fallback
+                cleaned.length < minLen -> cleaned.padEnd(minLen, '_')
+                else -> cleaned
+            }
+            return candidate.take(maxLen)
+        }
+
+        internal fun isValidResourceUrlForRules(url: String): Boolean {
+            val clean = url.trim()
+            return clean.length in 1..1000 && VALID_RESOURCE_URL_REGEX.matches(clean)
+        }
+
+        private fun isDocSafeForResourceUpdate(
+            doc: com.google.firebase.firestore.DocumentSnapshot
+        ): Boolean {
+            val fileUrl = doc.getString("fileUrl").orEmpty()
+            val title = doc.getString("title").orEmpty()
+            val type = doc.getString("type").orEmpty()
+            val duration = doc.getLong("durationSeconds") ?: -1L
+            return isValidResourceUrlForRules(fileUrl) &&
+                title.length in 2..200 &&
+                type in setOf("pdf", "word", "image", "video") &&
+                duration in 0L..86400L
+        }
+
+        fun shouldSkipVideoTrackingSync(
+            existing: VideoTracking?,
+            metrics: VideoTrackingMetrics
+        ): Boolean {
+            if (existing == null) return false
+            if (existing.status == "completed" && existing.watchedPercentage >= 100.0) return true
+            if (metrics.status != existing.status) return false
+            if (metrics.watchedPercentage >= 100.0 && existing.watchedPercentage < 100.0) return false
+            val pctGain = metrics.watchedPercentage - existing.watchedPercentage
+            val posGain = metrics.maxPositionSeconds - existing.maxPositionSeconds
+            return posGain < 5L && pctGain < 5.0
+        }
 
         fun computeVideoTrackingMetrics(
             positionSeconds: Long,

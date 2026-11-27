@@ -892,4 +892,10 @@
     <string name="svt_tool_neuro_state_subthreshold">Resting (-70 mV): stimulus too weak to open Na⁺ channels</string>
     <string name="svt_tool_neuro_state_no_ca">Synaptic / troponin block: missing Ca²⁺ ions</string>
     <string name="svt_tool_neuro_state_no_atp">Muscle fatigue: insufficient ATP for myosin head stroke</string>
+
+    <string name="quota_exceeded_error">Firebase daily server quota reached for now. Please try again later or upgrade your plan.</string>
+    <string name="quota_exceeded_ai_error">Daily AI request limit reached. Use the offline glossary or try again later.</string>
+    <string name="permission_denied_error">Access denied by the server (insufficient permissions). Check your account status or sign in again.</string>
+    <string name="profile_load_error_title">Unable to load your profile</string>
+    <string name="profile_load_retry_btn">Retry</string>
 </resources>

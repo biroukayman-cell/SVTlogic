@@ -495,11 +495,12 @@ private fun GlossaryLabSection(
     val isSearchableQuery = remember(query) { SvtLabLogic.isSearchableSvtQuery(query) }
 
     LaunchedEffect(query, currentLanguage, filtered.size, isGuestMode) {
-        if (isGuestMode || query.isBlank() || filtered.isNotEmpty()) {
+        val clean = query.trim()
+        if (isGuestMode || clean.isBlank() || filtered.isNotEmpty()) {
             onClearLabSvtSearch()
-        } else if (SvtLabLogic.isSearchableSvtQuery(query)) {
-            delay(650L)
-            onSearchLabSvtTerm(query.trim())
+        } else if (clean.length >= 3 && SvtLabLogic.isSearchableSvtQuery(clean)) {
+            delay(1200L)
+            onSearchLabSvtTerm(clean)
         } else {
             onClearLabSvtSearch()
         }

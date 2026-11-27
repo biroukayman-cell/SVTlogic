@@ -13,13 +13,25 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -165,7 +178,10 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
-        if (FirebaseApp.getApps(this).isNotEmpty() && Firebase.auth.currentUser != null) {
+        if (!isChangingConfigurations &&
+            FirebaseApp.getApps(this).isNotEmpty() &&
+            Firebase.auth.currentUser != null
+        ) {
             NotificationSyncScheduler.scheduleBackgroundCheckOnLeave(this)
         }
     }
@@ -321,6 +337,7 @@ private fun AuthenticatedSvtFlow(
     }
 
     val onSignOut: () -> Unit = {
+        viewModel.endSession()
         signOutUser(activityContext, scope)
     }
 
@@ -489,29 +506,13 @@ private fun AuthenticatedSvtFlow(
         }
 
         is ProfileGateState.Error -> {
-            val fallbackMassar = studentRoster?.massarNumber?.takeIf { it.isNotBlank() } ?: authDraft.massarNumber
-            val resolvedDefaultEmail = authDraft.email.ifBlank {
-                currentUser.email.orEmpty().takeUnless { it.endsWith("@student.bioterre.svt") }.orEmpty()
-            }.ifBlank {
-                if (authDraft.role == "student" || studentRoster != null) {
-                    AuthSessionDraft.defaultStudentTaalimEmail(fallbackMassar)
-                } else ""
-            }
-            AccountSetupScreen(
-                defaultName = authDraft.fullName.ifBlank { currentUser.displayName.orEmpty() },
-                defaultRole = authDraft.role,
-                defaultMassar = authDraft.massarNumber,
-                defaultEmail = resolvedDefaultEmail,
-                defaultPhone = authDraft.phoneNumber,
-                defaultEstablishment = authDraft.establishment,
-                studentRoster = studentRoster,
-                hasPendingQrToken = authDraft.pendingClassQrToken.isNotBlank(),
-                currentLanguage = currentLanguage,
-                onLanguageSelected = onLanguageSelected,
-                onSubmit = handleAccountSetupSubmit,
-                onSignOut = onSignOut,
-                isSubmitting = isSettingUpProfile,
-                serverError = onboardingLocalError ?: actionError ?: state.message
+            ProfileErrorScreen(
+                message = state.message,
+                onRetry = {
+                    viewModel.clearError()
+                    viewModel.retryProfileLoad()
+                },
+                onSignOut = onSignOut
             )
         }
 
@@ -671,6 +672,73 @@ private fun AuthenticatedSvtFlow(
                         onThemeChanged = onThemeChanged,
                         onSignOut = onSignOut
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileErrorScreen(
+    message: String,
+    onRetry: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier.widthIn(max = 460.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(40.dp)
+                )
+                Text(
+                    text = stringResource(id = R.string.profile_load_error_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Button(
+                    onClick = onRetry,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("profile_retry_button")
+                ) {
+                    Text(text = stringResource(id = R.string.profile_load_retry_btn))
+                }
+                OutlinedButton(
+                    onClick = onSignOut,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("profile_error_signout_button")
+                ) {
+                    Text(text = stringResource(id = R.string.auth_sign_out))
                 }
             }
         }

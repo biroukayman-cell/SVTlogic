@@ -892,4 +892,10 @@
     <string name="svt_tool_neuro_state_subthreshold">كمون الراحة (-70 mV): الإهاجة غير كافية لفتح قنوات Na⁺</string>
     <string name="svt_tool_neuro_state_no_ca">توقف عند السينابس/التروبونين: نقص Ca²⁺</string>
     <string name="svt_tool_neuro_state_no_atp">تعب عضلي: نقص ATP لدوران رؤوس الميوزين</string>
+
+    <string name="quota_exceeded_error">تم بلوغ الحد اليومي لخادم Firebase حالياً. يُرجى المحاولة لاحقاً أو الترقية لخطة أعلى.</string>
+    <string name="quota_exceeded_ai_error">تم بلوغ الحد اليومي لطلبات الذكاء الاصطناعي. استخدم المعجم دون إنترنت أو أعد المحاولة لاحقاً.</string>
+    <string name="permission_denied_error">تم رفض الوصول من الخادم (صلاحيات غير كافية). تحقق من حالة حسابك أو أعد تسجيل الدخول.</string>
+    <string name="profile_load_error_title">تعذر تحميل ملفك الشخصي</string>
+    <string name="profile_load_retry_btn">إعادة المحاولة</string>
 </resources>

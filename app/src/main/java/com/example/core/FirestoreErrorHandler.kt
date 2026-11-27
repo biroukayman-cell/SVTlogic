@@ -1,7 +1,9 @@
 package com.example.core
 
+import android.content.Context
 import android.util.Log
 import com.example.BuildConfig
+import com.example.R
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
@@ -15,6 +17,55 @@ enum class OperationType(val value: String) {
     LIST("list"),
     GET("get"),
     WRITE("write"),
+}
+
+fun isQuotaExceededError(error: Throwable?): Boolean {
+    if (error == null) return false
+    return generateSequence(error) { it.cause }.any { cause ->
+        if (cause is FirebaseFirestoreException &&
+            cause.code == FirebaseFirestoreException.Code.RESOURCE_EXHAUSTED
+        ) {
+            return@any true
+        }
+        val msg = cause.message.orEmpty()
+        msg.contains("RESOURCE_EXHAUSTED", ignoreCase = true) ||
+            msg.contains("Quota exceeded", ignoreCase = true) ||
+            msg.contains("free daily", ignoreCase = true) ||
+            msg.contains("quota metric", ignoreCase = true) ||
+            msg.contains("rate limit", ignoreCase = true) ||
+            msg.contains("Too many requests", ignoreCase = true) ||
+            msg.contains("Too many attempts", ignoreCase = true) ||
+            msg.contains("HTTP 429", ignoreCase = true) ||
+            msg.contains("429 Too Many Requests", ignoreCase = true)
+    }
+}
+
+fun isPermissionDeniedError(error: Throwable?): Boolean {
+    if (error == null) return false
+    return generateSequence(error) { it.cause }.any { cause ->
+        if (cause is FirebaseFirestoreException &&
+            cause.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
+        ) {
+            return@any true
+        }
+        val msg = cause.message.orEmpty()
+        msg.contains("PERMISSION_DENIED", ignoreCase = true) ||
+            msg.contains("Missing or insufficient permissions", ignoreCase = true)
+    }
+}
+
+fun userFriendlyFirestoreErrorMessage(
+    context: Context,
+    error: Throwable,
+    fallback: String
+): String {
+    if (isQuotaExceededError(error)) {
+        return context.getString(R.string.quota_exceeded_error)
+    }
+    if (isPermissionDeniedError(error)) {
+        return context.getString(R.string.permission_denied_error)
+    }
+    return error.localizedMessage?.takeIf { it.isNotBlank() } ?: fallback
 }
 
 private fun maskEmailForLogs(email: String?): String? {
