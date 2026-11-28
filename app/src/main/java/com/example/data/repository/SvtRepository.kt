@@ -894,8 +894,11 @@ class SvtRepository(private val db: FirebaseFirestore) {
         requireUserId()
         val clean = qrToken.trim()
         if (clean.isEmpty()) return null
-        val candidates = listOf(clean, clean.uppercase(Locale.US)).distinct()
-        var lastPath = "class_codes/$clean"
+        val candidates = listOf(clean, clean.uppercase(Locale.US))
+            .distinct()
+            .filter { VALID_CLASS_CODE_ID_REGEX.matches(it) }
+        if (candidates.isEmpty()) return null
+        var lastPath = "class_codes/${candidates.first()}"
         return try {
             for (candidate in candidates) {
                 val docRef = db.collection("class_codes").document(candidate)
@@ -2668,6 +2671,7 @@ class SvtRepository(private val db: FirebaseFirestore) {
         private val VALID_RESOURCE_URL_REGEX =
             Regex("^(https://.+|firestore://resource_chunks/[a-zA-Z0-9_-]+.*)")
         private val INVALID_ID_CHARS_REGEX = Regex("[^a-zA-Z0-9_-]")
+        private val VALID_CLASS_CODE_ID_REGEX = Regex("^[a-zA-Z0-9_-]{1,128}$")
 
         internal fun sanitizeId(raw: String, maxLen: Int = 128): String {
             return raw.trim().replace(INVALID_ID_CHARS_REGEX, "_").take(maxLen)

@@ -142,6 +142,7 @@ import com.example.core.QrScanResult
 import com.example.core.SavedBiometricCredential
 import com.example.core.SavedBiometricSummary
 import com.example.core.findFragmentActivity
+import com.example.core.resetCachedAppCheckToken
 import com.example.data.model.Enrollment
 import com.example.data.model.RosterStudent
 import com.example.data.model.UserProfile
@@ -181,7 +182,7 @@ fun signOutUser(
     }
 }
 
-private fun mapFirebaseAuthError(context: Context, e: Exception): String {
+internal fun mapFirebaseAuthError(context: Context, e: Exception): String {
     if (e is FirebaseAuthUserCollisionException) {
         return context.getString(R.string.auth_error_email_in_use)
     }
@@ -195,18 +196,37 @@ private fun mapFirebaseAuthError(context: Context, e: Exception): String {
         }
         return context.getString(R.string.auth_error_invalid_credentials)
     }
-    if (e is FirebaseAuthException) {
-        val msg = e.message.orEmpty()
-        if (e.errorCode == "ERROR_OPERATION_NOT_ALLOWED" ||
-            e.errorCode == "CONFIGURATION_NOT_FOUND" ||
-            msg.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) ||
-            msg.contains("PASSWORD_LOGIN_DISABLED", ignoreCase = true)
-        ) {
-            return context.getString(R.string.auth_error_email_disabled)
+    val rawMsg = buildString {
+        append(e.localizedMessage ?: e.message.orEmpty())
+        val causeMsg = e.cause?.message.orEmpty()
+        if (causeMsg.isNotBlank() && !contains(causeMsg)) {
+            append(' ').append(causeMsg)
         }
     }
-    val rawMsg = e.localizedMessage ?: e.message.orEmpty()
-    if (rawMsg.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) ||
+    val errorCode = (e as? FirebaseAuthException)?.errorCode.orEmpty()
+    if (errorCode == "ERROR_TOO_MANY_REQUESTS" ||
+        errorCode == "ERROR_QUOTA_EXCEEDED" ||
+        rawMsg.contains("TOO_MANY_ATTEMPTS", ignoreCase = true) ||
+        rawMsg.contains("QUOTA_EXCEEDED", ignoreCase = true) ||
+        rawMsg.contains("RESOURCE_EXHAUSTED", ignoreCase = true) ||
+        rawMsg.contains("Quota exceeded", ignoreCase = true) ||
+        rawMsg.contains("Too many requests", ignoreCase = true) ||
+        rawMsg.contains("rate limit", ignoreCase = true) ||
+        rawMsg.contains("429", ignoreCase = true)
+    ) {
+        return context.getString(R.string.auth_error_quota_exceeded)
+    }
+    if (rawMsg.contains("App Check", ignoreCase = true) ||
+        rawMsg.contains("app_check", ignoreCase = true) ||
+        rawMsg.contains("attestation", ignoreCase = true) ||
+        rawMsg.contains("recaptcha", ignoreCase = true)
+    ) {
+        resetCachedAppCheckToken(context)
+        return context.getString(R.string.auth_error_app_check)
+    }
+    if (errorCode == "ERROR_OPERATION_NOT_ALLOWED" ||
+        errorCode == "CONFIGURATION_NOT_FOUND" ||
+        rawMsg.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) ||
         rawMsg.contains("PASSWORD_LOGIN_DISABLED", ignoreCase = true)
     ) {
         return context.getString(R.string.auth_error_email_disabled)

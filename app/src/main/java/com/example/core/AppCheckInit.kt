@@ -138,3 +138,60 @@ fun configureAppCheck(context: Context, intent: Intent?) {
         Log.e(TAG, "Failed to initialize Firebase App Check", e)
     }
 }
+
+fun resetCachedAppCheckToken(context: Context) {
+    runCatching {
+        val app = if (FirebaseApp.getApps(context).isEmpty()) {
+            FirebaseApp.initializeApp(context)
+        } else {
+            FirebaseApp.getInstance()
+        } ?: return
+        clearAppCheckTokenStore(context.applicationContext, app.persistenceKey)
+        FirebaseAppCheck.getInstance(app).getAppCheckToken(true)
+    }
+}
+
+fun installAppCheckForSecondaryApp(context: Context, secondaryApp: FirebaseApp) {
+    runCatching {
+        val appContext = context.applicationContext
+        val persistenceKey = runCatching { FirebaseApp.getInstance().persistenceKey }.getOrDefault("")
+        val prefs = if (persistenceKey.isNotEmpty()) {
+            appContext.getSharedPreferences("$DEBUG_STORE_PREFIX$persistenceKey", Context.MODE_PRIVATE)
+        } else {
+            null
+        }
+        val hasPersistedHarnessToken = BuildConfig.DEBUG &&
+            prefs?.getBoolean(HARNESS_DEBUG_TOKEN_KEY, false) == true &&
+            !prefs.getString(DEBUG_SECRET_KEY, null).isNullOrBlank()
+
+        if (hasPersistedHarnessToken) {
+            val secret = prefs?.getString(DEBUG_SECRET_KEY, null).orEmpty()
+            if (secret.isNotBlank()) {
+                appContext.getSharedPreferences(
+                    "$DEBUG_STORE_PREFIX${secondaryApp.persistenceKey}",
+                    Context.MODE_PRIVATE
+                ).edit().putString(DEBUG_SECRET_KEY, secret).commit()
+            }
+            FirebaseAppCheck.getInstance(secondaryApp).installAppCheckProviderFactory(
+                DebugAppCheckProviderFactory.getInstance()
+            )
+            return
+        }
+
+        val resId = appContext.resources.getIdentifier(
+            RECAPTCHA_SITE_KEY_RES,
+            "string",
+            appContext.packageName
+        )
+        val siteKey = if (resId != 0) appContext.getString(resId).trim() else ""
+        if (siteKey.isNotBlank()) {
+            FirebaseAppCheck.getInstance(secondaryApp).installAppCheckProviderFactory(
+                RecaptchaAppCheckProviderFactory.getInstance(siteKey)
+            )
+        } else if (BuildConfig.DEBUG) {
+            FirebaseAppCheck.getInstance(secondaryApp).installAppCheckProviderFactory(
+                DebugAppCheckProviderFactory.getInstance()
+            )
+        }
+    }
+}

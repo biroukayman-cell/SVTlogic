@@ -54,6 +54,17 @@ fun isPermissionDeniedError(error: Throwable?): Boolean {
     }
 }
 
+fun isAppCheckError(error: Throwable?): Boolean {
+    if (error == null) return false
+    return generateSequence(error) { it.cause }.any { cause ->
+        val msg = cause.message.orEmpty()
+        msg.contains("App Check", ignoreCase = true) ||
+            msg.contains("app_check", ignoreCase = true) ||
+            msg.contains("attestation", ignoreCase = true) ||
+            msg.contains("recaptcha", ignoreCase = true)
+    }
+}
+
 fun userFriendlyFirestoreErrorMessage(
     context: Context,
     error: Throwable,
@@ -61,6 +72,10 @@ fun userFriendlyFirestoreErrorMessage(
 ): String {
     if (isQuotaExceededError(error)) {
         return context.getString(R.string.quota_exceeded_error)
+    }
+    if (isAppCheckError(error)) {
+        resetCachedAppCheckToken(context)
+        return context.getString(R.string.auth_error_app_check)
     }
     if (isPermissionDeniedError(error)) {
         return context.getString(R.string.permission_denied_error)

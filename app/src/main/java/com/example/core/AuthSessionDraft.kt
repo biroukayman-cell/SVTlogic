@@ -106,12 +106,14 @@ object AuthSessionDraft {
 
     fun getProvisionerAuth(context: Context): FirebaseAuth {
         val appName = "bioterre_student_provisioner"
-        val existing = FirebaseApp.getApps(context).firstOrNull { it.name == appName }
+        val appContext = context.applicationContext
+        val existing = FirebaseApp.getApps(appContext).firstOrNull { it.name == appName }
         val secondaryApp = existing ?: FirebaseApp.initializeApp(
-            context.applicationContext,
+            appContext,
             FirebaseApp.getInstance().options,
             appName
         )
+        installAppCheckForSecondaryApp(appContext, secondaryApp)
         return FirebaseAuth.getInstance(secondaryApp)
     }
 }

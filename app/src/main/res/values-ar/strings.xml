@@ -897,5 +897,10 @@
     <string name="quota_exceeded_ai_error">تم بلوغ الحد اليومي لطلبات الذكاء الاصطناعي. استخدم المعجم دون إنترنت أو أعد المحاولة لاحقاً.</string>
     <string name="permission_denied_error">تم رفض الوصول من الخادم (صلاحيات غير كافية). تحقق من حالة حسابك أو أعد تسجيل الدخول.</string>
     <string name="profile_load_error_title">تعذر تحميل ملفك الشخصي</string>
+    <string name="profile_load_error_body">تعذر جلب ملفك الشخصي من Firebase. تحقق من الاتصال بالإنترنت أو الصلاحيات ثم أعد المحاولة.</string>
     <string name="profile_load_retry_btn">إعادة المحاولة</string>
+    <string name="retry_action">إعادة المحاولة</string>
+    <string name="firestore_sync_warning_banner">توقفت مزامنة Firebase</string>
+    <string name="auth_error_app_check">تم رفض التحقق الأمني Firebase App Check. تحقق من اتصال الإنترنت وخدمات Google Play ثم أعد المحاولة. إذا استمر المشكل، راجع إعدادات App Check أو حصة reCAPTCHA في لوحة تحكم Firebase.</string>
+    <string name="auth_error_quota_exceeded">عدد محاولات كبير أو تم بلوغ حصة المصادقة مؤقتاً على خادم Firebase. انتظر بضع دقائق ثم أعد المحاولة.</string>
 </resources>

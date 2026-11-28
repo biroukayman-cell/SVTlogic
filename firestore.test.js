@@ -1226,9 +1226,11 @@ test("Establishments & custom glossary entries: teacher owns establishments/glos
   await assertFails(studentADb.collection("glossary_entries").doc("gloss_1").delete());
 });
 
-test("Student Android + Web/iPhone companion device locks operate independently and reset together", async () => {
+test("Student Android device lock/reset handles legacy docs and class_rosters/classes allow safe non-existent get", async () => {
   const teacherDb = testEnv.authenticatedContext(TEACHER_UID).firestore();
   const studentADb = testEnv.authenticatedContext(STUDENT_A_UID).firestore();
+  const studentBDb = testEnv.authenticatedContext(STUDENT_B_UID).firestore();
+  const unauthDb = testEnv.unauthenticatedContext().firestore();
   const now = serverNow();
 
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
@@ -1244,79 +1246,80 @@ test("Student Android + Web/iPhone companion device locks operate independently 
       requestedAt: now,
       updatedAt: now,
     });
-  });
 
-  // Student A creates profile and binds Android device
-  await assertSucceeds(
-    studentADb.collection("users").doc(STUDENT_A_UID).set({
+    // Legacy user document containing old boundWebDevice* fields from previous web version
+    await ctx.firestore().collection("users").doc(STUDENT_A_UID).set({
       userId: STUDENT_A_UID,
       fullName: "Amina El Amrani",
       phoneNumber: "+212600112233",
       role: "student",
       acceptedTerms: true,
-      xp: 0,
-      loginStreak: 1,
+      xp: 10,
+      loginStreak: 2,
       lastLoginDate: "2026-11-26",
       unlockedBadgeIds: [],
       boundDeviceId: "aid_android_1",
       boundDeviceModel: "Samsung A55",
+      boundWebDeviceId: "legacy_web_1",
+      boundWebDeviceModel: "Legacy Chrome",
       createdAt: now,
       updatedAt: now,
+    });
+  });
+
+  // Student A cannot overwrite Android device binding once bound
+  await assertFails(
+    studentADb.collection("users").doc(STUDENT_A_UID).update({
+      boundDeviceId: "aid_android_2",
+      boundDeviceModel: "Other Phone",
+      updatedAt: now,
     })
   );
 
-  // Student A can ALSO bind one Web/iPhone companion device without disturbing Android lock
+  // Student A can still update XP/streak on legacy doc containing boundWebDevice*
   await assertSucceeds(
     studentADb.collection("users").doc(STUDENT_A_UID).update({
-      boundWebDeviceId: "web_iphone_1",
-      boundWebDeviceModel: "iPhone Safari",
+      xp: 25,
       updatedAt: now,
     })
   );
 
-  // Student A cannot overwrite or clear boundWebDeviceId once bound
-  await assertFails(
-    studentADb.collection("users").doc(STUDENT_A_UID).update({
-      boundWebDeviceId: "web_iphone_2",
-      boundWebDeviceModel: "Another Browser",
-      updatedAt: now,
-    })
-  );
-  await assertFails(
-    studentADb.collection("users").doc(STUDENT_A_UID).update({
-      boundWebDeviceId: "",
-      boundWebDeviceModel: "",
-      updatedAt: now,
-    })
-  );
-
-  // Teacher cannot hijack boundWebDeviceId, but CAN reset both Android and Web locks
-  await assertFails(
-    teacherDb.collection("users").doc(STUDENT_A_UID).update({
-      boundDeviceId: "",
-      boundDeviceModel: "",
-      boundWebDeviceId: "hijack_web",
-      boundWebDeviceModel: "Other",
-      updatedAt: now,
-    })
-  );
+  // Teacher can reset Android device lock on legacy doc WITHOUT passing boundWebDevice* fields
   await assertSucceeds(
     teacherDb.collection("users").doc(STUDENT_A_UID).update({
       boundDeviceId: "",
       boundDeviceModel: "",
-      boundWebDeviceId: "",
-      boundWebDeviceModel: "",
       updatedAt: now,
     })
   );
 
-  // Student A can now re-bind a new Web/iPhone browser
+  // Student A can now bind a fresh Android device
   await assertSucceeds(
     studentADb.collection("users").doc(STUDENT_A_UID).update({
-      boundWebDeviceId: "web_iphone_2",
-      boundWebDeviceModel: "iPhone 16 Safari",
+      boundDeviceId: "aid_android_2",
+      boundDeviceModel: "Xiaomi Redmi",
       updatedAt: now,
     })
+  );
+
+  // Non-existent class_rosters single-doc get succeeds for signed-in teacher before creation,
+  // while list() remains scoped and unauthenticated get() fails
+  await assertSucceeds(
+    teacherDb.collection("class_rosters").doc("class_1_M12345").get()
+  );
+  await assertFails(
+    unauthDb.collection("class_rosters").doc("class_1_M12345").get()
+  );
+  await assertFails(
+    studentBDb.collection("class_rosters").get()
+  );
+
+  // Non-existent classes single-doc get returns null safely without PERMISSION_DENIED for signed-in user
+  await assertSucceeds(
+    teacherDb.collection("classes").doc("missing_class_99").get()
+  );
+  await assertFails(
+    unauthDb.collection("classes").doc("missing_class_99").get()
   );
 });
 

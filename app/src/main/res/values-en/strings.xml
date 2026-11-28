@@ -897,5 +897,10 @@
     <string name="quota_exceeded_ai_error">Daily AI request limit reached. Use the offline glossary or try again later.</string>
     <string name="permission_denied_error">Access denied by the server (insufficient permissions). Check your account status or sign in again.</string>
     <string name="profile_load_error_title">Unable to load your profile</string>
+    <string name="profile_load_error_body">Failed to retrieve your profile from Firebase. Check your connection or permissions and try again.</string>
     <string name="profile_load_retry_btn">Retry</string>
+    <string name="retry_action">Retry</string>
+    <string name="firestore_sync_warning_banner">Firebase synchronization interrupted</string>
+    <string name="auth_error_app_check">Firebase App Check security verification was rejected. Check your Internet connection and Google Play Services, then try again. If this persists, check Firebase Console (App Check → Authentication) or project reCAPTCHA quota.</string>
+    <string name="auth_error_quota_exceeded">Too many attempts or Firebase authentication quota temporarily reached. Please wait a few minutes and try again.</string>
 </resources>

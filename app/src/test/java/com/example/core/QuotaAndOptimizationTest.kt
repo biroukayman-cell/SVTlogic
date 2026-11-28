@@ -56,6 +56,9 @@ class QuotaAndOptimizationTest {
             RuntimeException("RESOURCE_EXHAUSTED: Quota exceeded")
         )
         assertFalse(SvtAiRepository.isAppCheckOrTokenError(quotaWrapped))
+
+        assertTrue(isAppCheckError(RuntimeException("An internal error has occurred. [ Firebase App Check token is invalid. ]")))
+        assertFalse(isAppCheckError(RuntimeException("ERROR_INVALID_CREDENTIAL")))
     }
 
     @Test

@@ -897,5 +897,10 @@
     <string name="quota_exceeded_ai_error">Limite quotidienne de requêtes IA atteinte. Utilisez le glossaire hors ligne ou réessayez plus tard.</string>
     <string name="permission_denied_error">Accès refusé par le serveur (permissions insuffisantes). Vérifiez votre statut de compte ou reconnectez-vous.</string>
     <string name="profile_load_error_title">Impossible de charger votre profil</string>
+    <string name="profile_load_error_body">La récupération de votre profil depuis Firebase a échoué. Vérifiez votre connexion ou vos permissions puis réessayez.</string>
     <string name="profile_load_retry_btn">Réessayer</string>
+    <string name="retry_action">Réessayer</string>
+    <string name="firestore_sync_warning_banner">Synchronisation Firebase interrompue</string>
+    <string name="auth_error_app_check">Vérification de sécurité App Check refusée par Firebase. Vérifiez votre connexion Internet et Google Play Services, puis réessayez. Si le problème persiste, vérifiez dans la console Firebase (App Check → Authentification) ou le quota reCAPTCHA du projet.</string>
+    <string name="auth_error_quota_exceeded">Trop de tentatives ou quota d\'authentification temporairement atteint sur le serveur Firebase. Patientez quelques minutes puis réessayez.</string>
 </resources>

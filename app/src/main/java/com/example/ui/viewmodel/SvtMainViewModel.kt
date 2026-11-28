@@ -52,6 +52,7 @@ import com.example.data.repository.ResourceReadException
 import com.example.data.repository.ResourceUploadTooLargeException
 import com.example.data.repository.SvtRepository
 import com.example.data.svt.SvtDomain
+import com.example.ui.screens.mapFirebaseAuthError
 import com.google.firebase.Firebase
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
@@ -154,6 +155,7 @@ class SvtMainViewModel(
 
     private val _sessionEnded = MutableStateFlow(false)
     private val _profileRetryTrigger = MutableStateFlow(0)
+    private val _streamRetryTrigger = MutableStateFlow(0)
     private val _authReloadTick = MutableStateFlow(0)
 
     private val authActiveForUserFlow: Flow<Boolean> = callbackFlow {
@@ -282,8 +284,9 @@ class SvtMainViewModel(
     private val canTeacherAccessFlow: Flow<Boolean> = combine(
         isSessionActiveFlow,
         profileState,
-        isVerifiedOwnerAdmin
-    ) { active, state, verifiedAdmin ->
+        isVerifiedOwnerAdmin,
+        _streamRetryTrigger
+    ) { active, state, verifiedAdmin, _ ->
         if (!active) return@combine false
         val profile = (state as? ProfileGateState.Ready)?.profile ?: return@combine false
         profile.role == "teacher" && (profile.teacherStatus == "approved" || verifiedAdmin)
@@ -303,67 +306,67 @@ class SvtMainViewModel(
     // Teacher streams (strictly gated on active session + approved teacher or verified admin)
     val teacherClasses: StateFlow<List<SvtClass>> = canTeacherAccessFlow.flatMapLatest { eligible ->
         if (eligible) repository.observeTeacherClasses(currentUserId)
-            .catch { emit(emptyList()) }
+            .catch { reportStreamError(it); emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val teacherEnrollments: StateFlow<List<Enrollment>> = canTeacherAccessFlow.flatMapLatest { eligible ->
         if (eligible) repository.observeTeacherEnrollments(currentUserId)
-            .catch { emit(emptyList()) }
+            .catch { reportStreamError(it); emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val teacherQuizzes: StateFlow<List<Quiz>> = canTeacherAccessFlow.flatMapLatest { eligible ->
         if (eligible) repository.observeTeacherQuizzes(currentUserId)
-            .catch { emit(emptyList()) }
+            .catch { reportStreamError(it); emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val teacherAttempts: StateFlow<List<QuizAttempt>> = canTeacherAccessFlow.flatMapLatest { eligible ->
         if (eligible) repository.observeTeacherAttempts(currentUserId)
-            .catch { emit(emptyList()) }
+            .catch { reportStreamError(it); emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val teacherResources: StateFlow<List<CourseResource>> = canTeacherAccessFlow.flatMapLatest { eligible ->
         if (eligible) repository.observeTeacherResources(currentUserId)
-            .catch { emit(emptyList()) }
+            .catch { reportStreamError(it); emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val teacherVideoTracking: StateFlow<List<VideoTracking>> = canTeacherAccessFlow.flatMapLatest { eligible ->
         if (eligible) repository.observeTeacherVideoTracking(currentUserId)
-            .catch { emit(emptyList()) }
+            .catch { reportStreamError(it); emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val teacherAnnouncements: StateFlow<List<Announcement>> = canTeacherAccessFlow.flatMapLatest { eligible ->
         if (eligible) repository.observeTeacherAnnouncements(currentUserId)
-            .catch { emit(emptyList()) }
+            .catch { reportStreamError(it); emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val teacherMessages: StateFlow<List<PrivateMessage>> = canTeacherAccessFlow.flatMapLatest { eligible ->
         if (eligible) repository.observeTeacherMessages(currentUserId)
-            .catch { emit(emptyList()) }
+            .catch { reportStreamError(it); emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val teacherRoster: StateFlow<List<RosterStudent>> = canTeacherAccessFlow.flatMapLatest { eligible ->
         if (eligible) repository.observeTeacherRoster(currentUserId)
-            .catch { emit(emptyList()) }
+            .catch { reportStreamError(it); emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val teacherEstablishments: StateFlow<List<Establishment>> = canTeacherAccessFlow.flatMapLatest { eligible ->
         if (eligible) repository.observeTeacherEstablishments(currentUserId)
-            .catch { emit(emptyList()) }
+            .catch { reportStreamError(it); emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
     val teacherCustomGlossary: StateFlow<List<CustomGlossaryEntry>> = canTeacherAccessFlow.flatMapLatest { eligible ->
         if (eligible) repository.observeTeacherGlossaryEntries(currentUserId)
-            .catch { emit(emptyList()) }
+            .catch { reportStreamError(it); emit(emptyList()) }
         else flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), emptyList())
 
@@ -413,10 +416,11 @@ class SvtMainViewModel(
 
     private val isApprovedStudent = approvedClassId.map { it != null }.distinctUntilChanged()
 
-    val studentClass: StateFlow<SvtClass?> = approvedClassId.flatMapLatest { classId ->
-        if (classId != null) repository.observeClassById(classId).catch { emit(null) }
-        else flowOf(null)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), null)
+    val studentClass: StateFlow<SvtClass?> = combine(approvedClassId, _streamRetryTrigger) { classId, _ -> classId }
+        .flatMapLatest { classId ->
+            if (classId != null) repository.observeClassById(classId).catch { reportStreamError(it); emit(null) }
+            else flowOf(null)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STREAM_STOP_TIMEOUT_MS), null)
 
     val studentAllowedLabDomains: StateFlow<Set<SvtDomain>> = studentClass.map { cls ->
         if (cls == null) {
@@ -571,6 +575,9 @@ class SvtMainViewModel(
     private val _actionError = MutableStateFlow<String?>(null)
     val actionError: StateFlow<String?> = _actionError.asStateFlow()
 
+    private val _streamSyncError = MutableStateFlow<String?>(null)
+    val streamSyncError: StateFlow<String?> = _streamSyncError.asStateFlow()
+
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
@@ -620,8 +627,33 @@ class SvtMainViewModel(
 
     fun retryProfileLoad() {
         _actionError.value = null
+        _streamSyncError.value = null
         _authReloadTick.value += 1
         _profileRetryTrigger.value += 1
+    }
+
+    fun retryAllStreams() {
+        _streamSyncError.value = null
+        _streamRetryTrigger.value += 1
+        retryProfileLoad()
+    }
+
+    fun clearStreamSyncError() {
+        _streamSyncError.value = null
+    }
+
+    private fun reportStreamError(error: Throwable) {
+        val fsErr = generateSequence(error) { it.cause }
+            .filterIsInstance<FirebaseFirestoreException>()
+            .firstOrNull()
+        if (fsErr == null && error is CancellationException) throw error
+        if (isQuotaExceededError(error) || isPermissionDeniedError(error) || fsErr != null) {
+            _streamSyncError.value = userFriendlyFirestoreErrorMessage(
+                context,
+                fsErr ?: error,
+                error.localizedMessage ?: context.getString(R.string.permission_denied_error)
+            )
+        }
     }
 
     fun selectClass(classId: String) {
@@ -1070,7 +1102,7 @@ class SvtMainViewModel(
                             false,
                             null,
                             null,
-                            mailEx.localizedMessage ?: uiContext.getString(R.string.password_change_error)
+                            mapFirebaseAuthError(uiContext, mailEx)
                         )
                     }
                 } else {
@@ -1081,7 +1113,7 @@ class SvtMainViewModel(
                     false,
                     null,
                     null,
-                    e.localizedMessage ?: uiContext.getString(R.string.password_change_error)
+                    mapFirebaseAuthError(uiContext, e)
                 )
             }
         }
@@ -1122,7 +1154,7 @@ class SvtMainViewModel(
             } catch (_: FirebaseAuthInvalidCredentialsException) {
                 onResult(false, null, uiContext.getString(R.string.teacher_reset_student_already_changed))
             } catch (e: Exception) {
-                onResult(false, null, e.localizedMessage ?: uiContext.getString(R.string.password_change_error))
+                onResult(false, null, mapFirebaseAuthError(uiContext, e))
             } finally {
                 runCatching { provisionerAuth.signOut() }
             }
